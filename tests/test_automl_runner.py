@@ -16,7 +16,7 @@ from sklearn.metrics import accuracy_score, f1_score, mean_squared_error, r2_sco
 from sklearn.model_selection import train_test_split
 
 from app.core.config import build_settings
-from app.services.automl_runner import AutoMLRunner, EngineResult, ExperimentError
+from app.services.automl_runner import AutoMLRunner, EngineResult, ExperimentError, unseen_category_warnings
 from app.services.evaluator import Evaluator, metric_warnings, validate_primary_metric
 from app.services.profiler import ClassBalance
 from app.services.task_detector import TaskType
@@ -154,6 +154,14 @@ def test_too_few_rows(settings):
     runner = AutoMLRunner(settings=settings, enable_mlflow=False)
     with pytest.raises(ExperimentError, match="At least"):
         runner.run(make_classification_frame().head(10), "label")
+
+
+def test_unseen_category_warnings():
+    train = pd.DataFrame({"city": ["a", "b", "a", "b"], "x": [1.0, 2.0, 3.0, 4.0]})
+    test = pd.DataFrame({"city": ["a", "c", "d", None], "x": [9.0, 8.0, 7.0, 6.0]})
+    messages = unseen_category_warnings(train, test)
+    assert len(messages) == 1  # numeric columns are ignored
+    assert messages[0].startswith("'city': 50% of test rows")
 
 
 # --------------------------------------------------------------------------- engine abstraction

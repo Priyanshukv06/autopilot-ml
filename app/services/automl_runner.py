@@ -12,6 +12,7 @@ import math
 import os
 import pickle
 import time
+import warnings as py_warnings
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -21,6 +22,7 @@ from typing import Any, Callable, Protocol
 
 import numpy as np
 import pandas as pd
+from pandas.api.types import is_bool_dtype, is_numeric_dtype
 from sklearn.model_selection import train_test_split
 
 from app.core.config import Settings, get_settings
@@ -44,6 +46,11 @@ ProgressCallback = Callable[[str, float, str], None]
 
 MIN_ROWS = 20
 
+# FLAML warns on every predict() call when a categorical column contains values not seen
+# during fit (dozens of times during permutation importance). The runner reports this once,
+# per column, via `unseen_category_warnings` instead.
+py_warnings.filterwarnings("ignore", message=r"Column '.*' contains values unseen at fit time", category=UserWarning)
+
 
 class ExperimentError(RuntimeError):
     """Raised when an experiment cannot be configured or completed."""
@@ -66,6 +73,23 @@ def to_jsonable(obj: Any) -> Any:
     if isinstance(obj, float) and not math.isfinite(obj):
         return None
     return obj
+
+
+def unseen_category_warnings(X_train: pd.DataFrame, X_test: pd.DataFrame) -> list[str]:
+    """Report categorical columns whose test values never appear in the training split."""
+    messages = []
+    for column in X_train.columns:
+        train_col = X_train[column]
+        if is_numeric_dtype(train_col) and not is_bool_dtype(train_col):
+            continue
+        test_values = X_test[column].dropna()
+        unseen = ~test_values.isin(set(train_col.dropna().unique()))
+        if len(X_test) and unseen.any():
+            messages.append(
+                f"'{column}': {unseen.sum() / len(X_test):.0%} of test rows have categories never seen in "
+                "training, so the model cannot use them (typical for high-cardinality columns)."
+            )
+    return messages
 
 
 # --------------------------------------------------------------------------- config
@@ -462,6 +486,7 @@ class AutoMLRunner:
         X, y, task_type, metric, warnings = self._prepare(dataframe, config)
 
         X_train, X_test, y_train, y_test = self._split(X, y, task_type, config, warnings)
+        warnings.extend(unseen_category_warnings(X_train, X_test))
         experiment_id = self.tracker.allocate_experiment_id()
         work_dir = self.tracker.experiment_dir(experiment_id)
         logger.info(

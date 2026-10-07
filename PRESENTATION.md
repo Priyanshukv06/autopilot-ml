@@ -219,7 +219,7 @@ Systems 4 and 5 are the ablation study: they show which part of the system actua
    python -m pytest -q
    ```
 
-   Expected result: `46 passed` in about 30 seconds. If you want to show that the code is tested, this is the screen to show.
+   Expected result: `47 passed` in about 30 seconds. If you want to show that the code is tested, this is the screen to show.
 
 3. Start the dashboard in the same window:
 

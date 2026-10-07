@@ -166,7 +166,7 @@ There are seven sections: Dataset, Target, Experiment Configuration, Run AutoML,
 - Evaluation: independent test split, FLAML's internal validation score and a trivial baseline.
 - Explainability: permutation importance, the model's own importance, confusion matrix, ROC curve, residual plots.
 - Tracking: local MLflow (SQLite) plus JSON records.
-- Tests: 46 pytest tests for the profiler, the task detector, the runner (with short real FLAML runs), the evaluator, failure handling and a custom engine.
+- Tests: 47 pytest tests for the profiler, the task detector, the runner (with short real FLAML runs), the evaluator, failure handling and a custom engine.
 - Not implemented: planner, critic, strategy engine, memory, resource manager, SHAP, automatic target detection, feature engineering, resampling.
 
 ## 10. Proposed modules (planned)

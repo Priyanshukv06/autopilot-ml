@@ -1,87 +1,83 @@
-# Research Direction
+# Research direction
 
-Status: **Planned.** This document defines what will be measured and how. No results are reported here because the autonomous layer does not exist yet. Every number in a future version of this document must come from the benchmark harness.
+Status: planned. This page sets out what we will measure and how. There are no results here yet, because the autonomous layer has not been built. Any numbers added later must come from the benchmark runs.
 
-## 1. Central question
+## The main question
 
 > Can an autonomous experimentation layer improve the efficiency and effectiveness of conventional AutoML by learning from previous experiments, diagnosing model weaknesses, selecting appropriate improvement strategies, and allocating computational resources adaptively?
 
-## 2. Research questions
+Put simply: on the same machine and with the same time limit, can our loop reach a good model faster, or reach a better one, than FLAML using the whole budget by itself?
 
-| ID | Question |
-|---|---|
-| RQ1 | Does diagnosis-driven strategy selection reach a given target score with less compute than running the AutoML engine alone for the same total budget? |
-| RQ2 | Does experiment memory (what worked on similar datasets) reduce the number of experiments needed on new datasets? |
-| RQ3 | Does adaptive budget allocation (utility = improvement per unit compute) improve final performance under a fixed budget compared with uniform allocation? |
-| RQ4 | How robust are these effects across dataset types (size, imbalance, missingness, cardinality)? |
+## Research questions
 
-## 3. Hypotheses
+- **RQ1:** Does choosing strategies from diagnoses reach a target score with less compute than running the AutoML engine alone for the same total budget?
+- **RQ2:** Does the experiment memory (what worked on similar datasets) reduce the number of experiments needed on new datasets?
+- **RQ3:** Does adaptive budget allocation (gain per unit of compute) give a better final score under a fixed budget than splitting the budget evenly?
+- **RQ4:** How consistent are these effects across different kinds of datasets (size, imbalance, missingness, cardinality)?
 
-- **H1**: Full AutoPilot-ML achieves a lower median time-to-target than FLAML with the same total budget.
-- **H2**: Removing experiment memory increases the number of experiments to reach the target (memory helps), measured on datasets not used to build the memory.
-- **H3**: Removing strategy selection (random or fixed strategy order) lowers the anytime performance curve.
-- **H4**: Final predictive performance of the full system is not worse than FLAML's at equal budget (non-inferiority), while using fewer experiments.
+## Hypotheses
 
-Each hypothesis will be tested with paired comparisons over datasets and seeds (see §7). A hypothesis that is not supported will be reported as such.
+- **H1:** The full system needs less time (median) than FLAML to reach the target score, with the same total budget.
+- **H2:** Without the memory, more experiments are needed to reach the target, measured on datasets that were not used to build the memory.
+- **H3:** Without strategy selection (random or fixed order), the best-score-over-time curve is lower.
+- **H4:** At the same budget, the final score of the full system is not worse than FLAML's, while using fewer experiments.
 
-## 4. Strategy selection: planned approaches
+Each hypothesis is tested with paired comparisons over datasets and seeds. If a hypothesis is not supported, we will say so.
 
-1. **Rule-based** (Phase 2): diagnosis → candidate strategies by a documented rule table and fixed priority. This is the reference point.
-2. **Multi-armed bandits** (Phase 3): each strategy is an arm; reward = Δ(primary metric) / compute seconds; UCB1 and Thompson sampling, optionally contextual on dataset meta-features.
-3. **Meta-learning from memory** (Phase 3): k-nearest datasets in meta-feature space, prioritise strategies with the best observed reward on them.
-4. **Bayesian optimisation over strategy parameters** (optional): e.g. Optuna over resampling ratio or feature-selection threshold, only if the simpler approaches leave a measurable gap.
-5. **Local LLM reasoning** (optional, Future Work): explanation only, evaluated separately; it is not part of the core claims.
+## How strategies will be chosen
 
-## 5. Resource-aware objective
+1. **Rules (Phase 2):** diagnosis to candidate strategies through a documented rule table, in a fixed priority order. Everything else is compared against this.
+2. **Multi-armed bandits (Phase 3):** each strategy is an arm, and the reward is the change in the primary metric divided by the compute seconds. We will try UCB1 and Thompson sampling, possibly using the dataset meta-features as context.
+3. **Memory (Phase 3):** find the nearest past datasets by meta-features and try first the strategies that gave the best reward there.
+4. **Bayesian optimisation of strategy settings (optional):** for example Optuna over the SMOTE ratio or a feature-selection threshold, only if the simpler methods leave a measurable gap.
+5. **Local LLM (optional, later):** only to explain decisions. It is evaluated separately and is not part of the main claims.
 
-For experiment *i* with primary score *sᵢ* and cost *cᵢ* (CPU-seconds or wall-clock seconds):
+## The resource-aware objective
+
+For experiment i, with primary score s_i and cost c_i (CPU or wall-clock seconds):
 
 ```text
-Utility_i = (s_i − s_best_before_i) / c_i        (sign-adjusted for loss metrics)
+utility_i = (s_i − best score before experiment i) / c_i      (sign flipped for loss metrics)
 ```
 
-The resource manager decides (a) how to split the total budget between experiments and (b) when to stop (e.g. when the expected utility of every remaining strategy falls below a threshold).
+The resource manager decides how to split the total budget between experiments, and when to stop. For example, it stops when no remaining strategy is expected to have a utility above a threshold.
 
-## 6. Datasets
+## Datasets
 
-- Development: the four bundled samples (Titanic, Breast Cancer Wisconsin, Palmer Penguins, California Housing).
-- Evaluation: a suite of public tabular datasets from OpenML (for example tasks from the OpenML-CC18 suite and the AutoML Benchmark), selected to cover small/large, balanced/imbalanced, low/high missingness, numeric/categorical-heavy datasets. Exact task ids will be fixed and committed before any evaluation run, and datasets used to build the experiment memory will be disjoint from the evaluation datasets.
-- Constraint: every dataset must run on a laptop CPU within the chosen budgets.
+- Development: the four sample datasets in `data/sample` (Titanic, Breast Cancer Wisconsin, Palmer Penguins, California Housing).
+- Evaluation: public tabular datasets from OpenML, for example tasks from the OpenML-CC18 suite and the AutoML Benchmark. They will be picked to cover small and large, balanced and imbalanced, clean and messy, and numeric-heavy and categorical-heavy data. The exact task IDs will be fixed and committed before any evaluation run. Datasets used to build the memory will not be used for evaluation.
+- Every dataset has to run on a laptop CPU within the chosen budgets.
 
-## 7. Protocol
+## Protocol
 
-- Budgets: several fixed total budgets (for example 2, 5 and 10 minutes) per dataset.
-- Seeds: at least 5 seeds per (dataset, system, budget).
-- Splits: identical outer train/test splits across systems for a given seed.
-- Logged per run: final test score, anytime curve (best score vs elapsed time), number of experiments, CPU-seconds, wall-clock time, strategies chosen.
-- Statistics: Wilcoxon signed-rank tests for pairwise comparisons over datasets, Friedman test with a post-hoc Nemenyi test for multiple systems (Demšar, 2006); effect sizes and confidence intervals reported alongside p-values.
+- Budgets: a few fixed total budgets per dataset (for example 2, 5 and 10 minutes).
+- Seeds: at least 5 for every combination of dataset, system and budget.
+- Splits: for a given seed, every system gets the same outer train/test split.
+- Logged for every run: the final test score, the best score over time, the number of experiments, CPU seconds, wall-clock seconds and the strategies chosen.
+- Statistics: Wilcoxon signed-rank tests for pairs of systems over datasets, and the Friedman test with a Nemenyi post-hoc test for several systems at once (Demšar, 2006). Effect sizes and confidence intervals are reported, not only p-values.
 
-## 8. Metrics
+## What we measure
 
-| Category | Metric |
-|---|---|
-| Predictive | Primary metric on the outer test split (F1 / ROC-AUC / R² / RMSE depending on task) |
-| Efficiency | Time-to-target (first time the best score reaches a fraction of the final best of a reference system), area under the anytime curve |
-| Experimentation | Number of experiments to target, number of strategies tried |
-| Cost | CPU-seconds, wall-clock seconds, utility per experiment |
-| Convergence | Score improvement per additional experiment, stopping point |
-| Robustness | Average rank across datasets, variance across seeds, worst-case gap to the best system |
+- **Predictive quality:** the primary metric on the outer test split (F1, ROC-AUC, R² or RMSE, depending on the task).
+- **Efficiency:** time to reach a target score, and the area under the best-score-over-time curve.
+- **Experimentation:** number of experiments and strategies needed to reach the target.
+- **Cost:** CPU seconds, wall-clock seconds, and utility per experiment.
+- **Convergence:** how much each extra experiment adds, and where the system stops.
+- **Consistency:** average rank across datasets, spread across seeds, and the worst-case gap to the best system.
 
-## 9. Baselines and ablations
+## Baselines and ablations
 
-| # | System | Purpose |
-|---|---|---|
-| 1 | Manual baseline (fixed sensible pipeline, e.g. default LightGBM / logistic regression) | Floor without search |
-| 2 | FLAML alone, full budget | The engine AutoPilot-ML builds on |
-| 3 | AutoGluon (CPU, matched budget) | Strong external AutoML reference |
-| 4 | AutoPilot-ML without experiment memory | Tests H2 |
-| 5 | AutoPilot-ML without strategy selection (random or fixed order) | Tests H3 |
-| 6 | Full AutoPilot-ML | Tests H1, H4 |
+1. Manual baseline: one fixed, sensible pipeline (for example default LightGBM or logistic regression). This is the floor, with no search.
+2. FLAML alone with the full budget: the engine we build on.
+3. AutoGluon (CPU only, same budget): a strong outside reference.
+4. AutoPilot-ML without experiment memory: tests H2.
+5. AutoPilot-ML without strategy selection (random or fixed order): tests H3.
+6. The full AutoPilot-ML: tests H1 and H4.
 
-## 10. Threats to validity
+## Things that could make the results misleading
 
-- **Time-based search noise**: FLAML and AutoGluon are budget-driven; mitigated by multiple seeds and paired comparisons.
-- **Hardware variance**: all systems run on the same machine, sequentially, with fixed `n_jobs`.
-- **Memory leakage**: memory built only from development datasets; evaluation datasets are never seen before evaluation.
-- **Metric choice**: results reported for the primary metric chosen before running, plus secondary metrics.
-- **Overfitting to the benchmark**: thresholds and rules frozen before the final evaluation runs.
+- **Noise from time-limited search:** FLAML and AutoGluon stop on time, not on trial count. We use several seeds and paired comparisons.
+- **Hardware differences:** every system runs on the same machine, one at a time, with a fixed `n_jobs`.
+- **Memory leaking into evaluation:** the memory is built only from development datasets, and evaluation datasets are never seen beforehand.
+- **Choice of metric:** the primary metric is fixed before the runs, and the other metrics are reported as well.
+- **Tuning the system to the benchmark:** thresholds and rules are frozen before the final evaluation.

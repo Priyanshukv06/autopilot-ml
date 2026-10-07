@@ -1,49 +1,39 @@
 # Architecture
 
-This document describes the **current baseline** (Phase 1) as implemented, and marks where the **planned** autonomous components will plug in. Planned components do not exist in the code yet.
+This page describes the code as it is now (the Phase 1 baseline) and shows where the planned autonomous parts will connect. The planned parts do not exist in the code yet.
 
-## 1. Layers
+## Layers
 
 ```text
-┌──────────────────────────────────────────────────────────────┐
-│ UI (Streamlit)            app/main.py, app/components/*      │  input + rendering only
-├──────────────────────────────────────────────────────────────┤
-│ Services                  app/services/*                     │  all business logic
-│   profiler · task_detector · automl_runner · evaluator ·     │
-│   experiment_tracker                                         │
-├──────────────────────────────────────────────────────────────┤
-│ Core                      app/core/config.py, logging_config │  settings, logging
-├──────────────────────────────────────────────────────────────┤
-│ External libraries        FLAML · scikit-learn · MLflow ·    │  used unmodified
-│                           pandas · Plotly                    │
-├──────────────────────────────────────────────────────────────┤
-│ Local storage             experiments/ · models/ · mlruns/   │  no cloud, no server
-└──────────────────────────────────────────────────────────────┘
+UI (Streamlit)        app/main.py, app/components/      collects input, shows results
+Services              app/services/                     all the logic
+Core                  app/core/                         settings (.env) and logging
+External libraries    FLAML, scikit-learn, MLflow,      used as normal dependencies,
+                      pandas, Plotly                    never modified
+Local storage         experiments/, models/, mlruns/    no cloud, no server
 ```
 
-Rules the code follows:
+We stick to three rules:
 
-- Services never import Streamlit. Every service can be used from a script, a notebook or tests.
-- FLAML is only referenced inside `FLAMLEngine` (`app/services/automl_runner.py`). The rest of the application sees engine-neutral types (`EngineResult`, `ExperimentResult`).
-- MLflow is only referenced inside `ExperimentTracker` (`app/services/experiment_tracker.py`).
+- Services never import Streamlit. Everything in `app/services/` can be used from a script, a notebook or a test.
+- FLAML is only used inside `FLAMLEngine` in `automl_runner.py`. The rest of the code works with our own result types (`EngineResult`, `ExperimentResult`), so another engine can be added without touching the UI.
+- MLflow is only used inside `ExperimentTracker`.
 
-## 2. Important classes
+## Main classes
 
-| Class | File | Responsibility |
-|---|---|---|
-| `Settings`, `get_settings()` | `core/config.py` | Paths, MLflow URI, defaults; reads `AUTOPILOT_*` variables / `.env` |
-| `DatasetProfiler` → `DatasetProfile` | `services/profiler.py` | Structured profile, quality flags, class balance, `meta_features()` |
-| `analyze_class_balance` → `ClassBalance` | `services/profiler.py` | Majority/minority shares, imbalance ratio, severity |
-| `TaskDetector` → `TaskDetectionResult` | `services/task_detector.py` | Task detection, override validation, target candidates, default target hook |
-| `TaskType` | `services/task_detector.py` | `binary`, `multiclass`, `regression` |
-| `Evaluator` → `EvaluationResult` | `services/evaluator.py` | Metrics, confusion matrix, baseline scores, permutation importance |
-| `METRICS`, `PRIMARY_METRICS` | `services/evaluator.py` | Metric registry and which metrics can be optimised per task |
-| `ExperimentConfig` | `services/automl_runner.py` | Everything needed to reproduce one experiment |
-| `AutoMLEngine` (Protocol), `FLAMLEngine` → `EngineResult` | `services/automl_runner.py` | Pluggable AutoML backend |
-| `AutoMLRunner` → `ExperimentResult` | `services/automl_runner.py` | Orchestrates one experiment end to end |
-| `ExperimentTracker` | `services/experiment_tracker.py` | MLflow runs + JSON index, experiment ids, history table |
+- `Settings` / `get_settings()` (`core/config.py`): paths, MLflow location and default values. Reads `AUTOPILOT_*` environment variables or a `.env` file.
+- `DatasetProfiler` → `DatasetProfile` (`services/profiler.py`): the dataset profile, quality flags, class balance and meta-features.
+- `analyze_class_balance` → `ClassBalance` (`services/profiler.py`): majority and minority share, imbalance ratio and severity.
+- `TaskDetector` → `TaskDetectionResult` (`services/task_detector.py`): task detection, checking overrides, describing target candidates, and the default target suggestion.
+- `TaskType` (`services/task_detector.py`): `binary`, `multiclass` or `regression`.
+- `Evaluator` → `EvaluationResult` (`services/evaluator.py`): metrics, confusion matrix, trivial baseline and permutation importance.
+- `METRICS`, `PRIMARY_METRICS` (`services/evaluator.py`): every metric we know about, and which ones can be optimised for each task.
+- `ExperimentConfig` (`services/automl_runner.py`): everything needed to repeat an experiment. The planned planner will produce these.
+- `AutoMLEngine`, `FLAMLEngine` → `EngineResult` (`services/automl_runner.py`): the engine interface and its FLAML implementation.
+- `AutoMLRunner` → `ExperimentResult` (`services/automl_runner.py`): runs one experiment from start to finish.
+- `ExperimentTracker` (`services/experiment_tracker.py`): MLflow runs, JSON records, experiment IDs and the history table.
 
-## 3. Execution flow of one experiment
+## What happens during one experiment
 
 ```mermaid
 sequenceDiagram
@@ -55,96 +45,77 @@ sequenceDiagram
     participant Eval as Evaluator
     participant Trk as ExperimentTracker
 
-    User->>UI: upload CSV / choose sample
+    User->>UI: upload CSV or choose a sample
     UI->>UI: DatasetProfiler.profile(df)
-    User->>UI: target, task override, budget, metric, seed
-    UI->>Runner: run_experiment(df, ExperimentConfig, progress_callback) [worker thread]
-    Runner->>Det: detect / validate task
-    Runner->>Runner: drop missing targets, exclude columns, stratified split
-    Runner->>Trk: allocate_experiment_id() -> EXP-###
-    Runner->>Eng: fit(X_train, y_train, task, metric, budget, seed)
-    Eng-->>Runner: EngineResult (model, best config, validation score, history, leaderboard)
-    Runner->>Eval: evaluate(test), evaluate(train), baseline, permutation importance
-    Runner->>Runner: profile with target, save models/EXP-###/model.pkl, write artifacts
-    Runner->>Trk: log_run (params, metrics, artifacts) -> MLflow run id
-    Runner->>Trk: save_record(summary.json)
+    User->>UI: target, task, budget, metric, seed
+    UI->>Runner: run_experiment(df, config) in a background thread
+    Runner->>Det: detect or validate the task
+    Runner->>Runner: drop missing targets, remove excluded columns, stratified split
+    Runner->>Trk: allocate_experiment_id() gives EXP-###
+    Runner->>Eng: fit(training part, task, metric, budget, seed)
+    Eng-->>Runner: model, best config, validation score, trials, leaderboard
+    Runner->>Eval: test and train metrics, baseline, permutation importance
+    Runner->>Runner: profile with target, save model, write result files
+    Runner->>Trk: MLflow run (params, metrics, files)
+    Runner->>Trk: summary.json
     Runner-->>UI: ExperimentResult
-    UI-->>User: results, explainability, history
+    UI-->>User: results, explanations, history
 ```
 
-Notes:
+A few things worth knowing:
 
-- The test split is created **before** FLAML sees any data and is only used once, for the final evaluation. FLAML's own validation (cross-validation for small data, holdout for larger data, chosen by FLAML) runs on the training split. Both numbers are shown and labelled separately.
-- The UI runs the experiment in a background thread and polls its progress, so the page stays responsive and survives Streamlit reruns. Progress during the search is estimated from elapsed time versus the budget because FLAML exposes no per-trial callback.
-- Failed runs write `experiments/EXP-###/error.json` and are not listed as completed experiments.
+- The test split is made before FLAML sees any data, and it is used once, at the end. FLAML does its own validation on the training part (cross-validation for small data, holdout for larger data, chosen by FLAML). The app shows both numbers and labels them separately.
+- The UI runs the experiment in a background thread and keeps the thread in the Streamlit session. If the page reruns during an experiment, the progress bar simply picks up again. FLAML gives no progress updates during its search, so the bar is estimated from elapsed time against the budget.
+- A failed experiment writes `experiments/EXP-###/error.json` and does not appear in the history as completed.
+- FLAML prints a warning on every prediction when a column has categories it never saw during training. During permutation importance that happens dozens of times, so we silence that one message and add a single note per column to the experiment instead.
 
-## 4. Data contracts
+## Data passed around
 
-`ExperimentConfig` (input):
+`ExperimentConfig` (input): `target_column`, `task_type` (None means detect it), `primary_metric` (None means the default for the task), `time_budget`, `random_seed`, `test_size`, `excluded_columns`, `estimator_list` (None means the engine decides), `dataset_name`, `n_jobs`.
 
-```text
-target_column, task_type (None = detect), primary_metric (None = task default),
-time_budget, random_seed, test_size, excluded_columns, estimator_list (None = engine default),
-dataset_name, n_jobs
-```
+`ExperimentResult` (output, saved as `summary.json`): the ID and time; the dataset, target, task and metric; the budget, seed and test size; the engine and its version; the train/test sizes and feature columns; the best estimator and its configuration; the validation, test and train scores; the full test, train and baseline metrics; the timings and number of trials; the leaderboard; the feature importances; the dataset meta-features; the warnings; the model path, the result folder and the MLflow run ID.
 
-`ExperimentResult` (output, JSON summary in `summary.json`):
+Kept in memory only, for the charts: the trial history, the test predictions and probabilities, and the full dataset profile.
 
-```text
-experiment_id, created_at, dataset_name, target_column, task_type, primary_metric,
-time_budget, random_seed, test_size, engine, engine_version, n_train, n_test,
-feature_columns, excluded_columns, best_estimator, best_model_name, best_config,
-best_validation_score, validation_method, test_score, train_score,
-test_metrics, train_metrics, baseline_metrics, training_time, total_time, n_trials,
-leaderboard, feature_importance, native_feature_importance,
-dataset_meta_features, warnings, model_path, artifact_dir, mlflow_run_id, status
-```
+Score conventions: every score is in the metric's normal units. FLAML minimises a loss, so `FLAMLEngine` converts it back (score = 1 − loss for F1, ROC-AUC, accuracy and R²; score = loss for MAE, MSE, RMSE and log loss). In binary problems the positive class is the last label in sorted order, the same as FLAML's label encoder. Multiclass precision, recall, F1 and ROC-AUC are macro averages.
 
-In memory only (for plots): `search_history`, `test_evaluation` (true/predicted values, probabilities), `profile`.
-
-Metric conventions: all reported scores are in the metric's natural units. FLAML minimises a loss; `FLAMLEngine` converts it back (`score = 1 − loss` for maximised metrics such as F1, ROC-AUC, accuracy, R²; `score = loss` for MAE, MSE, RMSE, log loss). For binary tasks the positive class is the last label in sorted order (the same convention FLAML's label encoder uses); multiclass precision/recall/F1/ROC-AUC are macro-averaged.
-
-## 5. Storage layout
+## Files on disk
 
 ```text
 experiments/EXP-001/
-    summary.json                 # engine-independent record (drives the history table)
-    profile.json                 # DatasetProfile with target
-    evaluation.json              # test metrics, confusion matrix, per-class report, train + baseline metrics
-    leaderboard.csv              # best validation score per model family
-    search_history.csv           # every FLAML trial
-    feature_importance.csv       # permutation importance
-    native_feature_importance.csv
-    predictions.csv              # test-set predictions (and probabilities / residuals)
-    flaml_search.log             # raw FLAML log
-models/EXP-001/model.pkl         # {"model", "feature_columns", "target_column", "task_type", "classes", ...}
-mlruns/mlflow.db                 # MLflow SQLite backend
-mlruns/artifacts/<run>/          # MLflow copies of the model and the files above
+    summary.json                   the record the history table reads
+    profile.json                   dataset profile including the target
+    evaluation.json                test metrics, confusion matrix, per-class report, train and baseline metrics
+    leaderboard.csv                best validation score per model family
+    search_history.csv             every FLAML trial
+    feature_importance.csv         permutation importance
+    native_feature_importance.csv  the model's own importance (if it has one)
+    predictions.csv                test predictions (with probabilities or residuals)
+    flaml_search.log               FLAML's raw log
+models/EXP-001/model.pkl           model + feature columns + target + task + classes
+mlruns/mlflow.db                   MLflow database (SQLite)
+mlruns/artifacts/                  MLflow copies of the model and the files above
 ```
 
-All three folders are git-ignored.
+These three folders are generated and are not committed to git.
 
-## 6. Where future components plug in (Planned)
+## Where the planned parts connect
 
-| Planned module | Plugs in at | Consumes | Produces |
-|---|---|---|---|
-| `experiment_planner.py` | Before `AutoMLRunner.run_experiment` | `DatasetProfile`, memory, remaining budget | `ExperimentConfig` (the runner already accepts it) |
-| `critic.py` | After `ExperimentResult` is produced | train vs test metrics, class balance, profile flags, leaderboard, timing | structured diagnoses, e.g. `{"overfitting": "high", "imbalance": "severe"}` |
-| `strategy_engine.py` | Between critic and planner | diagnoses, memory statistics | ranked strategies mapped to config changes (`excluded_columns`, `estimator_list`, metric, resampling, class weights) |
-| `experiment_memory.py` | Reads/writes the `experiments/` index | `dataset_meta_features`, config, result, cost | similarity-based retrieval of strategies that helped on similar datasets |
-| `resource_manager.py` | Wraps the planner loop | user budget (time, experiments, CPU) | per-experiment budgets, stop decisions, utility accounting |
-| `AutoGluonEngine` (baseline) | Implements `AutoMLEngine` | same as `FLAMLEngine` | `EngineResult` |
+- `experiment_planner.py` comes before `AutoMLRunner.run_experiment`. It reads the profile, the memory and the remaining budget, and outputs an `ExperimentConfig`, which the runner already accepts.
+- `critic.py` comes after each `ExperimentResult`. It reads the train vs test metrics, class balance, column flags, unseen-category notes, leaderboard and timings, and outputs structured diagnoses such as `{"overfitting": "high", "imbalance": "severe"}`.
+- `strategy_engine.py` sits between the critic and the planner. It turns diagnoses (plus memory statistics) into ranked strategies, and each strategy is a change to the config: excluded columns, model list, metric, resampling, class weights.
+- `experiment_memory.py` reads and writes the `experiments/` records. It stores meta-features, config, result and cost, and finds strategies that helped on similar datasets.
+- `resource_manager.py` wraps the planner loop. It takes the user's budget (time, experiments, CPU), and decides per-experiment budgets, when to stop, and how much each experiment was worth.
+- `AutoGluonEngine` will implement `AutoMLEngine` and return an `EngineResult` like `FLAMLEngine` does.
 
-The baseline already records what these modules need: train and test metrics for overfitting diagnosis, class balance and column flags for data diagnoses, per-model leaderboards and trial histories for search behaviour, wall-clock times for cost, and meta-features for dataset similarity.
+Most of what these modules need is already recorded by the baseline: train and test metrics for overfitting, class balance and column flags for data problems, leaderboards and trial histories for search behaviour, timings for cost, and meta-features for comparing datasets.
 
-## 7. Design decisions
+## Why it is built this way
 
-| Decision | Reason |
-|---|---|
-| Hold-out test split outside FLAML | Unbiased final score; FLAML's internal validation score alone is optimistically biased by the search |
-| Engine interface around FLAML | Keeps FLAML replaceable and enables the AutoGluon baseline required by the research plan |
-| `MlflowClient` instead of MLflow's global "active run" API | Explicit run ids, safe from a background thread, no hidden global state |
-| SQLite MLflow backend | Current MLflow defaults to a database backend; SQLite needs no server |
-| JSON index next to MLflow | Small, readable, engine-independent records for the future experiment memory |
-| Permutation importance as the default explanation | Model-agnostic, works on raw columns for every FLAML learner; SHAP deferred until it is needed |
-| Rule-based task detection with override | Transparent and testable; ambiguous cases (integer codes) are reported with lower confidence |
+- **Test split outside FLAML:** FLAML's validation score is the number it optimised, so it is a bit optimistic. A separate test set gives an honest final score.
+- **Engine interface around FLAML:** FLAML can be replaced, and AutoGluon is needed later as a comparison.
+- **`MlflowClient` instead of MLflow's global "active run":** run IDs are explicit, there is no hidden global state, and it works from a background thread.
+- **SQLite for MLflow:** recent MLflow versions default to a database backend, and SQLite needs no server.
+- **JSON records next to MLflow:** small, readable and independent of the engine, which is what the experiment memory needs.
+- **Permutation importance first:** it works on the original columns for every model FLAML can return. SHAP can be added when it is actually needed.
+- **Rule-based task detection with an override:** easy to explain and to test. Unclear cases, such as integer codes, are reported with lower confidence.

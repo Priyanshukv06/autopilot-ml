@@ -156,6 +156,17 @@ def test_too_few_rows(settings):
         runner.run(make_classification_frame().head(10), "label")
 
 
+def test_search_noise_is_recognised():
+    from sklearn.exceptions import ConvergenceWarning
+
+    from app.services.automl_runner import _is_search_noise
+
+    assert _is_search_noise("Column 'Ticket' contains values unseen at fit time (e.g. ['1'])", UserWarning)
+    assert _is_search_noise("The max_iter was reached", ConvergenceWarning)
+    assert not _is_search_noise("Something else went wrong", UserWarning)
+    assert not _is_search_noise("Column 'x' contains values unseen at fit time", DeprecationWarning)
+
+
 def test_unseen_category_warnings():
     train = pd.DataFrame({"city": ["a", "b", "a", "b"], "x": [1.0, 2.0, 3.0, 4.0]})
     test = pd.DataFrame({"city": ["a", "c", "d", None], "x": [9.0, 8.0, 7.0, 6.0]})

@@ -11,6 +11,7 @@ import json
 import math
 import os
 import pickle
+import re
 import time
 import warnings as py_warnings
 from collections import Counter
@@ -23,6 +24,7 @@ from typing import Any, Callable, Protocol
 import numpy as np
 import pandas as pd
 from pandas.api.types import is_bool_dtype, is_numeric_dtype
+from sklearn.exceptions import ConvergenceWarning
 from sklearn.model_selection import train_test_split
 
 from app.core.config import Settings, get_settings
@@ -46,10 +48,32 @@ ProgressCallback = Callable[[str, float, str], None]
 
 MIN_ROWS = 20
 
-# FLAML warns on every predict() call when a categorical column contains values not seen
-# during fit (dozens of times during permutation importance). The runner reports this once,
-# per column, via `unseen_category_warnings` instead.
-py_warnings.filterwarnings("ignore", message=r"Column '.*' contains values unseen at fit time", category=UserWarning)
+# Two kinds of warnings are pure noise here and can flood the terminal:
+# - FLAML warns on every predict() call when a categorical column has values it did not see
+#   during fit (dozens of times during permutation importance). The runner reports this once
+#   per column instead, see `unseen_category_warnings`.
+# - ConvergenceWarning from the short linear-model trials FLAML runs on purpose.
+# A warnings filter alone is not enough: scikit-learn's joblib wrapper calls
+# warnings.resetwarnings() inside worker threads, and since the filter list is shared by the
+# whole process this can wipe it in the middle of a search. Dropping these two in
+# showwarning() as well survives that reset.
+_UNSEEN_CATEGORY_MESSAGE = re.compile(r"Column '.*' contains values unseen at fit time")
+py_warnings.filterwarnings("ignore", message=_UNSEEN_CATEGORY_MESSAGE.pattern, category=UserWarning)
+_default_showwarning = py_warnings.showwarning
+
+
+def _is_search_noise(message: Any, category: type) -> bool:
+    if issubclass(category, ConvergenceWarning):
+        return True
+    return issubclass(category, UserWarning) and bool(_UNSEEN_CATEGORY_MESSAGE.match(str(message)))
+
+
+def _showwarning_without_search_noise(message, category, filename, lineno, file=None, line=None):  # noqa: ANN001
+    if not _is_search_noise(message, category):
+        _default_showwarning(message, category, filename, lineno, file, line)
+
+
+py_warnings.showwarning = _showwarning_without_search_noise
 
 
 class ExperimentError(RuntimeError):

@@ -267,7 +267,7 @@ Do this override check *before* setting the budget. When the error shows, the co
 - Set **Time budget** to **30** seconds, keep **Primary metric** = F1, **Random seed** = 42, **Test split** = 0.2.
 
 **Step 5: Section 4 · Run AutoML.**
-- Click **🚀 Run Experiment**. The run takes about 35 seconds.
+- Click **Run Experiment**. The run takes about 35 seconds.
 - While it runs, explain: "FLAML is now trying LightGBM, XGBoost, random forests and linear models with different settings, scoring each one by 5-fold cross-validation on the 80% training part. The 20% test part is locked away until the end."
 - Do not click anything else while it runs. Just talk.
 
@@ -285,7 +285,7 @@ Do this override check *before* setting the budget. When the error shows, the co
 
 **Step 8: The second experiment (the manual version of the future loop).**
 - Scroll up to Section 2 and add `Ticket` and `Cabin` to **Columns to exclude from training**.
-- Click **🚀 Run Experiment** again.
+- Click **Run Experiment** again.
 - Compare the two runs. The history table (Section 7) shows test and train F1 side by side. For ROC-AUC and the other metrics, tick both runs in MLflow and press Compare (or open each run and look at its Metrics).
 
 Safer option: you already have EXP-001 and EXP-002 from the dry run (60-second budget, seed 42). Instead of waiting for two more live runs, run one experiment live to show the process, then compare EXP-001 and EXP-002, which are already in the history and in MLflow:

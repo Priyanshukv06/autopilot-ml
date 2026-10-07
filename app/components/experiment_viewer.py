@@ -151,7 +151,7 @@ def render_run_section(df: pd.DataFrame, config: ExperimentConfig, settings: Set
         f"'{config.target_column}' ({config.task_type.display_name}), optimising "
         f"{metric_display_name(config.primary_metric, config.task_type)}."
     )
-    clicked = st.button("🚀 Run Experiment", type="primary", width="stretch", disabled=running)
+    clicked = st.button("Run Experiment", type="primary", width="stretch", disabled=running)
     if clicked and not running:
         active = _start_run(df.copy(), config, settings)
         st.session_state[ACTIVE_RUN_KEY] = active

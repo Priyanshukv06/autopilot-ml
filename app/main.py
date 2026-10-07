@@ -32,7 +32,7 @@ from app.core.logging_config import setup_logging  # noqa: E402
 
 def render_sidebar(settings: Settings) -> None:
     with st.sidebar:
-        st.markdown("## 🚀 AutoPilot-ML")
+        st.markdown("## AutoPilot-ML")
         st.caption(f"Phase 1 baseline · v{__version__}")
         st.markdown("**Implemented (current baseline)**")
         st.markdown(
@@ -51,12 +51,12 @@ def render_sidebar(settings: Settings) -> None:
 
 
 def main() -> None:
-    st.set_page_config(page_title="AutoPilot-ML", page_icon="🚀", layout="wide")
+    st.set_page_config(page_title="AutoPilot-ML", layout="wide")
     settings = get_settings()
     setup_logging(settings.log_level)
     render_sidebar(settings)
 
-    st.title("🚀 AutoPilot-ML")
+    st.title("AutoPilot-ML")
     st.caption("Autonomous Machine Learning Experimentation & Self-Optimization Framework · Phase 1 baseline")
 
     st.header("1 · Dataset")

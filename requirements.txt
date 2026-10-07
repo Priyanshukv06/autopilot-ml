@@ -1,0 +1,26 @@
+# AutoPilot-ML baseline dependencies (exact pins, verified on Python 3.11 / Windows 11).
+# Everything runs locally: no paid APIs, no cloud services, no GPU required.
+
+# Core data stack
+numpy==2.4.6
+pandas==3.0.6
+scikit-learn==1.9.1
+scipy==1.17.1
+
+# AutoML engine (FLAML) and the learners it searches over
+flaml[automl]==2.7.0
+lightgbm==4.7.0
+xgboost==2.1.4
+
+# Experiment tracking (local SQLite backend, no server required)
+mlflow==3.17.0
+
+# UI and visualisation
+streamlit==1.65.0
+plotly==7.1.0
+
+# Configuration (.env loading)
+python-dotenv==1.2.4
+
+# Testing
+pytest==9.1.1

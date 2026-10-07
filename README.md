@@ -122,6 +122,12 @@ result = AutoMLRunner().run(
 print(result.experiment_id, result.best_model_name, result.test_score)
 ```
 
+Comparing two setups fairly. One run on one split can mislead, so this script runs setup A and setup B on the same few random splits and prints the per-seed differences. It uses a temporary folder and does not touch the dashboard history.
+
+```bash
+python scripts/compare_seeds.py --dataset data/sample/titanic.csv --target Survived --exclude-a PassengerId,Name --exclude-b PassengerId,Name,Ticket,Cabin --seeds 1 2 3 4 5 --budget 30
+```
+
 ## Screenshots
 
 _To be added: dataset profile, results, explainability, experiment history and the MLflow run page._
@@ -218,6 +224,7 @@ autopilot-ml/
 │   ├── core/               settings and logging
 │   └── services/           profiler, task detector, AutoML runner, evaluator, tracker
 ├── data/sample/            small public demo datasets
+├── scripts/                compare_seeds.py: compare two setups over several splits
 ├── experiments/            JSON experiment records (generated, not in git)
 ├── models/                 saved models (generated, not in git)
 ├── mlruns/                 MLflow database and files (generated, not in git)

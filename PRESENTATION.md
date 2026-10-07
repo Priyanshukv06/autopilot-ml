@@ -28,8 +28,8 @@ The first stage is working today: a baseline that profiles the data, works out w
 
 Think about how a person actually works on a dataset like Titanic.
 
-- They train a model and get a test F1 of about 0.69.
-- They notice the training F1 is about 0.99. The model does much better on data it has seen than on new data, so it is overfitting.
+- They train a model and get a test F1 of about 0.67.
+- They notice the training F1 is about 0.93. The model does much better on data it has seen than on new data, so it is overfitting.
 - They look at the columns and see that `Ticket` has 681 different values in 891 rows. The model is probably memorising ticket numbers.
 - They remove `Ticket` and `Cabin`, train again, and compare the two runs.
 - They decide whether the change helped, and whether more training time is worth it.
@@ -140,7 +140,7 @@ The planned modules, in the order we will build them:
 How one cycle will look on Titanic once this is built:
 
 ```text
-EXP-001  baseline run              test F1 0.69, train F1 0.99
+EXP-001  baseline run              test F1 0.67, train F1 0.93
 Critic   overfitting: high; 'Ticket' high cardinality, 63% of test rows unseen
 Strategy drop 'Ticket' and 'Cabin' (cheapest fix that matches both diagnoses)
 EXP-002  run with the change       compare with EXP-001, keep it only if it helps
@@ -275,20 +275,42 @@ Do this override check *before* setting the budget. When the error shows, the co
 - The top cards show the best model, the test F1, the validation F1 and the training time. Explain why the test score is the honest one.
 - **Test-set metrics:** each card shows "vs baseline". The trivial "everyone died" model gets F1 = 0, so the gain is real.
 - Open **Notes and warnings**: "Ticket: 63% of test rows have categories never seen in training". This is the setup for experiment 2.
-- **Train vs test** table: point at the gap. In my rehearsal with a 30-second budget, train F1 was 0.99 and test F1 was 0.69. "This is overfitting. Detecting it automatically is the critic's first job."
+- **Train vs test** table: point at the gap. In my 60-second run (EXP-001), train F1 was 0.93 and test F1 was 0.67. "This is overfitting. Detecting it automatically is the critic's first job."
 - **Leaderboard** and **Search progress:** "FLAML tried this many model families. Each dot is one trial, and the line is the best score so far."
 
 **Step 7: Section 6 · Explainability.**
-- **Feature importance:** `Sex` and `Pclass` come out on top, which matches what we know about the Titanic. In my rehearsal `Ticket` came third, even though 63% of the test tickets never appear in training. That fits the overfitting story: the model is leaning on ticket numbers it memorised.
+- **Feature importance:** `Sex` and `Pclass` come out on top, which matches what we know about the Titanic. In my run `Ticket` came third, even though 63% of the test tickets never appear in training. That fits the overfitting story: the model is leaning on ticket numbers it memorised.
 - **Confusion matrix:** where the model makes mistakes.
 - **ROC curve**, and **Best configuration** (the exact hyperparameters FLAML chose).
 
 **Step 8: The second experiment (the manual version of the future loop).**
 - Scroll up to Section 2 and add `Ticket` and `Cabin` to **Columns to exclude from training**.
-- Click **🚀 Run Experiment** again (30 seconds).
-- Compare the new run with the first one. The history table (Section 7) shows test and train F1 side by side, so the gap is easy to see. For ROC-AUC and the other metrics, tick both runs in MLflow and press Compare (or open each run and look at its Metrics). In my rehearsal (30-second budget, seed 42), test F1 went from 0.695 to 0.709 and ROC-AUC from 0.807 to 0.823, while train F1 dropped from 0.99 to 0.87. The gap between train and test shrank a lot, so there is less overfitting. Your numbers will be a little different.
-- Say: "I diagnosed the problem and chose this fix myself. The critic and the strategy engine will do exactly this automatically, and the memory will remember whether it helped."
-- If the second run comes out worse on F1, that is still a good point to make: "This is why the system has to measure every change instead of assuming it helps."
+- Click **🚀 Run Experiment** again.
+- Compare the two runs. The history table (Section 7) shows test and train F1 side by side. For ROC-AUC and the other metrics, tick both runs in MLflow and press Compare (or open each run and look at its Metrics).
+
+Safer option: you already have EXP-001 and EXP-002 from the dry run (60-second budget, seed 42). Instead of waiting for two more live runs, run one experiment live to show the process, then compare EXP-001 and EXP-002, which are already in the history and in MLflow:
+
+| | EXP-001: defaults | EXP-002: `Ticket` and `Cabin` also excluded |
+|---|---|---|
+| Test F1 | 0.673 | 0.709 |
+| Test ROC-AUC | 0.792 | 0.823 |
+| Test accuracy | 0.793 | 0.793 |
+| Recall (share of survivors found) | 0.55 | 0.65 |
+| Train F1 | 0.934 | 0.873 |
+| Train − test gap | 0.26 | 0.16 |
+| Validation F1 (FLAML's own score) | 0.802 | 0.782 |
+| Trials in 60 seconds | 290 | 501 |
+
+The headline gain is small (+0.036 F1). Don't apologise for it, and don't oversell it. The useful part is how you read it:
+
+1. **On this split, the change helped in the right way.** Overfitting went down (the gap fell from 0.26 to 0.16), and the model now finds 65% of the survivors instead of 55%, at the same accuracy.
+2. **FLAML's validation score pointed the wrong way.** EXP-001 had the higher validation F1 (0.802 against 0.782) but the lower test F1. A plain AutoML run keeps whichever setup has the best validation score, so here it would have kept the worse one. A likely reason: families share ticket numbers, so in cross-validation the same ticket turns up in both the training and the validation folds, and the model looks better than it is.
+3. **The search got cheaper.** Without the two messy text columns, FLAML managed 501 trials in a minute instead of 290.
+4. **One split is not enough to call it.** I repeated both setups on 5 other random splits (seeds 1 to 5, 30-second budget, using `scripts/compare_seeds.py`, which calls the same runner). The average test F1 went from 0.772 to 0.784 (+0.012), and the change helped on 3 of the 5 splits. ROC-AUC went from 0.870 to 0.877 and also improved on 3 of 5. Setup B ran more trials on 4 of 5 splits. The train/test gap did not shrink consistently. Across the six splits I tried (seed 42 plus seeds 1 to 5), the default setup's test F1 ranged from 0.67 to 0.81 just because different passengers landed in the test set. That is far more than the effect of dropping the columns.
+
+So the honest conclusion: dropping `Ticket` and `Cabin` is a small, cheap improvement, not a big one, and a single run cannot tell you that. A system that tries changes on its own has to measure them over several splits and weigh them against their cost. If it doesn't, it will chase noise. Handling this is the job of the critic and the experiment memory, and it is why the research plan uses several seeds and paired statistical tests.
+
+- Say: "I diagnosed the problem and chose this fix myself, and even then the result needed careful reading. The critic and strategy engine will do this automatically, and the memory will record how much a change really helped and what it cost."
 
 **Step 9: Section 7 · Experiment History.**
 - The table lists every experiment with model, metric, test score, validation score, budget and time. The chart compares them.
@@ -340,6 +362,9 @@ The 20% test split is made before FLAML sees any data and is used exactly once, 
 
 **"Why is the Titanic F1 only about 0.7?"**
 F1 here is measured for the "survived" class, which is the harder class to predict, and the test set has only 179 rows. Accuracy is around 0.79 to 0.80, which is normal for this dataset with no feature engineering. The point of the demo is the process, not the leaderboard score.
+
+**"Removing the columns only improved F1 by 0.036. Is the project still worth it?"**
+Yes. Titanic is small and well studied, and most of the signal sits in two columns (sex and class), so one change cannot move the score much. The project is not about squeezing another decimal out of Titanic. It is about reaching a good model with fewer experiments and less compute, and about judging changes correctly. This experiment already shows why that matters: on my first split the gain was 0.036, but over five other splits the average gain was only 0.012, it helped on three of the five, and on one split FLAML's validation score even preferred the worse setup. A system that trusts one run would learn the wrong lessons. Bigger gains should come from strategies the baseline does not have yet (feature engineering such as extracting the title from `Name` or computing family size, and class weighting), and from messier datasets with more room to improve.
 
 **"Why is the validation F1 higher than the test F1?"**
 The validation score is the number FLAML was optimising, measured on the training part with cross-validation. After trying hundreds of configurations, the best one is bound to look slightly better than it really is. The test set was never used during the search, so it gives the honest number. With only 179 test rows, it also moves around a bit from run to run.

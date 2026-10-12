@@ -5,6 +5,8 @@
 B.Tech Computer Science Major Project, Phase 1 review
 
 > Archived: the text presented at the Phase 1 review (October 2026). It is no longer updated.
+>
+> Correction to point 2 in section 11: the shared-ticket explanation does not hold up. On that split, test rows shared a ticket with a training row more often (37%) than validation rows did with their training folds (29%), so shared tickets would help the test score at least as much. Validation preferring the worse setup happened on that one split only. Details: `docs/imp/report-notes.md`, chapter 9.
 
 **Contents**
 

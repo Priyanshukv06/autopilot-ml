@@ -1,0 +1,857 @@
+# Notes for the final project report
+
+This file collects the material for the final report while the project is being built, so nothing has to be dug out of old chats or commits later. It is a set of notes, not the report itself.
+
+Chapters 1 to 10 follow the report format. Each chapter has notes and a short "still to add" list. The appendices hold the references, the work log, the figure checklist, open items and where the raw data is.
+
+Rules for keeping it up to date:
+
+- After each piece of work (a module, a design decision, an algorithm, a problem solved, an experiment), add the facts to the right chapter and one line to the work log in Appendix B.
+- Only real, measured numbers, each with its settings (dataset, time budget, seed, date) and where the raw files are.
+- Mark anything that is not built yet as planned.
+- Longer text that is already written lives in `PROJECT.md` (same folder). This file points to it instead of copying it.
+
+Last updated: 2026-10-12
+
+---
+
+## 0. Front matter
+
+- Title submitted to the department: **AutoPilot-ML - An Autonomous, Self-Optimizing Machine Learning Experimentation Framework**. The repository and `PROJECT.md` use the subtitle "Autonomous Machine Learning Experimentation & Self-Optimization Framework". Use the submitted title everywhere in the final report.
+- Members (B.Tech CSE): Priyanshu Verma, Sch. No. 23U02016; Salil Kushwah, Sch. No. 23U02003.
+- Group number, guide, department and institute: to fill in.
+- Phase 1 review: October 2026, completed successfully (exact date to fill in).
+- Abstract: write it last, from the final results. Starting points are the abstract in `PROJECT.md` and the project description posted for the department, copied below. When it was posted only the baseline existed; the critic, strategy engine, memory, resource manager and SHAP were still planned.
+
+> AutoPilot-ML is an autonomous machine learning experimentation framework that goes beyond conventional AutoML. Instead of a single model search, it works like a data scientist in a loop. It profiles the dataset (data types, missing values, duplicates, class imbalance, high-cardinality and identifier columns), detects the problem type (binary, multiclass or regression) and trains models with FLAML as its AutoML engine. It then evaluates them on held-out data against baseline models and with explainability. A Critic module diagnoses model weaknesses such as overfitting, underfitting, class imbalance and misleading validation scores. A Strategy Engine then selects the next improvement (feature engineering, class weighting, SMOTE, regularisation or a change of model family) using rule-based selection, multi-armed bandits and meta-learning. An Experiment Memory stores dataset meta-features, strategies, results and compute cost, so the system learns from past experiments and tries first the strategies that worked on similar datasets. A Resource Manager spends the user's time and CPU budget on the experiments that give the most improvement per unit of compute. The system includes MLflow experiment tracking, explainability (permutation importance, SHAP) and an interactive Streamlit dashboard, and runs fully locally with no paid APIs. It will be evaluated against FLAML and AutoGluon with ablation studies. The baseline pipeline (profiling, task detection, FLAML training, evaluation, tracking and dashboard) is already implemented.
+
+---
+
+## 1. Introduction
+
+Notes:
+
+- Tabular data (records in rows and columns) is still the most common kind of data in applied machine learning. Gradient-boosted trees such as LightGBM and XGBoost are strong on it.
+- AutoML libraries (auto-sklearn, TPOT, AutoGluon, FLAML) automate choosing a model and its hyperparameters, known as the combined algorithm selection and hyperparameter optimisation (CASH) problem (Thornton et al., 2013).
+- They do not automate the loop around that search: reading the results, finding out why the model is weak, choosing what to change in the data, the features or the model family, running again, comparing fairly and deciding when to stop. What is learned on one dataset is rarely reused on the next.
+- Motivating example, measured on Titanic (EXP-001, 60 s budget, seed 42): test F1 0.673 against train F1 0.934, so the model overfits. `Ticket` has 681 different values in 891 rows, and 63% of the test passengers have a ticket number the model never saw in training. A person would drop or re-encode the column, run again and compare. AutoPilot-ML aims to do this loop itself.
+- Origin of the project: it started from working with FLAML (Microsoft Research; Wang et al., MLSys 2021; MIT licence). FLAML finds good models quickly on a laptop because its search takes the cost of each trial into account. The questions after every run were still left to the user, and that gap became this project. FLAML is used unchanged as the search engine. We do not modify it and do not claim to beat it; comparing against it is part of the evaluation.
+- Constraints that shape the design: a laptop CPU, no GPU, no paid APIs, no cloud services. Every decision must be measurable and work offline.
+- Research question: "Can an autonomous experimentation layer improve the efficiency and effectiveness of conventional AutoML by learning from previous experiments, diagnosing model weaknesses, selecting appropriate improvement strategies, and allocating computational resources adaptively?"
+- Text already written: `PROJECT.md` Abstract, Acknowledgement, sections 1 and 2.
+
+Still to add: a short paragraph on how the report is organised, written at the end.
+
+---
+
+## 2. Literature review
+
+Notes by topic. Numbers in brackets refer to the reference list in `PROJECT.md` section 26; other sources are in Appendix A.2.
+
+- Hyperparameter search: grid and random search [12]; Bayesian optimisation with SMAC [10], TPE [11] and Gaussian processes [13]; early stopping of weak configurations with Successive Halving [14], Hyperband [15] and BOHB [16].
+- Model selection together with tuning (CASH): Auto-WEKA [8]; auto-sklearn [4, 5], which also starts its search from configurations that worked on similar datasets (meta-learning) and builds ensembles.
+- Pipeline search: TPOT evolves whole pipelines with genetic programming [7].
+- Ensembles with strong defaults: AutoGluon-Tabular stacks many models instead of searching for long [6].
+- Cost-aware search: FLAML [1] with CFO [2] and BlendSearch [3]. FLAML also has a "zero-shot" mode that picks data-dependent default configurations mined offline from many datasets (Kayali and Wang, 2022).
+- Time-limited model selection using other datasets: OBOE fits a low-rank model to a matrix of model errors across many datasets and uses it to choose promising models for a new dataset within a time budget (Yang et al., 2019).
+- Meta-learning in general: survey by Vanschoren [17]. OpenML as a source of datasets and results [24]. The AutoML Benchmark for fair comparisons [23].
+- Bandits, for choosing between options under uncertainty: UCB1 [18] and Thompson sampling (Thompson, 1933).
+- Data problems the critic will look for: class imbalance and SMOTE [19]; data leakage, for example through ID-like columns (Kaufman et al., 2012).
+- Honest evaluation: picking the best of many configurations on the same validation data makes the winner's validation score optimistic (Cawley and Talbot, 2010). Comparing methods over many datasets needs paired tests such as Wilcoxon and Friedman [22].
+- Explanations: permutation importance, introduced with random forests [20], in its model-agnostic form (Fisher et al., 2019); SHAP [21] (planned).
+- LLM-based data science: CAAFE for feature engineering [26] and MLAgentBench for agents that run ML experiments [27]. These depend on a large language model, and the papers used hosted models. Related work only: AutoPilot-ML does not use an LLM for decisions.
+- Experiment tracking: MLflow [25].
+
+Draft comparison. Check each cell against the papers before using it in the report.
+
+| System | Model and hyperparameter search | Changes to data and features | Explains why a model is weak | Learns across datasets | Budget decisions across experiments |
+|---|---|---|---|---|---|
+| auto-sklearn | Yes, Bayesian optimisation | Partly: preprocessing steps inside the search space | No | Yes: warm start from data collected offline | Time limit only |
+| TPOT | Yes, genetic programming | Yes: pipeline operators | No | No | Generations or time limit |
+| AutoGluon-Tabular | Little: strong defaults and stacking | Built-in preprocessing | No | Fixed presets; newer versions also use portfolios built offline | Time limit and presets |
+| FLAML | Yes, cost-aware | Built-in preprocessing | No | Zero-shot defaults mined offline | Cost-aware inside one search |
+| OBOE | Model selection | No | No | Yes: error matrix over many datasets | Time-limited model selection |
+| LLM agents (CAAFE, MLAgentBench) | Through the LLM | Yes, written by the LLM | Implicitly, inside the LLM | No | No |
+| AutoPilot-ML (planned) | Through FLAML | Yes: strategy engine | Yes: critic | Yes: memory of changes with their effect and cost, from the user's own runs | Yes: resource manager |
+
+Points to make in the chapter:
+
+- Existing cross-dataset learning (auto-sklearn's warm start, FLAML's zero-shot defaults, OBOE) transfers good model and hyperparameter choices mined offline. AutoPilot-ML's memory stores changes to the experiment (drop or encode a column, class weights, resampling, another model family) with their measured effect and cost, collected from the user's own runs.
+- None of the AutoML systems above explains why a model is weak or decides to change the data. LLM agents can, but they need a large language model and are hard to reproduce and measure.
+- Phase 1 already showed why careful comparison matters (chapter 9). This connects to Cawley and Talbot (2010) and to Demšar [22].
+
+Still to add: read the papers in Appendix A.3, check the comparison table, write one paragraph per group of works.
+
+---
+
+## 3. Problem definition and objectives
+
+Problem (from `PROJECT.md` section 3): given a tabular dataset D with a target column y, a task T (binary classification, multiclass classification or regression), a primary metric m and a compute budget B (time, number of experiments, CPU cores):
+
+1. find a pipeline p (data treatment, features, model, hyperparameters) with the best possible test performance m(p), and
+2. reach it using as little of B as possible.
+
+The baseline solves part 1 with one AutoML run. The research system works on both parts with a sequence of experiments e1, e2, ..., ek, where each next experiment is chosen from the diagnoses of the earlier ones and from a memory of experiments on other datasets.
+
+| No. | Objective | Status |
+|---|---|---|
+| O1 | Baseline: profiling, task detection, FLAML training, held-out evaluation, explanations, experiment tracking, dashboard | Done (Phase 1) |
+| O2 | Critic: automatic, structured diagnosis of each experiment, with evidence | Planned |
+| O3 | Strategy engine: map diagnoses to candidate changes and rank them (rules, then bandits, then memory) | Planned |
+| O4 | Planner and autonomous loop, with a fair comparison of every change over several splits | Planned |
+| O5 | Experiment memory: reuse what worked on similar datasets | Planned |
+| O6 | Resource manager: share the time and CPU budget and decide when to stop (utility = improvement / cost) | Planned |
+| O7 | Evaluation against a manual baseline, FLAML and AutoGluon, with ablations, on public datasets and several seeds | Planned |
+
+- Scope: CSV, single-table tabular data; binary, multiclass and regression; laptop CPU; fully offline.
+- Out of scope: text, images, time series, clustering; LLMs as decision makers; cloud or paid services.
+- Limits in the current code: time budget 5 to 3600 s, at least 20 labelled rows, test share 0.05 to 0.5. The user chooses the target column.
+- Research questions RQ1 to RQ4 and hypotheses H1 to H4: `PROJECT.md` sections 15 and 16, and `research-direction.md`.
+
+Still to add: success criteria with numbers, once the first Phase 2 results exist.
+
+---
+
+## 4. Methodology and work description
+
+### 4.1 Approach
+
+- Build and measure a reliable baseline first, then add one autonomous module at a time. Each module gets tests and an evaluation method before it is used in any claim.
+- Use mature open-source libraries instead of rebuilding them (FLAML, scikit-learn, MLflow, Streamlit). FLAML is used unchanged.
+- Rules set at the start of the project: do not over-engineer; no LLM just for the label "agentic"; no paid APIs; no cloud; business logic separate from the UI; reusable modules with type hints; clear error handling; tests for the important parts; an evaluation method for every research component; never invent results, and label anything not built as planned.
+- One logical change per commit, with conventional commit messages.
+
+### 4.2 Phases
+
+| Phase | Content | Status |
+|---|---|---|
+| 1 | Baseline: profiling, task detection, FLAML, evaluation, MLflow, dashboard, history | Built 7 October 2026; reviewed in October 2026 |
+| 2 | Rule-based critic, strategy catalogue and engine, fair comparison of changes, planner loop, memory, resource manager | Next |
+| 3 | Learned strategy selection (bandits, memory), AutoGluon engine, benchmark, ablations | Planned |
+| 4 | Optional local LLM explanations, SHAP, API, packaging | Later |
+
+Steps and "done when" checks for each phase: `development-roadmap.md`.
+
+### 4.3 Work done in Phase 1
+
+In order (dates and commits in Appendix B):
+
+1. Checked the machine and tools, created the conda environment `automl` with Python 3.11 and installed pinned libraries.
+2. Created the project structure, settings and logging.
+3. Built the services: task detector, dataset profiler, evaluator, experiment tracker, and the AutoML runner with the FLAML engine.
+4. Added four small public datasets.
+5. Built the Streamlit dashboard with seven sections, including the experiment history.
+6. Wrote the tests, checked the dashboard headlessly on all four datasets and checked metric values against scikit-learn.
+7. Wrote the documentation, ran the first experiments, wrote the seed comparison script, then prepared and gave the Phase 1 review.
+
+### 4.4 How correctness was checked
+
+- 47 pytest tests (section 8.6), about 29 s, including short real FLAML runs.
+- Streamlit's headless test tool drove the real dashboard on all four sample datasets without errors. The demo flow was rehearsed with 23 automated checks, all passed (7 October 2026).
+- ROC-AUC, F1 and accuracy shown by the app were recomputed with scikit-learn from the saved predictions and matched exactly (Titanic: ROC-AUC 0.7868247694334651 both ways; the predicted class matched the higher probability on every row).
+- MLflow runs, metrics and files were read back through the MLflow server's REST API.
+- A saved model was reloaded and used to predict.
+
+### 4.5 Experimental method so far
+
+- Outer split: stratified 80/20 train/test split, made before FLAML sees any data. The test part is used once, at the end.
+- FLAML searches on the training part and validates each trial with 5-fold cross-validation or a holdout split, using its own rule (section 5.2).
+- Reported for every run: test metrics, train metrics, FLAML's validation score, a trivial baseline on the same test rows, training time and number of trials.
+- Comparing two setups: both are run on the same splits (same seed) and compared split by split (`scripts/compare_seeds.py`), with a paired t-test and a Wilcoxon signed-rank test on the differences. For a single split, a paired bootstrap over the test rows gave a confidence interval for the difference (section 9.3).
+- Planned for Phase 2: the loop decides on validation data only, over several splits; the test set only reports the final result (P6 in section 5.3).
+
+### 4.6 Design decisions
+
+| Decision | Reason |
+|---|---|
+| Test split made outside FLAML | FLAML's validation score is the number it optimised, so it cannot also be the independent final score |
+| FLAML behind a small engine interface | FLAML stays replaceable; AutoGluon is needed later for comparison |
+| Services never import Streamlit | The same code runs from the UI, scripts, notebooks and tests |
+| `MlflowClient` with explicit run IDs instead of MLflow's global "active run" | No hidden global state; works from a background thread |
+| MLflow on a local SQLite file | MLflow 3 defaults to a database backend; SQLite needs no server |
+| A small JSON record per experiment, next to MLflow | Readable and independent of the engine; raw material for the experiment memory |
+| Permutation importance first, SHAP later | Works on the original columns for every model FLAML returns |
+| Rule-based task detection with a user override | Easy to explain and test; unclear cases such as integer codes get lower confidence |
+| Experiment IDs reserved by creating the folder | Two runs started together can never get the same ID |
+| Experiment runs in a background thread | Streamlit reruns the script on every click; the run and its progress survive reruns |
+
+### 4.7 Problems met and how they were solved
+
+| Problem | Solution |
+|---|---|
+| FLAML printed a warning on every prediction when a column had values not seen in training: 96 warning lines in one 10-second Titanic run, mostly during permutation importance | Silenced that message and added one note per column with the share of affected test rows (commit 2fddc57) |
+| In longer runs the warnings came back, because scikit-learn's parallel helper calls `warnings.resetwarnings()` in worker threads, which wipes the process-wide filter list | Also drop these two kinds of warnings (unseen categories and convergence) where Python prints warnings, with a test (commit ca536c7) |
+| `mlflow ui` crashed on Windows with several workers (`OSError: [WinError 10022]`) | Start it with `--workers 1` |
+| MLflow 3 prints an "agent hint" banner on import, and its SQLite store prints a deprecation warning | `MLFLOW_DISABLE_AGENT_HINT=1`, and that warning is filtered |
+| MLflow 3 creates its database in whatever folder it is started from | Fixed locations: `mlruns/mlflow.db` and `mlruns/artifacts` |
+| Streamlit listens on all network interfaces by default and has no login | Start it with `--server.address localhost` |
+| FLAML reports no progress during its search | The progress bar is estimated from elapsed time against the budget |
+| Tests with a 3-second budget failed the 5-second minimum | Tests use 5 s |
+| pandas 3.0 has a new default text type (`str`) | Checked that FLAML 2.7 handles it |
+| Streamlit 1.65 deprecates `use_container_width` | `width="stretch"` |
+| Saved models are pickle files, which can run code when loaded | Documented: only load files this app created |
+| MLflow stores absolute file paths | Documented: moving the project folder breaks file links in old MLflow runs; the JSON records still work |
+
+### 4.8 Phase 1 review
+
+- Presented in October 2026 using the live dashboard and `docs/unimp/Project_Presentation.md`. Result: completed successfully.
+- Correction made afterwards (12 October 2026): the presentation explained the validation/test disagreement on seed 42 with shared ticket numbers. Measurement showed this does not hold up (section 9.7). The archived files carry a note.
+- Feedback from the guide: to fill in.
+
+Still to add: Phase 2 work as it happens.
+
+---
+
+## 5. Proposed algorithms
+
+### 5.1 Implemented in Phase 1
+
+**Algorithm 1: one experiment** (`AutoMLRunner.run_experiment`)
+
+```text
+input: dataset D, target, task (optional), metric (optional), budget, seed, test share, excluded columns
+1  check: target and excluded columns exist, 5 <= budget <= 3600, 0.05 <= test share <= 0.5
+2  y = target values without missing ones; X = the same rows without the target and excluded columns
+3  require at least 20 rows and at least one feature column
+4  task = given task, or detect it (Algorithm 2); check that task and metric fit y
+5  split X, y into train and test (stratified for classification; plain if a class has fewer than 2 rows)
+6  model, trial history, leaderboard = FLAML search on train (section 5.2)
+7  test metrics, train metrics, trivial baseline on the test rows (Algorithm 4)
+8  permutation importance on the test rows (Algorithm 5); unseen-category notes (Algorithm 6)
+9  save the model bundle, write result files, log an MLflow run, write summary.json
+output: ExperimentResult
+```
+
+**Algorithm 2: task detection** (`TaskDetector.detect`), on the target values without missing ones:
+
+1. Fewer than 2 distinct values: rejected.
+2. Text or boolean target: 2 classes gives binary; more classes gives multiclass, with high confidence up to 20 classes and low confidence above.
+3. Numeric target with exactly 2 distinct values: binary.
+4. Integer values with at most 20 distinct values: multiclass, medium confidence if the distinct values are at most 5% of the rows, otherwise low; the user is told it may be a count or an ordinal value.
+5. Other integer values: regression, medium confidence. Anything else: regression, high confidence.
+
+User overrides are checked by `TaskDetector.validate`: regression needs a numeric target, binary needs exactly 2 classes, multiclass needs at least 3. Warnings for missing targets, more than 20 classes, or classes with fewer than 2 rows.
+
+**Algorithm 3: column checks** (`DatasetProfiler`):
+
+- Constant: at most 1 distinct value.
+- Identifier-like: every value is different, nothing is missing, and the column is not decimal or a date; or the name looks like an ID (`id`, `..._id`, `...Id`, `...ID`) and more than 95% of the values are distinct. Identifier-like and constant columns are suggested for exclusion.
+- High cardinality: a text column with more than 50 distinct values (flagged only).
+- Mostly empty: at least 40% missing.
+- Class balance: ratio of majority to minority class. Below 1.5 none, 1.5 to 3 mild, 3 to 9 moderate, 9 or more severe.
+- Meta-features for the planned memory (`DatasetProfile.meta_features`): rows, columns, numerical and categorical feature counts, share of numerical features, overall and largest missing share, duplicate share, numbers of ID-like, high-cardinality and constant columns; for classification the number of classes, imbalance ratio and majority share; for regression the skew of the target.
+
+**Algorithm 4: scores and metrics** (`Evaluator`, `FLAMLEngine`):
+
+- Primary metric choices: binary F1, ROC-AUC, accuracy, log loss; multiclass macro F1, accuracy, macro ROC-AUC (one-vs-rest), log loss; regression R², RMSE, MAE, MSE. Defaults: F1 and R².
+- Names passed to FLAML: multiclass F1 becomes `macro_f1` and ROC-AUC becomes `roc_auc_ovr`; the others keep their names.
+- FLAML minimises a loss. For metrics where higher is better the score is 1 - loss; for error metrics the score is the loss itself.
+- Binary positive class: the last label in sorted order (Titanic: 1, survived; breast cancer: "malignant").
+- Trivial baseline on the same test rows: always the most common training class, or the training mean for regression.
+- Accuracy warning: shown when accuracy is chosen and the imbalance is moderate or severe.
+
+**Algorithm 5: permutation importance** (`Evaluator.feature_importance`, built on scikit-learn):
+
+```text
+use at most 2000 test rows
+s0 = score of the model with the primary metric, signed so that higher is better
+for each original column j:
+    repeat 5 times: shuffle column j and score again -> s(j, r)
+    importance(j) = mean over r of (s0 - s(j, r)); spread(j) = standard deviation
+sort the columns by importance
+```
+
+**Algorithm 6: unseen categories** (`unseen_category_warnings`): for each non-numeric column, the share of test rows whose value never appears in the training part. One note per affected column.
+
+### 5.2 FLAML's search (external, used unchanged)
+
+- Learner choice: FLAML keeps a search state for each learner and picks the next one using an estimate of the cost for improvement (ECI) [1]. In our classification runs the learners were LightGBM, XGBoost, XGBoost with limited depth, random forest, extra trees, an SGD linear model and L1 logistic regression (CatBoost is not installed).
+- Hyperparameters: CFO, a local search that starts from cheap configurations and moves to expensive ones only when that looks worthwhile [2]. FLAML's "auto" setting resolves to CFO in our runs because trials run one at a time without Ray or Spark (checked in the FLAML 2.7.0 source). BlendSearch [3] is used only for parallel trials and needs the optional Optuna package, which is not installed.
+- Validation rule (FLAML 2.7.0 source): 5-fold cross-validation if rows x columns / 0.9 < 10,000,000 x budget / 3600 and rows < 100,000; otherwise a holdout split. Titanic used cross-validation (recorded at 10 s and 60 s); California housing used holdout at 10 s.
+- After the search, the best configuration is retrained on all training rows (`retrain_full=True`). The search may stop early once it has converged (`early_stop=True`).
+
+### 5.3 Planned (draft designs; they will change as they are built)
+
+**P1. Critic.** Decisions use training and validation data only, never the test set. Starting rules, to be tuned on synthetic datasets with planted problems and frozen before the final evaluation:
+
+| Diagnosis | Evidence | Starting rule |
+|---|---|---|
+| Overfitting | train score minus validation score | gap above 0.10 moderate, above 0.20 high (scores from 0 to 1) |
+| Underfitting | train and validation scores against the trivial baseline | both low; exact rule to be set |
+| Class imbalance | class balance severity | moderate or severe |
+| Missing values | missing share per column | at least 40% in a column |
+| High cardinality | distinct values; unseen values between training and validation folds | more than 50 distinct text values, or many unseen values |
+| Unreliable validation | spread of validation scores across folds or splits | spread larger than the change being tested |
+| Wasted compute | improvement per second over recent trials or experiments | below a threshold |
+| Possible leakage (later) | one column with very high importance; ID-like names | flag for the user |
+
+Example from Phase 1 (EXP-001): train F1 0.934 against validation F1 0.802, a gap of 0.13, so "overfitting: moderate" under the starting rule.
+
+Each diagnosis will be checked for precision and recall on synthetic datasets where the problem is planted on purpose.
+
+**P2. Strategy rule table** (first version, also in `PROJECT.md` section 13):
+
+| Diagnosis | Candidate strategies |
+|---|---|
+| Overfitting | drop or encode high-cardinality columns; search space biased towards regularisation; fewer or shallower trees; feature selection |
+| Underfitting | more budget; more expressive model families; new features |
+| Class imbalance | class weights; SMOTE; switch the metric to F1 or ROC-AUC; tune the decision threshold |
+| Missing values | missing-value indicator columns; drop mostly empty columns |
+| High cardinality | frequency or target encoding; drop the column |
+| ID-like or constant columns | drop them |
+| Redundant features | drop one column of each highly correlated pair |
+| Unreliable validation | more splits or repeated cross-validation; group-aware folds where rows are related |
+| Wasted compute | restrict the model list; smaller budget; stop |
+
+**P3. Strategy selection.**
+
+- Version 1: fixed priority from the rule table, cheapest strategy first.
+- Version 2, bandit: each strategy is an arm. Reward = (validation score after - before) / compute seconds, sign flipped for error metrics and scaled to 0..1 over the strategies tried. UCB1 picks the arm with the highest mean reward + sqrt(2 ln N / n_a), where N is the total number of tries and n_a the tries of arm a [18]. Thompson sampling keeps a Gaussian belief about each arm's mean reward and picks the arm with the highest sampled value.
+- Version 3: start each arm's belief from what the strategy achieved on similar datasets (P4).
+
+**P4. Memory retrieval.** Each record stores meta-features, diagnoses, strategy, engine, model family, hyperparameters, score before and after (with its spread over splits) and cost. For a new dataset: standardise the meta-features over the stored records, find the k nearest past datasets by Euclidean distance (k = 5 to start), and rank strategies by distance-weighted mean reward. Fall back to the rule order when there are fewer than 3 observations.
+
+**P5. Resource manager.** Utility = improvement in validation score / compute seconds. The first run gets a fixed share of the budget (for example 30%), and each later experiment gets a share of what is left, weighted by expected utility. Stop when the time or experiment limit is reached, when no remaining strategy has an expected utility above a threshold, or after two experiments in a row without a kept improvement. `n_jobs` follows the CPU limit.
+
+**P6. Fair comparison of a change** (added after Phase 1):
+
+```text
+input: current setup A, candidate setup B, number of splits k (k >= 5)
+for i = 1..k:
+    split the training part into a search part and a decision part (80/20, seed i)
+    run FLAML for A and for B on the search part, same budget
+    d(i) = score of B minus score of A on the decision part
+keep B if the mean of d is above 0 and B wins on most splits
+(use the Wilcoxon signed-rank test once k >= 6)
+the outer test set is never used for this decision
+```
+
+This costs 2k runs per decision, so the budget split has to allow for it. Cheaper variants (shorter comparison budgets, reusing A's runs) are to be explored.
+
+**P7. Group-aware validation** (option): keep rows of the same group, for example the same `Ticket`, inside one fold, for data where new rows will come from new groups. On Titanic it is not needed to make validation and test agree (section 9.7); it is a choice about what kind of new data to expect.
+
+---
+
+## 6. Proposed flowchart, DFD and block diagrams
+
+To put these in the report, paste each block into mermaid.live and export PNG or SVG, or use a Mermaid preview extension in the editor. The call sequence of one experiment is in `architecture.md`.
+
+### 6.1 Block diagram: current baseline
+
+```mermaid
+flowchart LR
+    U["User"] --> UI["Streamlit dashboard"]
+    UI --> PR["Dataset profiler"]
+    UI --> TD["Task detector"]
+    UI --> RU["AutoML runner"]
+    RU --> SP["Stratified train/test split"]
+    SP --> FE["FLAML engine"]
+    FE --> EV["Evaluator and explanations"]
+    EV --> TR["Experiment tracker"]
+    RU --> MS[("Model files")]
+    TR --> ML[("MLflow store")]
+    TR --> JR[("Experiment records")]
+    JR --> UI
+    EV --> UI
+```
+
+### 6.2 Block diagram: proposed system
+
+```mermaid
+flowchart TD
+    IN["Dataset, target and budget"] --> DI["Dataset intelligence: profiler and task detector"]
+    DI --> PL["Experiment planner (planned)"]
+    PL --> AM["AutoML core: FLAML"]
+    AM --> EV["Evaluation: metrics, errors, cost"]
+    EV --> CR["Critic (planned)"]
+    CR --> SE["Strategy engine (planned)"]
+    SE --> PL
+    EV --> ME[("Experiment memory (planned)")]
+    ME --> SE
+    RM["Resource manager (planned)"] --> PL
+    RM --> SE
+    EV --> OUT["Best pipeline and experiment log"]
+```
+
+### 6.3 DFD level 0 (context)
+
+```mermaid
+flowchart LR
+    U["User"] -->|CSV file, target, budget, metric, seed| S(("AutoPilot-ML"))
+    S -->|profile, results, charts, history, trained model| U
+```
+
+### 6.4 DFD level 1 (current baseline)
+
+```mermaid
+flowchart LR
+    U["User"]
+    P1(("1.0 Load and profile data"))
+    P2(("2.0 Detect task and check settings"))
+    P3(("3.0 Split data"))
+    P4(("4.0 Search models with FLAML"))
+    P5(("5.0 Evaluate and explain"))
+    P6(("6.0 Save and track"))
+    P7(("7.0 Show results and history"))
+    D1[("D1 Model store")]
+    D2[("D2 Experiment records")]
+    D3[("D3 MLflow store")]
+
+    U -->|CSV file| P1
+    P1 -->|dataset profile| U
+    U -->|target, task, budget, metric, seed, excluded columns| P2
+    P1 -->|data table| P2
+    P2 -->|checked configuration| P3
+    P3 -->|training part| P4
+    P3 -->|test part| P5
+    P4 -->|best model, trial history, leaderboard| P5
+    P5 -->|metrics, importance, predictions| P6
+    P6 -->|model bundle| D1
+    P6 -->|summary and result files| D2
+    P6 -->|parameters, metrics, files| D3
+    D2 -->|past experiments| P7
+    P5 -->|results| P7
+    P7 -->|tables and charts| U
+```
+
+### 6.5 Flowchart: one experiment (current)
+
+```mermaid
+flowchart TD
+    A(["Start"]) --> B["Load CSV"]
+    B --> C["Profile the dataset"]
+    C --> D["User selects the target column"]
+    D --> E["Detect the task; user may override"]
+    E --> F{"Settings valid?"}
+    F -->|No| G["Show the error"] --> D
+    F -->|Yes| H["Drop rows without a target and the excluded columns"]
+    H --> I["Stratified 80/20 split"]
+    I --> J["FLAML search on the training part within the time budget"]
+    J --> K{"At least one trial finished?"}
+    K -->|No| L["Ask for a larger time budget"] --> Z(["End"])
+    K -->|Yes| M["Retrain the best configuration on all training rows"]
+    M --> N["Evaluate on test and train parts, compare with the trivial baseline"]
+    N --> O["Permutation importance on the test part"]
+    O --> P["Save the model, write result files, log the MLflow run"]
+    P --> Q["Show results and update the history"]
+    Q --> Z
+```
+
+### 6.6 Flowchart: autonomous loop (planned)
+
+```mermaid
+flowchart TD
+    A(["Start: dataset, target, budget"]) --> B["Profile and detect the task"]
+    B --> C["Planner: first configuration, using memory of similar datasets"]
+    C --> D["Run experiment"]
+    D --> E["Critic: diagnoses with evidence"]
+    E --> F["Strategy engine: rank changes by expected gain per second"]
+    F --> G{"Budget left and expected gain worth the cost?"}
+    G -->|No| H["Return the best pipeline and the experiment log"] --> Z(["End"])
+    G -->|Yes| I["Planner: apply the top strategy"]
+    I --> J["Compare old and new setup over several splits on validation data"]
+    J --> K{"Better on most splits?"}
+    K -->|Yes| L["Keep the change"]
+    K -->|No| M["Discard the change"]
+    L --> N["Memory: record diagnosis, strategy, effect and cost"]
+    M --> N
+    N --> E
+```
+
+Still to add: render the diagrams as images; update 6.6 when the loop is built.
+
+---
+
+## 7. Tools and technology used
+
+Machine used for all runs so far:
+
+| Item | Value |
+|---|---|
+| Laptop | ASUS ROG Zephyrus G15 (GA503RW) |
+| CPU | AMD Ryzen 9 6900HS, 8 cores, 16 threads |
+| RAM | 15.2 GB, as reported by Windows |
+| GPU | Not used |
+| Operating system | Windows 11 Home Single Language, version 10.0.26200 |
+
+Software (versions pinned in `requirements.txt`):
+
+| Area | Tool | Version | Used for |
+|---|---|---|---|
+| Language | Python | 3.11.16 | Everything |
+| Environment | Miniconda (conda) | 26.5.3 | Separate environment `automl` (about 1.1 GB on disk) |
+| Data | pandas | 3.0.6 | Loading and handling tables |
+| Numerics | NumPy | 2.4.6 | Arrays and numeric work |
+| Machine learning | scikit-learn | 1.9.1 | Splitting, metrics, permutation importance |
+| Scientific | SciPy | 1.17.1 | Dependency; statistical tests later |
+| AutoML | FLAML | 2.7.0 | Model and hyperparameter search |
+| Learners | LightGBM, XGBoost | 4.7.0, 2.1.4 | Gradient-boosted trees searched by FLAML |
+| Tracking | MLflow | 3.17.0 | Experiment runs on a local SQLite file |
+| Dashboard | Streamlit | 1.65.0 | Web interface |
+| Charts | Plotly | 7.1.0 | Interactive charts |
+| Configuration | python-dotenv | 1.2.4 | Reading `.env` settings |
+| Testing | pytest | 9.1.1 | Automated tests |
+| Version control | Git | 2.55.0 | History, one change per commit |
+| Editor | Kiro (based on VS Code) | | Development |
+
+Why these: all open source, all run offline on a laptop CPU, widely used and documented. FLAML was chosen as the engine because its cost-aware search gives good models on small budgets.
+
+Planned, not used yet: Optuna (searching strategy settings), SHAP (explanations), imbalanced-learn (SMOTE), AutoGluon (comparison baseline), OpenML (benchmark datasets).
+
+Sample datasets (all public, small):
+
+| File | Size | Rows x columns | Task and target | Notes from the profiler |
+|---|---|---|---|---|
+| `titanic.csv` | 59 KB | 891 x 12 | Binary, `Survived` (549 died, 342 survived; majority 61.6%, mild imbalance) | 866 missing values (Age 177, Cabin 687, Embarked 2); ID-like `PassengerId`, `Name`; high-cardinality `Ticket` (681), `Cabin` (147); `Cabin` 77% missing |
+| `breast_cancer.csv` | 122 KB | 569 x 31 | Binary, `diagnosis` (357 benign, 212 malignant; majority 62.7%, mild) | 30 numeric features, no missing values |
+| `penguins.csv` | 13 KB | 344 x 7 | Multiclass, `species` (Adelie 152, Gentoo 124, Chinstrap 68; majority 44.2%, mild) | 4 numeric and 2 text features; 19 missing values |
+| `california_housing.csv` | 1.9 MB | 20,640 x 9 | Regression, `MedHouseVal` (mean 2.07, median 1.80, range 0.15 to 5.00, skew 0.98) | 8 numeric features, no missing values; the target is capped at about 5.0 in the original data |
+
+Sources: Titanic, Kaggle "Titanic: Machine Learning from Disaster" training set (via datasciencedojo/datasets on GitHub); Breast Cancer Wisconsin (Diagnostic), UCI, exported from scikit-learn; Palmer Penguins (Horst, Hill and Gorman), via mwaskom/seaborn-data; California Housing (Pace and Barry, 1997), exported from scikit-learn.
+
+---
+
+## 8. Implementation and coding
+
+### 8.1 Code size (12 October 2026)
+
+| File | Lines | Main parts |
+|---|---|---|
+| `app/services/automl_runner.py` | 817 | `ExperimentConfig`, `AutoMLEngine`, `FLAMLEngine`, `EngineResult`, `ExperimentResult`, `AutoMLRunner`, `unseen_category_warnings` |
+| `app/services/profiler.py` | 328 | `DatasetProfiler`, `DatasetProfile`, `ColumnProfile`, `ClassBalance`, `analyze_class_balance` |
+| `app/services/evaluator.py` | 318 | `Evaluator`, `EvaluationResult`, `METRICS`, `PRIMARY_METRICS`, `metric_warnings` |
+| `app/services/task_detector.py` | 228 | `TaskDetector`, `TaskType`, `TaskDetectionResult`, `TargetCandidate` |
+| `app/services/experiment_tracker.py` | 197 | `ExperimentTracker` |
+| `app/core/config.py`, `logging_config.py` | 130, 41 | `Settings`, `build_settings`, `get_settings`, `setup_logging` |
+| `app/components/results_viewer.py` | 293 | Sections 5 and 6 of the dashboard |
+| `app/components/experiment_viewer.py` | 206 | Sections 3, 4 and 7 |
+| `app/components/dataset_profiler.py` | 185 | Sections 1 (profile) and 2 |
+| `app/components/dataset_uploader.py` | 124 | Section 1 (input), CSV reading with fallbacks |
+| `app/main.py` | 91 | Page layout and sidebar |
+| `scripts/compare_seeds.py` | 89 | Paired comparison of two setups over several seeds |
+| `tests/` (3 files) | 469 | 47 tests |
+
+Total: 3,539 lines in 21 Python files (2,981 in `app/`, 469 in `tests/`, 89 in `scripts/`), including comments and blank lines.
+
+### 8.2 Main interfaces
+
+```python
+result = AutoMLRunner().run(
+    dataframe=df, target_column="Survived", task=None,      # None means detect
+    time_budget=60, primary_metric="f1", random_seed=42, test_size=0.2,
+    excluded_columns=["PassengerId", "Name"], dataset_name="titanic",
+    estimator_list=None, progress_callback=None,
+)
+```
+
+- `AutoMLEngine.fit(X_train, y_train, *, task_type, metric, time_budget, seed, n_jobs, estimator_list, work_dir)` returns an `EngineResult`: model, engine name and version, best estimator, best configuration, best validation score, validation method, training time, trial history, leaderboard, model's own feature importance, class labels.
+- `ExperimentResult` (saved as `summary.json`): ID and time; dataset, target, task, metric; budget, seed, test share; engine and version; train and test sizes; feature and excluded columns; best model and configuration; validation, test and train scores; full test, train and baseline metrics; training time, total time, number of trials; leaderboard; feature importance; dataset meta-features; warnings; model path, result folder and MLflow run ID.
+- Progress stages reported to the UI: preparing (2%), searching (5% to 85%, estimated from time), evaluating (85%), explaining (90%), saving (95%), done (100%).
+
+### 8.3 Dashboard sections
+
+1. Dataset: upload or sample; cards for rows, columns, missing values, duplicates, numerical and categorical features; tabs for columns, preview, data quality and target candidates.
+2. Target: target column; detected problem with reason and confidence; override; class distribution or target histogram; columns to exclude.
+3. Experiment configuration: time budget, primary metric, random seed, test split; metric warnings.
+4. Run AutoML: button, progress bar, success or error message.
+5. Results: best model, test score, validation score, training time; notes and warnings; test metrics with differences from the baseline; train vs test table; leaderboard; search progress chart.
+6. Explainability: permutation importance with spread, the model's own importance, confusion matrix with per-class report, ROC curve (binary), predicted vs actual and residual plots (regression), best configuration.
+7. Experiment history: table of all experiments, chart of test scores, command to open MLflow.
+
+The sidebar lists the implemented modules and the planned ones.
+
+### 8.4 Files written by one experiment
+
+```text
+experiments/EXP-001/  summary.json, profile.json, evaluation.json, leaderboard.csv, search_history.csv,
+                      feature_importance.csv, native_feature_importance.csv, predictions.csv, flaml_search.log
+models/EXP-001/       model.pkl (model, feature columns, target, task, class labels)
+mlruns/               mlflow.db and artifacts/ (copies of the model and the files above)
+```
+
+### 8.5 Commands
+
+```bash
+conda activate automl
+cd C:\Users\priya\Desktop\project\AutoML\autopilot-ml
+python -m pytest -q
+streamlit run app/main.py --server.address localhost --browser.gatherUsageStats false
+mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db --port 5000 --workers 1
+python scripts/compare_seeds.py --dataset data/sample/titanic.csv --target Survived --exclude-a PassengerId,Name --exclude-b PassengerId,Name,Ticket,Cabin --seeds 1 2 3 4 5 --budget 30
+```
+
+### 8.6 Tests (47, about 29 s)
+
+| File | Tests | What they cover |
+|---|---|---|
+| `tests/test_task_detector.py` | 16 | Detection for 7 kinds of target, confidence, missing values, unusable targets, rejected and allowed overrides, target candidates, default target |
+| `tests/test_profiler.py` | 11 | Shape and types, missing values and duplicates, column flags, class distribution, the 4 imbalance levels, regression summary, JSON output and meta-features, bad input |
+| `tests/test_automl_runner.py` | 20 | Real short FLAML runs (binary with MLflow and model reload, multiclass with ROC-AUC, regression), 7 invalid configurations, impossible override, too few rows, warning handling, unseen categories, a non-FLAML engine, the record left by a failed run, evaluator metrics against scikit-learn, baselines, permutation importance, metric checks |
+
+### 8.7 Code listings worth including in the report
+
+- `FLAMLEngine.fit`: the call to FLAML and the metric mapping (`_METRICS`)
+- The loss-to-score conversion inside `FLAMLEngine.fit`
+- `Evaluator.compute_metrics` and `Evaluator.feature_importance`
+- `TaskDetector.detect` and `analyze_class_balance`
+- `unseen_category_warnings` and `_showwarning_without_search_noise`
+- `ExperimentTracker.allocate_experiment_id` and `ExperimentTracker.log_run`
+
+Still to add: Phase 2 modules, updated line counts and test counts.
+
+---
+
+## 9. Result analysis
+
+All numbers below are real measurements. FLAML's search is limited by time, so repeated runs can differ slightly.
+
+### 9.1 Setup
+
+Machine and software as in chapter 7. Outer split: stratified 80/20; seed 42 unless stated. Titanic runs exclude `PassengerId` and `Name` (setup A); setup B also excludes `Ticket` and `Cabin`.
+
+### 9.2 All four datasets through the dashboard (10 s budget, seed 42, 7 October 2026)
+
+| Dataset | Task | Train / test rows | Best model | Test score | FLAML validation | Trivial baseline on the same test rows | Other test metrics | Training time |
+|---|---|---|---|---|---|---|---|---|
+| Titanic | Binary | 712 / 179 | XGBoost | F1 0.6935 | 0.7868 (CV) | F1 0.0000, accuracy 0.6145 | accuracy 0.7877, ROC-AUC 0.7868 | 10.1 s |
+| Breast cancer | Binary (positive: malignant) | 455 / 114 | LightGBM | F1 0.9512 | 0.9675 | F1 0.0000, accuracy 0.6316 | accuracy 0.9649, ROC-AUC 0.9904 | 10.1 s |
+| Penguins | Multiclass | 275 / 69 | LightGBM | macro F1 0.9829 | 0.9881 | macro F1 0.2020, accuracy 0.4348 | accuracy 0.9855, macro ROC-AUC 0.9991 | 10.0 s |
+| California housing | Regression | 16,512 / 4,128 | XGBoost | R² 0.8566 | 0.8648 (holdout) | R² -0.0002, RMSE 1.1449 | MAE 0.2791, RMSE 0.4335 | 16.9 s |
+
+California's training time is above the 10 s budget because FLAML retrains the best configuration on all 16,512 training rows after the search. Baselines were recomputed on 12 October 2026 on the same seed-42 splits.
+
+### 9.3 Titanic EXP-001 vs EXP-002 (60 s budget, seed 42, run on 7 October 2026)
+
+| | EXP-001 (setup A) | EXP-002 (setup B) |
+|---|---|---|
+| Best model | XGBoost | XGBoost (depth-limited) |
+| Test accuracy | 0.793 | 0.793 |
+| Test balanced accuracy | 0.748 | 0.767 |
+| Test precision | 0.864 | 0.776 |
+| Test recall | 0.551 | 0.652 |
+| Test F1 | 0.673 | 0.709 |
+| Test ROC-AUC | 0.792 | 0.823 |
+| Test log loss | 0.551 | 0.499 |
+| Confusion matrix (TP, FP, FN, TN) | 38, 6, 31, 104 | 45, 13, 24, 97 |
+| Train F1 / train ROC-AUC | 0.934 / 0.987 | 0.873 / 0.960 |
+| Train F1 minus test F1 | 0.261 | 0.164 |
+| Train F1 minus validation F1 | 0.132 | 0.090 |
+| FLAML validation F1 (5-fold CV) | 0.802 | 0.782 |
+| Trials in 60 s | 290 | 501 |
+| Training time / total time | 60.1 s / 63.1 s | 60.0 s / 61.0 s |
+| Top permutation importances | Sex 0.219, Pclass 0.098, Ticket 0.043, Fare 0.027, SibSp 0.021 | Sex 0.293, Pclass 0.179, Age 0.070, Fare 0.045, SibSp 0.019 |
+| Notes | `Ticket`: 63% of test rows unseen in training; `Cabin`: 11% | none |
+
+Leaderboards (best validation F1 per learner, trials in brackets):
+
+- EXP-001: XGBoost 0.802 (114), XGBoost depth-limited 0.792 (21), LightGBM 0.785 (83), random forest 0.742 (36), extra trees 0.715 (7), SGD 0.531 (28), L1 logistic regression 0.454 (1).
+- EXP-002: XGBoost depth-limited 0.782 (187), LightGBM 0.774 (155), XGBoost 0.771 (38), random forest 0.743 (42), extra trees 0.733 (21), SGD 0.647 (46), L1 logistic regression 0.465 (12).
+
+How the two runs differ, row by row on the same 179 test passengers: both right 132, only EXP-001 right 10, only EXP-002 right 10, both wrong 27. Accuracy is therefore the same. EXP-002 finds 7 more survivors (TP 45 against 38) at the cost of 7 more false alarms (FP 13 against 6), which raises recall and F1 and lowers precision.
+
+Paired bootstrap over the 179 test rows (12 October 2026; 5,000 resamples with replacement, NumPy seed 0, from the `predictions.csv` files of both runs):
+
+- 95% intervals: EXP-001 F1 0.564 to 0.768; EXP-002 F1 0.612 to 0.791.
+- F1 difference (EXP-002 minus EXP-001): +0.036, 95% interval -0.042 to +0.117. The difference was zero or negative in 19% of resamples.
+- ROC-AUC difference: +0.031, 95% interval -0.014 to +0.080, zero or negative in 9% of resamples.
+- Conclusion: on this single split the improvement is not statistically clear.
+
+### 9.4 Same pair with a 30 s budget (seed 42, demo rehearsal, 7 October 2026)
+
+| | Setup A | Setup B |
+|---|---|---|
+| Best model | XGBoost (depth-limited) | XGBoost (depth-limited) |
+| Test F1 / accuracy / ROC-AUC | 0.695 / 0.799 / 0.807 | 0.709 / 0.793 / 0.823 |
+| Train F1 / train ROC-AUC | 0.994 / 1.000 | 0.873 / 0.960 |
+| FLAML validation F1 | 0.796 | 0.782 |
+| Trials | 188 | 237 |
+| Total time | 37.0 s | 31.8 s |
+
+### 9.5 Effect of the time budget (seed 42; single split, so indicative only)
+
+| Budget | A validation | A test F1 | A train F1 | A trials | B validation | B test F1 | B train F1 | B trials |
+|---|---|---|---|---|---|---|---|---|
+| 10 s | 0.785 | 0.694 | 0.910 | 77 | 0.774 | 0.698 | 0.851 | 80 |
+| 30 s | 0.796 | 0.695 | 0.994 | 188 | 0.782 | 0.709 | 0.873 | 237 |
+| 60 s | 0.802 | 0.673 | 0.934 | 290 | 0.782 | 0.709 | 0.873 | 501 |
+
+Sources: 10 s rows are development runs (7 October 2026, temporary folders); 30 s from 9.4; 60 s from 9.3. The 10 s Titanic run in 9.2 is a separate run of setup A with the same seed: validation 0.787 and test F1 0.694, so repeated runs moved the validation score by about 0.002 here.
+
+- Setup B reached its final model by 30 s: the 30 s and 60 s runs gave the same test result. More budget only added trials.
+- Setup A's validation F1 rose with the budget while its test F1 did not. That is what selection bias would look like (the best of more trials looks better than it is; Cawley and Talbot, 2010), but one split cannot prove it.
+
+### 9.6 Paired comparison over five splits (30 s budget, seeds 1 to 5, 7 October 2026)
+
+Difference B minus A on each split:
+
+| Seed | Test F1 | Test ROC-AUC | Test accuracy | Train-test F1 gap | Validation F1 | Trials |
+|---|---|---|---|---|---|---|
+| 1 | +0.020 | +0.004 | +0.006 | +0.050 | +0.006 | +44 |
+| 2 | +0.030 | +0.030 | +0.017 | +0.090 | +0.002 | -12 |
+| 3 | -0.003 | -0.007 | -0.006 | +0.016 | +0.006 | +44 |
+| 4 | -0.006 | -0.016 | -0.006 | -0.066 | +0.004 | +15 |
+| 5 | +0.020 | +0.021 | +0.006 | -0.036 | +0.006 | +86 |
+| Mean | +0.012 | +0.006 | +0.003 | +0.011 | +0.005 | +35.4 |
+
+Means per setup:
+
+| Setup | Test F1 | Test ROC-AUC | Test accuracy | Train F1 | Validation F1 | Train-test gap | Trials |
+|---|---|---|---|---|---|---|---|
+| A | 0.772 | 0.870 | 0.836 | 0.852 | 0.766 | 0.080 | 186.4 |
+| B | 0.784 | 0.877 | 0.839 | 0.875 | 0.771 | 0.091 | 221.8 |
+
+- B was better on test F1 on 3 of 5 splits and ran more trials on 4 of 5.
+- Validation F1 preferred B on all 5 splits.
+- The train-test gap did not shrink on average, unlike on seed 42.
+- Paired tests on the five differences (computed 12 October 2026 with SciPy, from the differences rounded to 3 decimals): test F1 paired t-test p = 0.16, Wilcoxon p = 0.25; test ROC-AUC p = 0.50 and 0.63. Not significant. With only five pairs, an exact two-sided Wilcoxon test cannot go below p = 0.0625, so the benchmark needs more splits or more datasets.
+
+A shorter check (10 s, seeds 1 to 3, the version used in the demo, 7 October 2026): test F1 A 0.750 / 0.794 / 0.800, B 0.752 / 0.762 / 0.806; mean difference -0.008; B ran more trials on 3 of 3 (+15 to +16).
+
+Repeatability: running seed 1 at 30 s a second time gave the same test F1 for both setups (A 0.750, B 0.770) with slightly different trial counts (A 213 against 210, B 245 against 254). On seed 2, setup A's test F1 was 0.794 at 10 s but about 0.73 at 30 s, so the budget can change the chosen model, and its test score, on the same split.
+
+### 9.7 Do shared tickets explain the validation and test disagreement? (12 October 2026)
+
+At the Phase 1 review we suggested that passengers sharing a ticket made cross-validation look better than the test set. Measured on the same splits:
+
+- 681 different tickets for 891 passengers; 38.6% of passengers share a ticket with someone.
+- Test rows whose ticket also appears in the training part: 37.4% on seed 42; 30% to 37% on the six splits (seeds 42 and 1 to 5), 33.1% on average.
+- Validation rows whose ticket appears in the other folds (5-fold stratified cross-validation on the training part, 5 shuffles): 29.1% on seed 42; 29% to 32% on the six splits, 30.4% on average.
+
+On seed 42, test rows shared a ticket with a training row more often than validation rows did with their training folds. Shared tickets would therefore help the test score at least as much as the validation score, so they cannot explain why validation preferred setup A on that split. Method, to repeat it for the report: the same outer splits as the runner (stratified 80/20, `random_state` = seed); for validation, `StratifiedKFold(5, shuffle=True)` on the training part with shuffle seeds 0 to 4; count the rows whose `Ticket` value appears in the other part. What the data does show:
+
+- Split luck: on seed 42 setup A's test F1 (0.67 to 0.69 over three budgets) was lower than on every other split (0.73 to 0.81 on seeds 1 to 5). Setup B was also lowest on seed 42 (0.70 to 0.71, against 0.75 to 0.81). At the same time setup A's validation F1 on seed 42 was higher than on the other seeds (0.796 at 30 s, against 0.763 to 0.768 on seeds 1 to 5). That split put harder passengers into the test part.
+- Across seeds 1 to 5 the mean validation F1 (A 0.766) was close to the mean test F1 (A 0.772), and validation picked the same winner as the average test result.
+- Selection bias may add to this (section 9.5), but these runs are too few to measure it.
+
+### 9.8 Running times
+
+- 30 s budget: Titanic 32 to 37 s total, Penguins 32 s, California housing 40 s. The time above the budget goes into retraining the best model, evaluation, permutation importance and logging.
+- 60 s budget on Titanic: 61 to 63 s total.
+- One 30 s experiment started from Python, including imports: 38 s.
+- Test suite: about 29 s.
+
+### 9.9 What these results show, and what they do not
+
+- The baseline beats the trivial baselines by a wide margin on every dataset (for example, Titanic F1 0.69 against 0; California R² 0.86 against 0.00).
+- Dropping the two high-cardinality columns on Titanic is a small, cheap change: +0.012 test F1 on average over five splits, better on 3 of 5. In most runs it lets FLAML run more trials in the same time (4 of 5 splits at 30 s, +35 on average; 3 of 3 at 10 s; 290 to 501 in 60 s on seed 42).
+- The choice of split matters more than the change: for setup A the test F1 ranged from 0.67 to 0.81 over the six splits and budgets tried, and from 0.70 to 0.81 at a fixed 30 s budget. The 95% interval of the single-split difference (-0.04 to +0.12) includes zero, and the five-split paired tests are not significant.
+- So changes have to be compared over several splits, on validation data, with their uncertainty recorded. This is the basis of P6 (section 5.3) and of the memory design.
+- Not shown yet: anything about the autonomous layer, which does not exist yet.
+
+### 9.10 Still to produce
+
+- The planned benchmark in `research-direction.md`: six systems, OpenML datasets, several budgets and seeds, paired statistical tests.
+- Re-run sections 9.2 to 9.6 with the final code and keep the raw files.
+- Charts: test score against budget; per-seed differences; bootstrap intervals.
+
+---
+
+## 10. Conclusion and future scope
+
+Conclusions so far (Phase 1):
+
+1. A complete, tested and fully offline baseline exists. It handles binary, multiclass and regression problems from a CSV file on a laptop CPU; an experiment takes its time budget plus a few seconds (for example 32 to 40 s with a 30 s budget).
+2. Independent test evaluation, trivial baselines and train vs test scores make the results honest and easy to read.
+3. The first experiments show why the planned decision layer needs careful comparison: a sensible change gave a small average gain, and a single split could not tell it apart from noise.
+4. Every experiment is recorded with the information the critic, strategy engine and memory will need.
+
+Future scope (beyond the planned phases):
+
+- Automatic target detection and data-leakage checks
+- Feature engineering, for example passenger title from `Name` and family size on Titanic
+- Encoding high-cardinality columns instead of only dropping them
+- SHAP explanations for the whole model and for single predictions
+- Group-aware validation as an option for related rows
+- An optional local language model (for example through Ollama) to explain diagnoses in plain language; decisions stay measurable and do not depend on it
+- A REST API (FastAPI), a Docker image and a database backend for several users
+- Time-series and text features, once the tabular loop is shown to work
+
+---
+
+## Appendix A. References
+
+### A.1 Master list
+
+`PROJECT.md` section 26 (27 entries plus the datasets). Keep it as the master list and add the sources below when the report cites them.
+
+### A.2 Additional sources used in these notes
+
+- Cawley, G. C., and Talbot, N. L. C. (2010). On Over-fitting in Model Selection and Subsequent Selection Bias in Performance Evaluation. Journal of Machine Learning Research, 11, 2079-2107.
+- Kaufman, S., Rosset, S., Perlich, C., and Stitelman, O. (2012). Leakage in Data Mining: Formulation, Detection, and Avoidance. ACM Transactions on Knowledge Discovery from Data, 6(4).
+- Fisher, A., Rudin, C., and Dominici, F. (2019). All Models are Wrong, but Many are Useful: Learning a Variable's Importance by Studying an Entire Class of Prediction Models Simultaneously. Journal of Machine Learning Research, 20(177).
+- Kayali, M., and Wang, C. (2022). Mining Robust Default Configurations for Resource-constrained AutoML. arXiv:2202.09927. The basis of FLAML's zero-shot AutoML (checked online on 12 October 2026).
+- Yang, C., Akimoto, Y., Kim, D. W., and Udell, M. (2019). OBOE: Collaborative Filtering for AutoML Model Selection. KDD 2019. arXiv:1808.03233 (checked online on 12 October 2026).
+- Thompson, W. R. (1933). On the Likelihood that One Unknown Probability Exceeds Another in View of the Evidence of Two Samples. Biometrika, 25(3/4), 285-294.
+- Efron, B., and Tibshirani, R. J. (1993). An Introduction to the Bootstrap. Chapman & Hall.
+- Ke, G., et al. (2017). LightGBM: A Highly Efficient Gradient Boosting Decision Tree. NeurIPS.
+- Chen, T., and Guestrin, C. (2016). XGBoost: A Scalable Tree Boosting System. KDD.
+- Pedregosa, F., et al. (2011). Scikit-learn: Machine Learning in Python. Journal of Machine Learning Research, 12, 2825-2830.
+
+### A.3 To read (check the details before citing)
+
+- Salinas, D., and Erickson, N. TabRepo: a large repository of tabular model evaluations and its AutoML uses (portfolios built offline).
+- Domhan, T., Springenberg, J. T., and Hutter, F. (IJCAI 2015). Speeding up hyperparameter optimisation by extrapolating learning curves; relevant to stopping rules.
+- Grinsztajn, L., Oyallon, E., and Varoquaux, G. (NeurIPS 2022, Datasets and Benchmarks). Why tree-based models still outperform deep learning on tabular data; supports the statement in chapter 1.
+
+---
+
+## Appendix B. Work log
+
+| Date | Work | Commits |
+|---|---|---|
+| 2026-10-07 | Checked tools (Windows 11, Git 2.55, conda 26.5.3); created conda env `automl` with Python 3.11.16; installed pinned libraries (SHAP installed and removed again as not needed yet) | |
+| 2026-10-07 | Project skeleton, settings and logging; task detector; profiler; evaluator; MLflow tracking; FLAML integration; sample datasets; Streamlit dashboard | b29514e to 80d7fbb |
+| 2026-10-07 | README, PROJECT.md, architecture, roadmap, research direction | 4a3b013 |
+| 2026-10-07 | Fixed the flood of FLAML unseen-category warnings | 2fddc57 |
+| 2026-10-07 | Documents rewritten in plain language; demo guide; demo rehearsed (23 checks passed) | 95d582a |
+| 2026-10-07 | EXP-001 and EXP-002 (Titanic, 60 s) run at 16:55 and 17:02 | |
+| 2026-10-07 | Five-seed paired comparison; `scripts/compare_seeds.py`; results added to the demo guide | ae040b3, e8a5492 |
+| 2026-10-07 | Removed the decorative rocket emoji from the dashboard | c88f9ea |
+| 2026-10-07 | Fixed warnings returning when scikit-learn resets the warning filters | ca536c7 |
+| 2026-10-07 | `Project_Presentation.md` for the Phase 1 review | e3ec86e |
+| October 2026 | Phase 1 review presented and completed; project title and description posted for the department | |
+| 2026-10-12 | Documents split into `docs/imp` (maintained) and `docs/unimp` (archived); links updated; roadmap updated after Phase 1 | e090039, 28a52cc |
+| 2026-10-12 | Report notes started; ticket-overlap check and paired bootstrap; shared-ticket explanation corrected | |
+
+---
+
+## Appendix C. Figures and screenshots checklist
+
+Diagrams (chapter 6): current block diagram, proposed block diagram, DFD level 0, DFD level 1, flowchart of one experiment, flowchart of the planned loop, sequence diagram (`architecture.md`).
+
+Screenshots to take (not taken yet unless marked):
+
+- [ ] Dashboard section 1: cards and the data quality tab (Titanic)
+- [ ] Section 2: target, detected problem, class distribution
+- [ ] Section 3 and 4: configuration and progress bar
+- [ ] Section 5: result cards, train vs test table, leaderboard, search progress chart
+- [ ] Section 6: permutation importance, confusion matrix, ROC curve (Titanic); residual plots (California housing)
+- [ ] Section 7: experiment history table and chart
+- [ ] MLflow experiment list with EXP-001 and EXP-002 (a screenshot was taken on 7 October 2026; keep a copy with the report material)
+- [ ] MLflow run page: parameters, metrics, artifacts
+- [ ] Terminal: `47 passed`
+- [ ] Terminal: output of `scripts/compare_seeds.py`
+
+Charts to make for chapter 9: test score against budget (9.5), per-seed differences (9.6), bootstrap intervals (9.3).
+
+---
+
+## Appendix D. Open items for the report
+
+- Group number, guide's name, department and institute
+- Exact date of the Phase 1 review, and the guide's feedback
+- Final title (use the submitted one)
+- Check the comparison table in chapter 2 against the papers
+- Re-run the result tables with the final code, same seeds, and keep the raw files
+- Render the diagrams as images
+- Back up `experiments/` and `mlruns/` regularly (they are not in git)
+- Check whether the department wants AI-assisted tools declared (the Kiro editor includes an AI assistant)
+
+---
+
+## Appendix E. Where the data and documents are
+
+- Raw results of EXP-001 and EXP-002: `experiments/EXP-001/`, `experiments/EXP-002/` (summary, predictions, leaderboard, trial history, importances, profile, FLAML log), `models/EXP-00x/model.pkl`, and the MLflow store in `mlruns/`. These folders are not in git, so back them up.
+- The development runs (9.2, 9.5), the rehearsal (9.4) and the seed checks (9.6) ran in temporary folders that were deleted afterwards. Only the numbers in this file remain; re-run them for the final report.
+- Maintained documents: `docs/imp/` (this file, `PROJECT.md`, `architecture.md`, `development-roadmap.md`, `research-direction.md`).
+- Archived Phase 1 material: `docs/unimp/PRESENTATION.md` (demo guide; section 7 concepts, section 15 viva questions) and `docs/unimp/Project_Presentation.md` (text presented at the review).

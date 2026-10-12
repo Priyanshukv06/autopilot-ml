@@ -17,14 +17,14 @@ Done when: a CSV can go from upload to a tracked, explained model that can be re
 
 ## Phase 2: Rule-based autonomous loop (next)
 
-1. **Critic** (`critic.py`): structured diagnoses for overfitting, underfitting, imbalance, missingness, high cardinality, unseen categories at prediction time, low variance, redundancy, unreliable validation (validation and test scores disagree) and excessive time, with thresholds kept in config.
+1. **Critic** (`critic.py`): structured diagnoses for overfitting, underfitting, imbalance, missingness, high cardinality, unseen categories at prediction time, low variance, redundancy, unreliable validation (validation scores that vary a lot from split to split) and excessive time, with thresholds kept in config.
    Done when: tests on synthetic datasets trigger each diagnosis on purpose, and the diagnoses are saved in `summary.json`.
 2. **Strategy catalogue**: class weights, resampling (SMOTE, which needs `imbalanced-learn` added), dropping or selecting columns, encoding high-cardinality columns, a search space biased towards regularisation, a restricted model list.
    Done when: each strategy is a tested change to `ExperimentConfig` or to the data.
 3. **Strategy engine v1** (`strategy_engine.py`): a rule table from diagnosis to candidate strategies, ranked by a fixed priority.
    Done when: the same diagnosis always gives the same ranking, and the rule table is documented.
-4. **Fair comparison of changes**: a change is kept only if it helps over several random splits, compared seed by seed (the method of `scripts/compare_seeds.py`). Where rows are related, for example passengers sharing a ticket, validation keeps each group inside one fold. Added after Phase 1, where the choice of split alone moved Titanic's test F1 more than the change being tested.
-   Done when: the planner's keep-or-discard decision uses this check, and group-aware validation is tested on Titanic.
+4. **Fair comparison of changes**: the loop keeps a change only if it improves the validation score consistently over several splits of the training data, compared split by split (the same paired idea as `scripts/compare_seeds.py`, but on validation data). The held-out test set is never used for these decisions; it only reports the final result. Optionally, related rows (for example passengers sharing a ticket) are kept inside one fold, for data where new rows will come from new groups. Added after Phase 1: on Titanic the choice of split alone moved the test F1 more than the change being tested, and on one split FLAML's validation score preferred the setup that did worse on the test set.
+   Done when: the planner's keep-or-discard decision uses this check, with tests.
 5. **Planner and loop** (`experiment_planner.py`): baseline run, then critic, then strategy, then the next run, until the budget is used up or nothing improves.
    Done when: the loop runs on all four sample datasets without any input, and stays within the budget.
 6. **Experiment memory v1** (`experiment_memory.py`): stores meta-features, diagnoses, strategy, model, config, change in score and cost.

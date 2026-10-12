@@ -4,6 +4,8 @@
 
 B.Tech Computer Science Major Project, Phase 1 review
 
+> Archived: the text presented at the Phase 1 review (October 2026). It is no longer updated.
+
 **Contents**
 
 - Part 1. The project

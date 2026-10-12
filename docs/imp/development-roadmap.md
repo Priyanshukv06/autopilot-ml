@@ -13,21 +13,23 @@ Each phase ends with something we can check. Only Phase 1 is done. Everything af
 - [x] Streamlit dashboard with seven sections, including the experiment history
 - [x] pytest tests for the profiler, task detector, runner and evaluator
 
-Done when: a CSV can go from upload to a tracked, explained model that can be reloaded, both from the UI and from Python, and the tests pass. This is met.
+Done when: a CSV can go from upload to a tracked, explained model that can be reloaded, both from the UI and from Python, and the tests pass. This is met, and the Phase 1 review was completed in October 2026.
 
 ## Phase 2: Rule-based autonomous loop (next)
 
-1. **Critic** (`critic.py`): structured diagnoses for overfitting, underfitting, imbalance, missingness, high cardinality, low variance, redundancy and excessive time, with thresholds kept in config.
+1. **Critic** (`critic.py`): structured diagnoses for overfitting, underfitting, imbalance, missingness, high cardinality, unseen categories at prediction time, low variance, redundancy, unreliable validation (validation and test scores disagree) and excessive time, with thresholds kept in config.
    Done when: tests on synthetic datasets trigger each diagnosis on purpose, and the diagnoses are saved in `summary.json`.
 2. **Strategy catalogue**: class weights, resampling (SMOTE, which needs `imbalanced-learn` added), dropping or selecting columns, encoding high-cardinality columns, a search space biased towards regularisation, a restricted model list.
    Done when: each strategy is a tested change to `ExperimentConfig` or to the data.
 3. **Strategy engine v1** (`strategy_engine.py`): a rule table from diagnosis to candidate strategies, ranked by a fixed priority.
    Done when: the same diagnosis always gives the same ranking, and the rule table is documented.
-4. **Planner and loop** (`experiment_planner.py`): baseline run, then critic, then strategy, then the next run, until the budget is used up or nothing improves.
+4. **Fair comparison of changes**: a change is kept only if it helps over several random splits, compared seed by seed (the method of `scripts/compare_seeds.py`). Where rows are related, for example passengers sharing a ticket, validation keeps each group inside one fold. Added after Phase 1, where the choice of split alone moved Titanic's test F1 more than the change being tested.
+   Done when: the planner's keep-or-discard decision uses this check, and group-aware validation is tested on Titanic.
+5. **Planner and loop** (`experiment_planner.py`): baseline run, then critic, then strategy, then the next run, until the budget is used up or nothing improves.
    Done when: the loop runs on all four sample datasets without any input, and stays within the budget.
-5. **Experiment memory v1** (`experiment_memory.py`): stores meta-features, diagnoses, strategy, model, config, change in score and cost.
+6. **Experiment memory v1** (`experiment_memory.py`): stores meta-features, diagnoses, strategy, model, config, change in score and cost.
    Done when: records survive a restart, and the k most similar past datasets can be retrieved.
-6. **Resource manager v1** (`resource_manager.py`): total time, maximum experiments, CPU cores (`n_jobs`), and the split of the budget between experiments.
+7. **Resource manager v1** (`resource_manager.py`): total time, maximum experiments, CPU cores (`n_jobs`), and the split of the budget between experiments.
    Done when: the budget is never exceeded by more than the retraining time, and any overrun is logged.
 
 ## Phase 3: Learning and evaluation

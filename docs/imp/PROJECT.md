@@ -112,7 +112,7 @@ AutoPilot-ML puts an experiment loop around the AutoML engine:
                            └──────────► next cycle
 ```
 
-In the code there are three layers: the Streamlit UI (`app/main.py`, `app/components/`), the services with all the logic (`app/services/`), and settings and logging (`app/core/`). Under them are the external libraries (FLAML, scikit-learn, MLflow) and local storage (`experiments/`, `models/`, `mlruns/`). The services never import the UI. Class-level detail and the sequence of calls are in `docs/architecture.md`.
+In the code there are three layers: the Streamlit UI (`app/main.py`, `app/components/`), the services with all the logic (`app/services/`), and settings and logging (`app/core/`). Under them are the external libraries (FLAML, scikit-learn, MLflow) and local storage (`experiments/`, `models/`, `mlruns/`). The services never import the UI. Class-level detail and the sequence of calls are in [architecture.md](architecture.md).
 
 ## 8. Detailed modules
 

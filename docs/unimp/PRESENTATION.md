@@ -1,5 +1,7 @@
 # AutoPilot-ML: project walkthrough and demo guide
 
+> Archived after the Phase 1 review (October 2026) and no longer updated. Kept for reference: section 7 explains the main concepts and section 15 answers likely viva questions.
+
 This file explains the whole project in one place: the idea, the final goal, where FLAML fits in, what is built so far, what comes next, and exactly how to run the demo.
 
 Part A is the explanation. Part B is the demo script and the checklist for the day.

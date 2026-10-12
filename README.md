@@ -11,7 +11,7 @@ We are building it in two stages, and this README keeps them apart:
 - **Current baseline (working now):** CSV → dataset profiling → task detection → FLAML AutoML → evaluation → MLflow tracking → Streamlit dashboard.
 - **Proposed research system (planned, not built yet):** experiment planner, critic, strategy engine, experiment memory and resource-aware budgeting on top of the baseline.
 
-For a full walkthrough of the idea and the demo, see [PRESENTATION.md](PRESENTATION.md). The detailed project document is [PROJECT.md](PROJECT.md).
+The detailed project document is [docs/imp/PROJECT.md](docs/imp/PROJECT.md). All maintained documents are in [docs/imp](docs/imp), including the running notes for the final report. The Phase 1 review material is archived in [docs/unimp](docs/unimp).
 
 ## Problem
 
@@ -62,7 +62,7 @@ AutoMLRunner ──► stratified train/test split
 
 The code has three layers. `app/main.py` and `app/components/` are the Streamlit UI, which only collects input and shows results. `app/services/` holds all the logic, and none of it imports Streamlit, so it can be used from a script or a notebook. `app/core/` holds settings and logging. FLAML is only touched inside `FLAMLEngine`, and MLflow only inside `ExperimentTracker`.
 
-More detail is in [docs/architecture.md](docs/architecture.md).
+More detail is in [docs/imp/architecture.md](docs/imp/architecture.md).
 
 ## Installation
 
@@ -194,7 +194,7 @@ The question we want to answer:
 
 > Can an autonomous experimentation layer improve the efficiency and effectiveness of conventional AutoML by learning from previous experiments, diagnosing model weaknesses, selecting appropriate improvement strategies, and allocating computational resources adaptively?
 
-We plan to compare six systems: a manual baseline, FLAML, AutoGluon, AutoPilot-ML without experiment memory, AutoPilot-ML without strategy selection, and the full AutoPilot-ML. They will be compared on test score, time to reach a target score, number of experiments, compute cost, convergence and consistency across datasets. The plan is in [docs/research-direction.md](docs/research-direction.md).
+We plan to compare six systems: a manual baseline, FLAML, AutoGluon, AutoPilot-ML without experiment memory, AutoPilot-ML without strategy selection, and the full AutoPilot-ML. They will be compared on test score, time to reach a target score, number of experiments, compute cost, convergence and consistency across datasets. The plan is in [docs/imp/research-direction.md](docs/imp/research-direction.md).
 
 ## Roadmap
 
@@ -203,7 +203,7 @@ We plan to compare six systems: a manual baseline, FLAML, AutoGluon, AutoPilot-M
 3. Learned strategy selection (bandits, memory-based), benchmark datasets, AutoGluon baseline, ablation study
 4. Optional extras: local LLM explanations, an API, packaging
 
-Steps and exit criteria are in [docs/development-roadmap.md](docs/development-roadmap.md).
+Steps and exit criteria are in [docs/imp/development-roadmap.md](docs/imp/development-roadmap.md).
 
 ## Future work
 
@@ -229,7 +229,10 @@ autopilot-ml/
 ├── models/                 saved models (generated, not in git)
 ├── mlruns/                 MLflow database and files (generated, not in git)
 ├── tests/                  pytest tests
-└── docs/                   architecture, roadmap, research direction
+└── docs/
+    ├── imp/                maintained: project document, architecture, roadmap,
+    │                       research plan, notes for the final report
+    └── unimp/              archived Phase 1 review material
 ```
 
 ## Sample datasets

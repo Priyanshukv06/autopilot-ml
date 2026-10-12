@@ -811,7 +811,7 @@ Future scope (beyond the planned phases):
 | 2026-10-07 | `Project_Presentation.md` for the Phase 1 review | e3ec86e |
 | October 2026 | Phase 1 review presented and completed; project title and description posted for the department | |
 | 2026-10-12 | Documents split into `docs/imp` (maintained) and `docs/unimp` (archived); links updated; roadmap updated after Phase 1 | e090039, 28a52cc |
-| 2026-10-12 | Report notes started; ticket-overlap check and paired bootstrap; shared-ticket explanation corrected | |
+| 2026-10-12 | Report notes started; ticket-overlap check, paired bootstrap and paired tests; shared-ticket explanation corrected; roadmap step for fair comparison of changes | e3dd52d |
 
 ---
 

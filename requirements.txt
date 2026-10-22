@@ -18,6 +18,8 @@ mlflow==3.17.0
 # UI and visualisation
 streamlit==1.65.0
 plotly==7.1.0
+# Static charts for the documentation and the report (scripts/plot_search_history.py)
+matplotlib==3.11.2
 
 # Configuration (.env loading)
 python-dotenv==1.2.4

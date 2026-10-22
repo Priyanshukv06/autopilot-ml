@@ -11,7 +11,7 @@ Rules for keeping it up to date:
 - Mark anything that is not built yet as planned.
 - Longer text that is already written lives in `PROJECT.md` (same folder). This file points to it instead of copying it.
 
-Last updated: 2026-10-12
+Last updated: 2026-10-22
 
 ---
 
@@ -146,7 +146,7 @@ In order (dates and commits in Appendix B):
 
 ### 4.4 How correctness was checked
 
-- 47 pytest tests (section 8.6), about 29 s, including short real FLAML runs.
+- 47 pytest tests (section 8.6), including short real FLAML runs: about 29 s on 7 to 12 October, about 41 s in three runs on 22 October, with no code change in between.
 - Streamlit's headless test tool drove the real dashboard on all four sample datasets without errors. The demo flow was rehearsed with 23 automated checks, all passed (7 October 2026).
 - ROC-AUC, F1 and accuracy shown by the app were recomputed with scikit-learn from the saved predictions and matched exactly (Titanic: ROC-AUC 0.7868247694334651 both ways; the predicted class matched the higher probability on every row).
 - MLflow runs, metrics and files were read back through the MLflow server's REST API.
@@ -270,6 +270,20 @@ sort the columns by importance
 - Validation rule (FLAML 2.7.0 source): 5-fold cross-validation if rows x columns / 0.9 < 10,000,000 x budget / 3600 and rows < 100,000; otherwise a holdout split. Titanic used cross-validation (recorded at 10 s and 60 s); California housing used holdout at 10 s.
 - After the search, the best configuration is retrained on all training rows (`retrain_full=True`). The search may stop early once it has converged (`early_stop=True`).
 
+Details checked in the FLAML 2.7.0 source and in the EXP-001 and EXP-002 trial logs (22 October 2026). The plain-language version, with diagrams, is `how-it-works.md` section 6.
+
+- One pass of the search loop runs exactly one trial: pick a learner, let its CFO search propose one configuration, train and score it (5 models with cross-validation), update that learner's records. EXP-001 made 290 passes in 60 s, and 59.7 s of that went into training and scoring.
+- Starting cost guesses relative to LightGBM (`cost_relative2lgbm` in `automl/model.py`): LightGBM 1, SGD 1, XGBoost 1.6, extra trees 1.9, random forest 2, XGBoost depth-limited 64, L1 logistic regression 160. EXP-001 tried the learners for the first time in exactly this order, at trials 0, 3, 12, 14, 21, 258 and 289.
+- Learner choice (`_select_estimator` in `automl/automl.py`, `estimated_cost4improvement` in `automl/state.py`): expected cost of the next improvement = the larger of the learner's own time spent on its last improvement and its own time since then. A learner behind the leader by a gap g, improving at speed v, gets at least 2g/v. An untried learner keeps its starting guess times the cost of the first trial, and is chosen when it is the cheapest. Otherwise the learner is drawn at random with probability proportional to 1 / expected cost (FLAML's own fixed seed 1). Learners whose best trial is slower than the time left are skipped.
+- CFO details (`tune/searcher/flow2.py`, `blendsearch.py`): the first configuration uses small values for the cost-related settings (4 trees and 4 leaves for LightGBM, XGBoost and random forest) and defaults for the rest. From the best point, it steps in a random direction in a 0-to-1 scaled space (log scale for wide ranges) and tries the opposite step if that fails. The first step length is 0.1 x sqrt(d), where d is the number of settings. The step shrinks only after 2^min(d, 9) consecutive proposals without improvement (512 for XGBoost, 256 for LightGBM). When the step falls below a lower bound the search has converged, and CFO restarts from the starting point with random noise. Our `seed` drives these random directions.
+- Search ranges on Titanic: up to 712 trees and 712 leaves (FLAML caps both at the number of training rows; the largest tried in EXP-001 was 711 trees).
+- Early stop needs every learner's local search to have converged at least once and the search to have run more than 10 times as long as it took to find the current best. It did not trigger in EXP-001 or EXP-002, which both searched for the full 60 s. In EXP-001, XGBoost never had more than 34 failed tries in a row, far below the 512 needed before its step shrinks.
+- Retraining after the search has no time limit (`time_budget = -1` in `automl/automl.py`), which explains why runs overrun the budget (California at 10 s: 16.9 s).
+- Folds and holdout: `RepeatedStratifiedKFold(5)` for classification (`RepeatedKFold(5)` for regression) after a shuffle, and the holdout is 10% of the training part (`SPLIT_RATIO = 0.1`), all with FLAML's fixed seed 1, so they do not change with our seed. A trial's score is the mean of its fold scores. California switches from holdout to cross-validation at a 53 s budget (16,512 x 8 / 0.9 = 146,773 against 147,222).
+- Data preparation (`DataTransformer` in `automl/data.py`, run on the EXP-001 split). Text columns with one value, or a different value in every filled row, are dropped: FLAML would drop `Name` by itself but would keep `PassengerId`, a number. Other text columns become categories, and empty text becomes `__NAN__`. Empty numbers get the training median: 137 missing ages became 28.5. Labels are encoded 0/1.
+- How each learner sees categories: LightGBM uses them directly. XGBoost, random forest, extra trees and the linear models get alphabetical codes (female 0, male 1; tickets 0 to 570). Unseen test tickets become `__NAN__`, code 571, for 112 of the 179 test rows in EXP-001.
+- Sampling (training on a growing sample) is used only with a holdout and more than 40,000 training rows, so it never applied to our datasets: every trial used the whole training part. Classes with fewer than 20 training rows would be copied (`auto_augment`); this also never applied.
+
 ### 5.3 Planned (draft designs; they will change as they are built)
 
 **P1. Critic.** Decisions use training and validation data only, never the test set. Starting rules, to be tuned on synthetic datasets with planted problems and frozen before the final evaluation:
@@ -335,6 +349,8 @@ This costs 2k runs per decision, so the budget split has to allow for it. Cheape
 ## 6. Proposed flowchart, DFD and block diagrams
 
 To put these in the report, paste each block into mermaid.live and export PNG or SVG, or use a Mermaid preview extension in the editor. The call sequence of one experiment is in `architecture.md`.
+
+More diagrams are in `how-it-works.md`: the layers (what we wrote and what we use), the code map, the dashboard's background worker (sequence diagram), the data split, inside one FLAML call, FLAML's search loop, CFO's step rule, and where the planned parts connect. All diagrams in the maintained documents parse with Mermaid 11.15.0, the version in Kiro's Markdown preview (checked on 22 October 2026).
 
 ### 6.1 Block diagram: current baseline
 
@@ -489,6 +505,7 @@ Software (versions pinned in `requirements.txt`):
 | Tracking | MLflow | 3.17.0 | Experiment runs on a local SQLite file |
 | Dashboard | Streamlit | 1.65.0 | Web interface |
 | Charts | Plotly | 7.1.0 | Interactive charts |
+| Static charts | matplotlib | 3.11.2 | PNG charts for the documents and the report (`scripts/plot_search_history.py`) |
 | Configuration | python-dotenv | 1.2.4 | Reading `.env` settings |
 | Testing | pytest | 9.1.1 | Automated tests |
 | Version control | Git | 2.55.0 | History, one change per commit |
@@ -513,7 +530,7 @@ Sources: Titanic, Kaggle "Titanic: Machine Learning from Disaster" training set 
 
 ## 8. Implementation and coding
 
-### 8.1 Code size (12 October 2026)
+### 8.1 Code size (22 October 2026)
 
 | File | Lines | Main parts |
 |---|---|---|
@@ -529,9 +546,10 @@ Sources: Titanic, Kaggle "Titanic: Machine Learning from Disaster" training set 
 | `app/components/dataset_uploader.py` | 124 | Section 1 (input), CSV reading with fallbacks |
 | `app/main.py` | 91 | Page layout and sidebar |
 | `scripts/compare_seeds.py` | 89 | Paired comparison of two setups over several seeds |
+| `scripts/plot_search_history.py` | 172 | Charts of one experiment's FLAML search from its saved trial history |
 | `tests/` (3 files) | 469 | 47 tests |
 
-Total: 3,539 lines in 21 Python files (2,981 in `app/`, 469 in `tests/`, 89 in `scripts/`), including comments and blank lines.
+Total: 3,711 lines in 22 Python files (2,981 in `app/`, 469 in `tests/`, 261 in `scripts/`), including comments and blank lines.
 
 ### 8.2 Main interfaces
 
@@ -580,7 +598,7 @@ mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db --port 5000 --workers 1
 python scripts/compare_seeds.py --dataset data/sample/titanic.csv --target Survived --exclude-a PassengerId,Name --exclude-b PassengerId,Name,Ticket,Cabin --seeds 1 2 3 4 5 --budget 30
 ```
 
-### 8.6 Tests (47, about 29 s)
+### 8.6 Tests (47, about 29 to 41 s)
 
 | File | Tests | What they cover |
 |---|---|---|
@@ -728,7 +746,7 @@ On seed 42, test rows shared a ticket with a training row more often than valida
 - 30 s budget: Titanic 32 to 37 s total, Penguins 32 s, California housing 40 s. The time above the budget goes into retraining the best model, evaluation, permutation importance and logging.
 - 60 s budget on Titanic: 61 to 63 s total.
 - One 30 s experiment started from Python, including imports: 38 s.
-- Test suite: about 29 s.
+- Test suite: about 29 s (7 to 12 October), about 41 s (three runs on 22 October, no code change in between).
 
 ### 9.9 What these results show, and what they do not
 
@@ -738,7 +756,31 @@ On seed 42, test rows shared a ticket with a training row more often than valida
 - So changes have to be compared over several splits, on validation data, with their uncertainty recorded. This is the basis of P6 (section 5.3) and of the memory design.
 - Not shown yet: anything about the autonomous layer, which does not exist yet.
 
-### 9.10 Still to produce
+### 9.10 How FLAML spent the budget (EXP-001 and EXP-002, from the saved trial logs, analysed 22 October 2026)
+
+Source: `experiments/EXP-00x/search_history.csv` and `flaml_search.log`. Charts of EXP-001: `docs/imp/images/exp001_search_timeline.png`, `exp001_time_per_learner.png`, `exp001_best_learner_settings.png` (drawn with `scripts/plot_search_history.py`).
+
+| | EXP-001 (setup A) | EXP-002 (setup B) |
+|---|---|---|
+| Trials in 60 s | 290 | 501 |
+| Time inside trials | 59.7 s | 59.5 s |
+| New overall bests | 12 | 9 |
+| Last new best | 42.9 s (XGBoost, trial 240) | 23.2 s (XGBoost depth-limited, trial 188) |
+| Time after the last new best | 17.1 s | 36.8 s |
+| Trials with validation F1 0 | 6 (SGD 4, LightGBM 1, XGBoost 1) | 5 (SGD 3, LightGBM 1, XGBoost 1) |
+| Share of trials below 0.70 | 19.3% | 19.6% |
+
+EXP-001 search time per learner (trials, best validation F1): XGBoost 34.6 s (114, 0.802), random forest 9.6 s (36, 0.742), LightGBM 9.1 s (83, 0.785), XGBoost depth-limited 2.5 s (21, 0.792), SGD 2.2 s (28, 0.531), extra trees 1.7 s (7, 0.715), L1 logistic regression 0.1 s (1, 0.454). The winner got 58% of the time.
+
+EXP-001 best validation F1 over time: 0.631 after the first trial (0.1 s), 0.769 after 8 trials (0.8 s), 0.785 at 9.6 s, 0.802 at 42.9 s. About 81% of the total rise came in the first 0.8 s and 90% by 9.6 s.
+
+XGBoost in EXP-001 started at 4 trees with at most 4 leaves (validation F1 0.631) and beat its own best 10 times, ending at 304 trees and 11 leaves (0.802). It never had more than 34 failed tries in a row.
+
+In EXP-002, XGBoost depth-limited got its first trial at 20.0 s (trial 159) and produced the run's best 3.2 s later.
+
+What this shows: on small data FLAML finds most of its gain in the first seconds and then keeps searching until the budget runs out, because early stop cannot trigger (section 5.2). This is evidence for the planned resource manager. It is a single run per setup, so the exact shares are indicative.
+
+### 9.11 Still to produce
 
 - The planned benchmark in `research-direction.md`: six systems, OpenML datasets, several budgets and seeds, paired statistical tests.
 - Re-run sections 9.2 to 9.6 with the final code and keep the raw files.
@@ -812,6 +854,7 @@ Future scope (beyond the planned phases):
 | October 2026 | Phase 1 review presented and completed; project title and description posted for the department | |
 | 2026-10-12 | Documents split into `docs/imp` (maintained) and `docs/unimp` (archived); links updated; roadmap updated after Phase 1 | e090039, 28a52cc |
 | 2026-10-12 | Report notes started; ticket-overlap check, paired bootstrap and paired tests; shared-ticket explanation corrected; roadmap step for fair comparison of changes | e3dd52d |
+| 2026-10-22 | FLAML 2.7.0 internals read in the source and checked against the EXP-001 and EXP-002 logs (section 5.2, 9.10); `scripts/plot_search_history.py` and three EXP-001 charts; matplotlib pinned; plain-language guide `how-it-works.md` with 10 diagrams, all parsed with Mermaid 11.15.0 | 5722435, afa3b7c |
 
 ---
 
@@ -834,6 +877,12 @@ Screenshots to take (not taken yet unless marked):
 
 Charts to make for chapter 9: test score against budget (9.5), per-seed differences (9.6), bootstrap intervals (9.3).
 
+Charts already made (in `docs/imp/images`, from `scripts/plot_search_history.py`, 22 October 2026):
+
+- [x] EXP-001: every trial over time with the best so far (`exp001_search_timeline.png`)
+- [x] EXP-001: search time per learner family (`exp001_time_per_learner.png`)
+- [x] EXP-001: XGBoost's size settings and scores, trial by trial (`exp001_best_learner_settings.png`)
+
 ---
 
 ## Appendix D. Open items for the report
@@ -846,6 +895,7 @@ Charts to make for chapter 9: test score against budget (9.5), per-seed differen
 - Render the diagrams as images
 - Back up `experiments/` and `mlruns/` regularly (they are not in git)
 - Check whether the department wants AI-assisted tools declared (the Kiro editor includes an AI assistant)
+- Find out which warnings pytest listed once on 22 October: one of three identical test runs ended with "47 passed, 350 warnings", the other two with no warnings. The output of that run was not kept, so the warning types are unknown. All tests passed every time
 
 ---
 
@@ -853,5 +903,5 @@ Charts to make for chapter 9: test score against budget (9.5), per-seed differen
 
 - Raw results of EXP-001 and EXP-002: `experiments/EXP-001/`, `experiments/EXP-002/` (summary, predictions, leaderboard, trial history, importances, profile, FLAML log), `models/EXP-00x/model.pkl`, and the MLflow store in `mlruns/`. These folders are not in git, so back them up.
 - The development runs (9.2, 9.5), the rehearsal (9.4) and the seed checks (9.6) ran in temporary folders that were deleted afterwards. Only the numbers in this file remain; re-run them for the final report.
-- Maintained documents: `docs/imp/` (this file, `PROJECT.md`, `architecture.md`, `development-roadmap.md`, `research-direction.md`).
+- Maintained documents: `docs/imp/` (this file, `PROJECT.md`, `how-it-works.md`, `architecture.md`, `development-roadmap.md`, `research-direction.md`) and the charts in `docs/imp/images/`.
 - Archived Phase 1 material: `docs/unimp/PRESENTATION.md` (demo guide; section 7 concepts, section 15 viva questions) and `docs/unimp/Project_Presentation.md` (text presented at the review).

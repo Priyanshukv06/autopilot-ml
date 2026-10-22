@@ -528,7 +528,7 @@ flowchart TD
 
 Because every family starts small and only grows when growing helps, the first trials take only 0.1 to 0.2 seconds, and slow, large models are trained only after smaller ones have shown that size pays off. That is the "frugal" part.
 
-XGBoost in EXP-001, every time it beat its own best:
+XGBoost in EXP-001, every time it set a new best of its own (its first trial counts as the first):
 
 | XGBoost trial | Time (s) | Trees | Max leaves per tree | Validation F1 |
 |---|---|---|---|---|
@@ -561,7 +561,7 @@ The search stops when the time budget is used up. With `early_stop`, it may stop
 1. every family's CFO search has converged at least once, and
 2. the search has already run more than 10 times as long as it took to find the current best.
 
-Neither was true in our runs. In EXP-001, XGBoost's search never converged, and the best was found at 42.9 seconds, so stopping early would have needed 429 seconds anyway. On small datasets the search therefore always uses the whole budget, even after it stops improving: EXP-001 found nothing better in its last 17 seconds, and EXP-002 nothing in its last 37 seconds.
+In EXP-001 neither was true: XGBoost's search never converged, and the best was found at 42.9 seconds, so stopping early would have needed 429 seconds anyway. In EXP-002 the best came at 23.2 seconds, so the second condition alone would have needed 232 seconds. So on small datasets like ours, the search normally uses the whole budget, even after it stops improving: EXP-001 found nothing better in its last 17 seconds, and EXP-002 nothing in its last 37 seconds.
 
 ### 6.9 Steps 4 and 5: retrain the winner and hand back the result
 

@@ -1,6 +1,6 @@
 # Architecture
 
-This page describes the code as it is now (the Phase 1 baseline) and shows where the planned autonomous parts will connect. The planned parts do not exist in the code yet.
+This page describes the code as it is now (the Phase 1 baseline) and shows where the planned autonomous parts will connect. The planned parts do not exist in the code yet. For a plain-language walkthrough of the same system and of how FLAML works inside it, see [how-it-works.md](how-it-works.md).
 
 ## Layers
 

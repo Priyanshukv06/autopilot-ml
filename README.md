@@ -11,7 +11,7 @@ We are building it in two stages, and this README keeps them apart:
 - **Current baseline (working now):** CSV → dataset profiling → task detection → FLAML AutoML → evaluation → MLflow tracking → Streamlit dashboard.
 - **Proposed research system (planned, not built yet):** experiment planner, critic, strategy engine, experiment memory and resource-aware budgeting on top of the baseline.
 
-The detailed project document is [docs/imp/PROJECT.md](docs/imp/PROJECT.md). All maintained documents are in [docs/imp](docs/imp), including the running notes for the final report. The Phase 1 review material is archived in [docs/unimp](docs/unimp).
+The detailed project document is [docs/imp/PROJECT.md](docs/imp/PROJECT.md). To understand how the current system and FLAML work, step by step and with diagrams, read [docs/imp/how-it-works.md](docs/imp/how-it-works.md). All maintained documents are in [docs/imp](docs/imp), including the running notes for the final report. The Phase 1 review material is archived in [docs/unimp](docs/unimp).
 
 ## Problem
 
@@ -128,6 +128,12 @@ Comparing two setups fairly. One run on one split can mislead, so this script ru
 python scripts/compare_seeds.py --dataset data/sample/titanic.csv --target Survived --exclude-a PassengerId,Name --exclude-b PassengerId,Name,Ticket,Cabin --seeds 1 2 3 4 5 --budget 30
 ```
 
+Charts of one experiment's FLAML search: every trial over time, the search time each learner family got, and how the winning family's settings grew. The script only reads the experiment's saved files, and writes PNG files to `docs/imp/images`.
+
+```bash
+python scripts/plot_search_history.py --experiment EXP-001
+```
+
 ## Screenshots
 
 _To be added: dataset profile, results, explainability, experiment history and the MLflow run page._
@@ -225,13 +231,14 @@ autopilot-ml/
 │   └── services/           profiler, task detector, AutoML runner, evaluator, tracker
 ├── data/sample/            small public demo datasets
 ├── scripts/                compare_seeds.py: compare two setups over several splits
+│                           plot_search_history.py: charts of one experiment's search
 ├── experiments/            JSON experiment records (generated, not in git)
 ├── models/                 saved models (generated, not in git)
 ├── mlruns/                 MLflow database and files (generated, not in git)
 ├── tests/                  pytest tests
 └── docs/
-    ├── imp/                maintained: project document, architecture, roadmap,
-    │                       research plan, notes for the final report
+    ├── imp/                maintained: project document, how-it-works guide, architecture,
+    │                       roadmap, research plan, notes for the final report, charts
     └── unimp/              archived Phase 1 review material
 ```
 

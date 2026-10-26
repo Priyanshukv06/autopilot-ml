@@ -25,7 +25,6 @@ import numpy as np
 import pandas as pd
 from pandas.api.types import is_bool_dtype, is_numeric_dtype
 from sklearn.exceptions import ConvergenceWarning
-from sklearn.model_selection import train_test_split
 
 from app.core.config import Settings, get_settings
 from app.core.logging_config import get_logger
@@ -39,6 +38,7 @@ from app.services.evaluator import (
 )
 from app.services.experiment_tracker import ExperimentTracker
 from app.services.profiler import DatasetProfile, DatasetProfiler, analyze_class_balance
+from app.services.splits import SplitError, make_outer_split
 from app.services.task_detector import TaskDetector, TaskType
 
 logger = get_logger(__name__)
@@ -683,18 +683,14 @@ class AutoMLRunner:
     def _split(
         X: pd.DataFrame, y: pd.Series, task_type: TaskType, config: ExperimentConfig, warnings: list[str]
     ) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
-        stratify = None
-        if task_type.is_classification:
-            if y.value_counts().min() >= 2:
-                stratify = y
-            else:
-                warnings.append("Stratified split disabled because some classes have fewer than 2 samples.")
+        """Split with the shared rule in ``splits.py`` (the same rows as Phase 1)."""
         try:
-            return train_test_split(
-                X, y, test_size=config.test_size, random_state=config.random_seed, stratify=stratify
-            )
-        except ValueError as exc:
-            raise ExperimentError(f"Could not split the data: {exc}") from exc
+            split, split_warnings = make_outer_split(y, task_type, config.test_size, config.random_seed)
+        except SplitError as exc:
+            raise ExperimentError(str(exc)) from exc
+        warnings.extend(split_warnings)
+        train, test = split.train_positions, split.test_positions
+        return X.iloc[train], X.iloc[test], y.iloc[train], y.iloc[test]
 
     def _save_model(
         self,

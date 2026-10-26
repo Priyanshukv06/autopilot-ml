@@ -687,9 +687,9 @@ mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db --port 5000 --workers 1
 python scripts/compare_seeds.py --dataset data/sample/titanic.csv --target Survived --exclude-a PassengerId,Name --exclude-b PassengerId,Name,Ticket,Cabin --seeds 1 2 3 4 5 --budget 30
 ```
 
-### 8.6 Tests (190, about 87 s on 26 October 2026)
+### 8.6 Tests (219, about 87 s on 26 October 2026)
 
-Phase 1 ended with the first three files below (47 tests, about 29 to 41 s). Phase 2 has added the others so far. Full suite on 26 October 2026 after task 6.1: 190 passed in 86.7 s on the laptop in chapter 7.
+Phase 1 ended with the first three files below (47 tests, about 29 to 41 s). Phase 2 has added the others so far. Full suite on 26 October 2026 after task 7.1: 219 passed in 86.7 s on the laptop in chapter 7.
 
 | File | Tests | What they cover |
 |---|---|---|
@@ -702,6 +702,8 @@ Phase 1 ended with the first three files below (47 tests, about 29 to 41 s). Pha
 | `tests/test_search_summary.py` | 5 | A small history worked by hand, error metrics, unusable histories, and the saved EXP-001 and EXP-002 histories (search time, time of the best trial, share after it, number of trials) |
 | `tests/test_assessor.py` | 9 | One score per fold with every metric; means and standard deviations; only the fold's training rows of the Training_Part are refitted (the whole dataset is refused); class weights from each fold's training rows; a cached Setup is not refitted but a new configuration is; a failing fold fails the Assessment; unseen shares per fold against a hand-made answer; regression; two separate Assessments with real FLAML refits agree within 1e-12 |
 | `tests/test_critic.py` | 44 | Hand-made profiles and Assessments, no FLAML: each thin rule at high, at moderate, exactly at a threshold and just below it, with its evidence numbers; gaps and recall as means over folds; the smallest class in multiclass; no imbalance rule for regression; excluded and numeric columns skipped; fixed output order and repeatable output; the version label on every Diagnosis; an empty list when nothing applies; the choice of diagnostic metric; the default thresholds file holds the design values; missing, unreadable and invalid thresholds files are refused with a clear message |
+| `tests/test_strategies.py` | 21 | The exact change of each Strategy to a Setup, with the original unchanged and nothing shared; drop_columns only for columns in use, with at least one left; class weights only for classification without weights; smaller trees keep tighter limits, never widen and apply once; the limits fit FLAML's search spaces for all three task types; canonical keys |
+| `tests/test_strategy_engine.py` | 8 | The Titanic Proposals in rule order (drop Ticket, drop Cabin, smaller trees) with merged answers; tried changes and changes that conflict with the Accepted_Setup left out; class weights for classification only; severity before table order; the full ranking key; empty lists; repeatable output |
 | `tests/test_synthetic.py` | 32 | Same seed gives the same data; problem order does not matter; each of the 8 problems measured at its requested strength in both the dataset and the fresh sample (imbalance ratio, share of changed labels, correlation of copies, distinct share of IDs, share of the main value, unseen share of categories, empty share); our profiler flags the planted ID, constant and high-cardinality columns; clean data has none of them; a model scores the same on the fresh sample as in cross-validation; 11 invalid requests rejected |
 
 ### 8.7 Code listings worth including in the report
@@ -966,7 +968,8 @@ Future scope (beyond the planned phases):
 | 2026-10-26 | Guard: the runner refuses datasets with repeated row labels (section 4.7), with one new test in `tests/test_automl_runner.py` | 6fa465d |
 | 2026-10-26 | Spec task 6: thin Critic (`app/services/critic.py`, Algorithm 11) with thresholds file `critic_thresholds.toml` (`v0-start`); one threshold added to the design (`min_ratio_for_recall`); throwaway check on Titanic gave the expected Diagnoses (section 5.4) | 1d49fe4 |
 | 2026-10-26 | Spec task 6.1: 44 Critic tests in `tests/test_critic.py`; 190 tests in total, all passing in 86.7 s | 6b1ac70 |
-| 2026-10-26 | Spec task 7: Strategy_Catalogue (`app/services/strategies.py`: drop_columns, class_weight_balanced, regularised_search_space) and the rule-based Strategy_Engine (`app/services/strategy_engine.py`), Algorithm 12 in section 5.4 | see the commit of this date |
+| 2026-10-26 | Spec task 7: Strategy_Catalogue (`app/services/strategies.py`: drop_columns, class_weight_balanced, regularised_search_space) and the rule-based Strategy_Engine (`app/services/strategy_engine.py`), Algorithm 12 in section 5.4 | 32db280 |
+| 2026-10-26 | Spec task 7.1: 21 Strategy tests and 8 Strategy_Engine tests; 219 tests in total, all passing in 86.7 s | see the commit of this date |
 
 ---
 

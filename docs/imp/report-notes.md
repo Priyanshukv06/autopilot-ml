@@ -432,6 +432,17 @@ On the Titanic Diagnoses of Algorithm 11 this gives: drop `Ticket` (high; answer
 
 Why the correction: the 15 folds share most of their training rows, so their scores are not independent. With 15 folds the variance of the mean is taken as (1/15 + 1/4) times the fold variance instead of 1/15 of it. Worked example: d = (0.02, 0.01, 0.03, -0.01, 0.02) gives mean 0.014 and variance 0.00023, corrected t = 1.376 with 4 degrees of freedom and p(better) = 0.120, so the change is not kept at alpha 0.10; an uncorrected paired t-test would give t = 2.064 and p = 0.054 and would keep it.
 
+**Algorithm 14: Resource_Manager** (`app/services/resource_manager.py`, task 9). Budget: total seconds T, maximum Experiments, CPU cores, minimum 5 s per Experiment, first share 35%, patience 3. All time is measured wall-clock time.
+
+1. First Experiment: max(5, floor(0.35 x T)) seconds of search; it must finish by T.
+2. Reserve: 1.2 x (Assessment + other seconds) of the previous step, kept back for the next Assessment and the final steps.
+3. Time left R = T - elapsed - reserve; Experiments left s. If R < 5, stop (time); if s = 0, stop (experiments).
+4. Next search budget = max(5, floor(R / s)). For "more search time": at least min(2 x the Accepted_Setup's budget, R). If a wasted-budget Diagnosis is present: at most max(5, ceil(1.5 x the time the Accepted_Setup's search needed to find its best)).
+5. A later step must finish by "now + its budget + the reserve". After each step, record the budget, search time, Assessment time, other time, overrun past the deadline and utility (validation gain per second).
+6. Stop checks, in order: user request, error, time, experiments, no Proposals left, 3 discards in a row.
+
+Since every deadline lies inside T, the steps end at most one step's overrun after T, and that overrun is recorded.
+
 **Algorithm 10: search summary** (`app/services/search_summary.py`, task 5): from the trial history, the search time (end of the last trial), the time of the best trial (the first one if tied), the share of the search time after it, the gain of the best score in the last quarter of the time (signed so that positive is better), the number of trials, and the best score and total trial time of each learner family. On the saved EXP-001 and EXP-002 histories it gives exactly the numbers of section 9.10 (best at 42.9 s and 23.2 s; 17.1 s and 36.8 s after the best; XGBoost 34.6 s in EXP-001).
 
 ---
@@ -985,7 +996,8 @@ Future scope (beyond the planned phases):
 | 2026-10-26 | Spec task 7.1: 21 Strategy tests and 8 Strategy_Engine tests; 219 tests in total, all passing in 86.7 s | a8629f3 |
 | 2026-10-26 | Spec task 8: Judge with the corrected resampled t-test (`app/services/judge.py`, Algorithm 13 with a worked example in section 5.4) | 064396a |
 | 2026-10-26 | Fix found by the Judge tests: equal differences are detected from the values, not from a rounded variance (section 4.7) | 032674e |
-| 2026-10-26 | Spec task 8.1: 25 Judge tests in `tests/test_judge.py` (the worked example by hand, every verdict, error metrics, equal differences, records, errors); 244 tests in total, all passing in 87.6 s | see the commit of this date |
+| 2026-10-26 | Spec task 8.1: 25 Judge tests in `tests/test_judge.py` (the worked example by hand, every verdict, error metrics, equal differences, records, errors); 244 tests in total, all passing in 87.6 s | 00954da |
+| 2026-10-26 | Spec task 9: Resource_Manager (`app/services/resource_manager.py`, Algorithm 14): deadlines per step for measuring overruns, reserve from the previous step, stop rules in order | see the commit of this date |
 
 ---
 

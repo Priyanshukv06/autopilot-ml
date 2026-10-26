@@ -40,10 +40,14 @@ def render_sidebar(settings: Settings) -> None:
             "- ✅ Test-set evaluation + trivial baselines\n- ✅ Permutation feature importance\n"
             "- ✅ MLflow tracking (local)\n- ✅ Experiment history"
         )
-        st.markdown("**Autonomous layer (planned, not implemented)**")
+        st.markdown("**Autonomous layer, first version (command line: `scripts/run_autopilot.py`)**")
         st.markdown(
-            "- 🕒 Experiment planner\n- 🕒 Critic\n- 🕒 Strategy engine\n"
-            "- 🕒 Experiment memory\n- 🕒 Resource manager"
+            "- ✅ Experiment planner and session loop\n- ✅ Critic (3 diagnoses)\n"
+            "- ✅ Strategy engine (3 strategies)\n- ✅ Judge (corrected t-test)\n- ✅ Resource manager"
+        )
+        st.markdown("**Planned, not implemented**")
+        st.markdown(
+            "- 🕒 Autonomous mode in this dashboard\n- 🕒 Full critic and strategies\n- 🕒 Experiment memory"
         )
         st.divider()
         st.caption("Runs fully locally: no paid APIs, no cloud services.")

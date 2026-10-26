@@ -703,7 +703,7 @@ Phase 2 extensions (spec task 3, 26 October 2026). Every new option defaults to 
 6. Explainability: permutation importance with spread, the model's own importance, confusion matrix with per-class report, ROC curve (binary), predicted vs actual and residual plots (regression), best configuration.
 7. Experiment history: table of all experiments, chart of test scores, command to open MLflow.
 
-The sidebar lists the implemented modules and the planned ones.
+The sidebar lists the implemented modules and the planned ones. Since 26 October 2026 (after task 11.2) it lists the first version of the autonomous layer as built (planner and session loop, Critic with 3 diagnoses, Strategy_Engine with 3 strategies, Judge, Resource_Manager; run from the command line), and as planned: the autonomous mode in the dashboard, the full Critic and Strategies, and the Experiment_Memory.
 
 ### 8.4 Files written by one experiment
 
@@ -1054,7 +1054,8 @@ Future scope (beyond the planned phases):
 | 2026-10-26 | Spec task 10.1: 8 tracking tests in `tests/test_tracking.py`; 293 tests in total, all passing in 95.3 s | 847621f |
 | 2026-10-26 | Spec task 11: Planner, the autonomous Session loop and `scripts/run_autopilot.py` (Algorithm 15 in section 5.4); two trial Sessions in a temporary folder ran end to end (not kept) | 62dc010 |
 | 2026-10-26 | Spec task 11.1: 12 Session tests in `tests/test_autopilot.py` (Information_Barrier, stops, failures, replay); `Assessment.from_dict` and `DatasetProfile.from_dict` for replaying from the records; 305 tests in total, all passing in 103.8 s | 489c048 |
-| 2026-10-26 | Spec task 11.2: first real Session on Titanic, SES-001 (300 s budget, at most 8 Experiments, seed 42; EXP-003 to EXP-006): stopped with no Proposals left after 206.0 s; refit validation F1 0.706 to 0.763; test F1 of the first and final model 0.684 and 0.724; records checked by hand (section 9.11); two weaknesses noted (section 4.7) | see the commit of this date |
+| 2026-10-26 | Spec task 11.2: first real Session on Titanic, SES-001 (300 s budget, at most 8 Experiments, seed 42; EXP-003 to EXP-006): stopped with no Proposals left after 206.0 s; refit validation F1 0.706 to 0.763; test F1 of the first and final model 0.684 and 0.724; records checked by hand (section 9.11); two weaknesses noted (section 4.7) | 49cb088 |
+| 2026-10-26 | Dashboard sidebar: the first version of the autonomous layer moved from "planned" to "implemented" (section 8.3); the app renders without errors; 305 tests passing in 114.1 s | see the commit of this date |
 
 ---
 

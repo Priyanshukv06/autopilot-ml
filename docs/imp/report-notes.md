@@ -390,6 +390,18 @@ Added as each spec task is built. Full code shapes are in the spec's `design.md`
 
 Because both parts come from one generator, a model's score on the fresh sample estimates its true score. Checked on 26 October 2026: a binary dataset with all eight problems (1,000 rows plus 20,000 fresh rows) is made in 0.1 s.
 
+**Algorithm 9: Assessment of a Setup** (`app/services/assessor.py`, task 5)
+
+1. Look up the cache key (setup key, winning learner family, winning configuration). If this configuration of this Setup was assessed before in the Session, return that Assessment without refitting.
+2. Check that the given rows are the Training_Part the Session_Folds were made on (same number of rows).
+3. For each of the 15 folds (3 repeats of 5 folds): take the fold's training rows; compute balanced sample weights from them if the Setup uses class weights; train the winning configuration on them with `fit_config`; score it on the fold's training rows and validation rows with every task metric, record each class's validation recall, the share of validation rows with a category not seen in the fold's training rows (per column), the trivial baseline's validation scores and the fit time.
+4. If a fold fails, record the error, mark the Assessment failed and stop.
+5. Report the total time, and per metric the mean and standard deviation over the folds.
+
+Throwaway check on 26 October 2026 (Titanic, setup A, seed-42 split, session folds seed 43, one 10 s FLAML search, `n_jobs=-1`; output printed only, not saved): FLAML chose XGBoost with a validation F1 of 0.774; the 15 refits took 4.6 s and gave validation F1 0.751 (standard deviation 0.051 over the folds) and training F1 0.854. The trivial baseline (always "did not survive") scores F1 0. In the folds, 72% of validation rows had a ticket not seen in the fold's training rows (section 9.7 found 71%) and 15.7% a cabin not seen. Asking again for the same configuration returned the cached Assessment.
+
+**Algorithm 10: search summary** (`app/services/search_summary.py`, task 5): from the trial history, the search time (end of the last trial), the time of the best trial (the first one if tied), the share of the search time after it, the gain of the best score in the last quarter of the time (signed so that positive is better), the number of trials, and the best score and total trial time of each learner family. On the saved EXP-001 and EXP-002 histories it gives exactly the numbers of section 9.10 (best at 42.9 s and 23.2 s; 17.1 s and 36.8 s after the best; XGBoost 34.6 s in EXP-001).
+
 ---
 
 ## 6. Proposed flowchart, DFD and block diagrams
@@ -621,6 +633,7 @@ Phase 2 extensions (spec task 3, 26 October 2026). Every new option defaults to 
 - `AutoMLRunner.run_experiment(..., split=None, evaluate_test=True, compute_importance=True, profile_rows="all", session_id=None, parent_experiment_id=None, proposal=None)`. With `evaluate_test=False` the test part is not used at all (no test metrics, baseline, predictions, importance or test-row notes). With `class_weight="balanced"` the runner passes scikit-learn's balanced sample weights to FLAML.
 - `ExperimentResult` gains `schema_version` (2), `search_metric`, `test_evaluated`, `best_config_per_estimator`, `search_summary`, `session_id`, `parent_experiment_id`, `proposal`, `setup_key`, `setup` and `profile_rows`.
 - `decision_view(result)` returns the record without the test score, test and baseline metrics, permutation importance and warnings, and without the meta-features unless the profile was made from the training part only. Decision components only ever see this view.
+- Task 5: `Assessor(engine, folds, task_type, primary_metric, n_jobs, seed).assess(X_train, y_train, config, result)` returns an `Assessment` (one `FoldScore` per fold; `values(metric, part)`, `summary()`, `to_dict()`). `summarize_search(history, metric)` returns a `SearchSummary`, which the runner now saves in every record (`search_summary`). `unseen_category_shares(X_train, X_other)` gives the unseen share per categorical column; the Phase 1 test-row note now uses it, with the same text.
 
 ### 8.3 Dashboard sections
 
@@ -924,7 +937,8 @@ Future scope (beyond the planned phases):
 | 2026-10-26 | Spec task 3: engine and runner extensions (starting points, search-space limits, class weights, separate search metric, `max_iter`, `fit_config`, `run_experiment` options for Sessions, `decision_view`, new record fields; section 8.2); found that FLAML's integer upper bounds are exclusive (section 5.2); a throwaway run on Titanic (10 s, seed 42, `max_iter=8`, temporary folder) showed every option reaching FLAML; all 70 tests still pass | 77ed822 |
 | 2026-10-26 | Spec task 3.1: 28 tests in `tests/test_engine_extensions.py` and one more FLAML check (integer upper bound never searched); 99 tests in total, all passing in 64.8 s (section 8.6) | e54e69c |
 | 2026-10-26 | Spec task 4: `research/` package and the synthetic data generator `research/synthetic.py` with 8 problem kinds and a fresh sample (section 5.4, Algorithm 8); section 5.4 started with Algorithm 7 from task 3 | d5bd0ac |
-| 2026-10-26 | Spec task 4.1: 32 generator tests in `tests/test_synthetic.py`; 131 tests in total, all passing in 65.8 s. A planned check that another seed is a different problem was dropped: logistic regression trained on the seed-10 binary dataset (1,000 rows) scored accuracy 0.758 on its own fresh sample (20,000 rows) and still 0.715 on seed 11's (5,000 rows) | see the commit of this date |
+| 2026-10-26 | Spec task 4.1: 32 generator tests in `tests/test_synthetic.py`; 131 tests in total, all passing in 65.8 s. A planned check that another seed is a different problem was dropped: logistic regression trained on the seed-10 binary dataset (1,000 rows) scored accuracy 0.758 on its own fresh sample (20,000 rows) and still 0.715 on seed 11's (5,000 rows) | c786048 |
+| 2026-10-26 | Spec task 5: `app/services/assessor.py` (Algorithm 9) and `app/services/search_summary.py` (Algorithm 10); the runner saves the search summary; cache key widened to setup key plus configuration (design updated); 5 search-summary tests, two of them on the saved EXP-001 and EXP-002 histories; throwaway Assessor check on Titanic (section 5.4) | see the commit of this date |
 
 ---
 

@@ -41,6 +41,7 @@ from app.services.evaluator import (
 )
 from app.services.experiment_tracker import ExperimentTracker
 from app.services.profiler import DatasetProfile, DatasetProfiler, analyze_class_balance
+from app.services.search_summary import summarize_search
 from app.services.splits import OuterSplit, SplitError, make_outer_split
 from app.services.task_detector import TaskDetector, TaskType
 
@@ -104,21 +105,30 @@ def to_jsonable(obj: Any) -> Any:
     return obj
 
 
-def unseen_category_warnings(X_train: pd.DataFrame, X_test: pd.DataFrame) -> list[str]:
-    """Report categorical columns whose test values never appear in the training split."""
-    messages = []
+def unseen_category_shares(X_train: pd.DataFrame, X_other: pd.DataFrame) -> dict[str, float]:
+    """For each categorical column, the share of ``X_other`` rows whose value never appears in ``X_train``.
+
+    Empty cells count as seen (FLAML fills them). The share is over all rows of ``X_other``.
+    """
+    shares: dict[str, float] = {}
     for column in X_train.columns:
         train_col = X_train[column]
         if is_numeric_dtype(train_col) and not is_bool_dtype(train_col):
             continue
-        test_values = X_test[column].dropna()
-        unseen = ~test_values.isin(set(train_col.dropna().unique()))
-        if len(X_test) and unseen.any():
-            messages.append(
-                f"'{column}': {unseen.sum() / len(X_test):.0%} of test rows have categories never seen in "
-                "training, so the model cannot use them (typical for high-cardinality columns)."
-            )
-    return messages
+        other_values = X_other[column].dropna()
+        unseen = ~other_values.isin(set(train_col.dropna().unique()))
+        shares[column] = float(unseen.sum() / len(X_other)) if len(X_other) else 0.0
+    return shares
+
+
+def unseen_category_warnings(X_train: pd.DataFrame, X_test: pd.DataFrame) -> list[str]:
+    """Report categorical columns whose test values never appear in the training split."""
+    return [
+        f"'{column}': {share:.0%} of test rows have categories never seen in "
+        "training, so the model cannot use them (typical for high-cardinality columns)."
+        for column, share in unseen_category_shares(X_train, X_test).items()
+        if share > 0
+    ]
 
 
 # --------------------------------------------------------------------------- config
@@ -973,6 +983,12 @@ class AutoMLRunner:
             primary_metric=metric,
             search_metric=None if data.search_metric == metric else data.search_metric,
         )
+        search_summary = None
+        if engine_result.search_history:  # engines without a trial history have no summary
+            try:
+                search_summary = summarize_search(engine_result.search_history, data.search_metric).to_dict()
+            except ValueError as exc:
+                logger.warning("Search summary not available: %s", exc)
 
         result = ExperimentResult(
             experiment_id=experiment_id,
@@ -1013,6 +1029,7 @@ class AutoMLRunner:
             search_metric=data.search_metric,
             test_evaluated=test_eval is not None,
             best_config_per_estimator=engine_result.best_config_per_estimator,
+            search_summary=search_summary,
             session_id=options.session_id,
             parent_experiment_id=options.parent_experiment_id,
             proposal=to_jsonable(options.proposal) if options.proposal is not None else None,

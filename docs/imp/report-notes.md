@@ -776,9 +776,9 @@ mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db --port 5000 --workers 1
 python scripts/compare_seeds.py --dataset data/sample/titanic.csv --target Survived --exclude-a PassengerId,Name --exclude-b PassengerId,Name,Ticket,Cabin --seeds 1 2 3 4 5 --budget 30
 ```
 
-### 8.6 Tests (434, about 112 s on 26 October 2026)
+### 8.6 Tests (448, about 116 s on 26 October 2026)
 
-Phase 1 ended with the first three files below (47 tests, about 29 to 41 s). Phase 2 has added the others so far. Full suite on 26 October 2026 after task 14.1: 434 passed in 112.0 s on the laptop in chapter 7. The counts below were taken from pytest's list of collected tests.
+Phase 1 ended with the first three files below (47 tests, about 29 to 41 s). Phase 2 has added the others so far. Full suite on 26 October 2026 after task 15.1: 448 passed in 115.8 s on the laptop in chapter 7, close to the design's limit of about 2 minutes. The counts below were taken from pytest's list of collected tests.
 
 | File | Tests | What they cover |
 |---|---|---|
@@ -798,6 +798,7 @@ Phase 1 ended with the first three files below (47 tests, about 29 to 41 s). Pha
 | `tests/test_tracking.py` | 8 | Session IDs never clash (also with a hand-made folder in between and with 16 threads at once); `session.json` keeps its earlier steps and leaves no temporary file when writing is interrupted before or at the rename; a file held open for a moment is retried; step files; copies of the EXP-001 and EXP-002 records load as version 1 and appear in the history next to a Session record; the session history; an Experiment run in a Session is an MLflow child run of the Session's parent run, and one outside a Session is not |
 | `tests/test_autopilot.py` | 12 | Whole Sessions with a recording engine, a scripted Assessor and a fake clock (about 1 s each): no Test_Part row reaches the engine, the Assessor or the Critic's profile, and no Experiment record of a Session has a test number; every step's record and files; each stop reason (time, Experiments, patience, user request, no Proposals); a stop request still runs the Final_Evaluation; failed candidates (a failed search and a failed Assessment) are discarded and the Session goes on; a failed first Experiment stops the Session with an error record; bad settings write nothing; the Diagnoses and Verdicts replay exactly from the saved records |
 | `tests/test_transforms.py` | 20 | Each Data_Step's exact output on a small frame, including unseen values and empty cells; steps in order; a step learns nothing when applied and each output row depends only on its own input row; the Assessor fits the steps on each fold's training rows only; specs round-trip through JSON and give the same setup key in either form; invalid specs and steps that do not fit the data are refused; a reloaded bundle predicts exactly as before saving from raw rows; importance on the original columns; without Data_Steps nothing changes |
+| `tests/test_experiment_memory.py` | 14 | Records survive a restart, in order, one JSON object per line, and adding only appends; damaged lines (not JSON, missing fields, a line cut off by a crash) are skipped with a warning; fields from a later schema are ignored; read-only memories and NaN values are refused; the snapshot hash; the dataset fingerprint; the nearest datasets in the right order with distances worked by hand (records averaged per dataset, features without spread and features one side lacks left out); other task types and an excluded dataset left out; strategy statistics on a small hand-made memory (weights, keep rate, gain when kept, cost); a Session adds one record per Verdict and none for a failed candidate; a pre-filled memory does not change any decision |
 | `tests/test_synthetic.py` | 32 | Same seed gives the same data; problem order does not matter; each of the 8 problems measured at its requested strength in both the dataset and the fresh sample (imbalance ratio, share of changed labels, correlation of copies, distinct share of IDs, share of the main value, unseen share of categories, empty share); our profiler flags the planted ID, constant and high-cardinality columns; clean data has none of them; a model scores the same on the fresh sample as in cross-validation; 11 invalid requests rejected |
 
 ### 8.7 Code listings worth including in the report
@@ -1114,7 +1115,8 @@ Future scope (beyond the planned phases):
 | 2026-10-26 | Spec task 13.1: 68 more Critic tests (112 in `tests/test_critic.py`) and 2 profiler tests; test counts in section 8.6 corrected from pytest's list (the runner file has 21 tests and the engine file 29); 396 tests in total, all passing in 114.2 s | 39c5569 |
 | 2026-10-26 | Spec task 14: the full Strategy_Catalogue (nine Strategies) and rule table (section 5.4); a throwaway 90 s Session on Titanic used the new data Strategies end to end; existing tests updated for the longer Proposal lists | b7869fe |
 | 2026-10-26 | Spec task 14.1: 30 more Strategy tests and 8 more Strategy_Engine tests; 434 tests in total, all passing in 112.0 s | 4fe539c |
-| 2026-10-26 | Spec task 15: Experiment_Memory version 1 (`app/services/experiment_memory.py`, Algorithm 17); the Session adds one record per Verdict; Proposals record the severities of the Diagnoses they answer | see the commit of this date |
+| 2026-10-26 | Spec task 15: Experiment_Memory version 1 (`app/services/experiment_memory.py`, Algorithm 17); the Session adds one record per Verdict; Proposals record the severities of the Diagnoses they answer | 4500f7f |
+| 2026-10-26 | Spec task 15.1: 14 memory tests in `tests/test_experiment_memory.py`; 448 tests in total, all passing in 115.8 s | see the commit of this date |
 
 ---
 

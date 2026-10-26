@@ -710,9 +710,9 @@ mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db --port 5000 --workers 1
 python scripts/compare_seeds.py --dataset data/sample/titanic.csv --target Survived --exclude-a PassengerId,Name --exclude-b PassengerId,Name,Ticket,Cabin --seeds 1 2 3 4 5 --budget 30
 ```
 
-### 8.6 Tests (244, about 88 s on 26 October 2026)
+### 8.6 Tests (285, about 88 s on 26 October 2026)
 
-Phase 1 ended with the first three files below (47 tests, about 29 to 41 s). Phase 2 has added the others so far. Full suite on 26 October 2026 after task 8.1: 244 passed in 87.6 s on the laptop in chapter 7.
+Phase 1 ended with the first three files below (47 tests, about 29 to 41 s). Phase 2 has added the others so far. Full suite on 26 October 2026 after task 9.1: 285 passed in 88.2 s on the laptop in chapter 7.
 
 | File | Tests | What they cover |
 |---|---|---|
@@ -728,6 +728,7 @@ Phase 1 ended with the first three files below (47 tests, about 29 to 41 s). Pha
 | `tests/test_strategies.py` | 21 | The exact change of each Strategy to a Setup, with the original unchanged and nothing shared; drop_columns only for columns in use, with at least one left; class weights only for classification without weights; smaller trees keep tighter limits, never widen and apply once; the limits fit FLAML's search spaces for all three task types; canonical keys |
 | `tests/test_strategy_engine.py` | 8 | The Titanic Proposals in rule order (drop Ticket, drop Cabin, smaller trees) with merged answers; tried changes and changes that conflict with the Accepted_Setup left out; class weights for classification only; severity before table order; the full ranking key; empty lists; repeatable output |
 | `tests/test_judge.py` | 25 | The corrected t and p-values against the worked example computed by hand; keep, keep_simpler and discard, including "within the margin but consistently worse"; the minimum gain; RMSE with the sign flipped; wins, losses and ties; equal differences decided on the mean without p-values; folds without scores left out; the decision record; different folds, metrics, failed Assessments and invalid settings refused |
+| `tests/test_resource_manager.py` | 41 | With a fake clock: the first budget at its share and never below 5 s; later budgets from measured time and the reserve, not from the budgets handed out; the wasted-budget cap; more search time capped by the time left; the accepted budget follows kept steps only; each stop reason, and their order when all apply at once; patience counts discards in a row; every part of a step in the ledger; overruns against each step's deadline; 20 simulated Sessions with random overruns never end later than the budget plus the last step's overrun; invalid budgets refused |
 | `tests/test_synthetic.py` | 32 | Same seed gives the same data; problem order does not matter; each of the 8 problems measured at its requested strength in both the dataset and the fresh sample (imbalance ratio, share of changed labels, correlation of copies, distinct share of IDs, share of the main value, unseen share of categories, empty share); our profiler flags the planted ID, constant and high-cardinality columns; clean data has none of them; a model scores the same on the fresh sample as in cross-validation; 11 invalid requests rejected |
 
 ### 8.7 Code listings worth including in the report
@@ -997,7 +998,8 @@ Future scope (beyond the planned phases):
 | 2026-10-26 | Spec task 8: Judge with the corrected resampled t-test (`app/services/judge.py`, Algorithm 13 with a worked example in section 5.4) | 064396a |
 | 2026-10-26 | Fix found by the Judge tests: equal differences are detected from the values, not from a rounded variance (section 4.7) | 032674e |
 | 2026-10-26 | Spec task 8.1: 25 Judge tests in `tests/test_judge.py` (the worked example by hand, every verdict, error metrics, equal differences, records, errors); 244 tests in total, all passing in 87.6 s | 00954da |
-| 2026-10-26 | Spec task 9: Resource_Manager (`app/services/resource_manager.py`, Algorithm 14): deadlines per step for measuring overruns, reserve from the previous step, stop rules in order | see the commit of this date |
+| 2026-10-26 | Spec task 9: Resource_Manager (`app/services/resource_manager.py`, Algorithm 14): deadlines per step for measuring overruns, reserve from the previous step, stop rules in order | 733c86e |
+| 2026-10-26 | Spec task 9.1: 41 Resource_Manager tests with a fake clock, including 20 simulated Sessions; 285 tests in total, all passing in 88.2 s | see the commit of this date |
 
 ---
 

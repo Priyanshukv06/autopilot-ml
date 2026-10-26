@@ -42,14 +42,14 @@ Tasks 20 to 28: development and evaluation datasets (fixed in advance and kept a
 
 Tasks 29 to 35: SMOTE through FLAML's resampler, target encoding and token features, group-aware folds, SHAP, target suggestion and a leakage check, local language-model summaries (never used for decisions), an API and a Docker image.
 
-## Decisions still needed
+## Decisions
 
-From `design.md`:
+Confirmed on 26 October 2026 (details in `design.md`):
 
-- D2: the Judge design (refit fixed configurations on 15 folds, with the corrected resampled t-test). Confirm before task 8.
-- D3: downloading small public OpenML datasets once, and `imbalanced-learn` for the optional SMOTE task. Needed before tasks 20 and 29.
-- D4: whether AutoGluon gets its own conda environment. Checked at the start of task 23.
-- D5: who takes Track 1 (decision path) and Track 2 (evidence). Optional.
+- D2: the Judge refits fixed configurations on 15 folds and uses the corrected resampled t-test.
+- D3: small public OpenML datasets are downloaded once; `imbalanced-learn` is added only for the optional SMOTE task.
+- D4: AutoGluon gets its own conda environment if it does not install next to our pinned libraries (checked at the start of task 23).
+- D5: not needed. Priyanshu Verma builds all tasks; Salil Kushwah is credited in the final report.
 
 ## Commits
 

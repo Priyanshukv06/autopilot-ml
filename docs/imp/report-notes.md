@@ -290,7 +290,7 @@ Details checked in the FLAML 2.7.0 source and in the EXP-001 and EXP-002 trial l
 Update, 26 October 2026: the current design is the spec's `design.md` (`.kiro/specs/autopilot-ml/`). The drafts P1 to P7 below are kept for the history of the design. What changed:
 
 - New component, the Assessor: it refits a setup's best configuration (no search) on fixed Session_Folds of the training part, 3 repeats of 5-fold cross-validation, and records per-fold scores. The Critic and the Judge both read these scores.
-- P6 is replaced by the Judge: paired differences on the 15 folds, the corrected resampled t-test of Nadeau and Bengio (2003) in the repeated form of Bouckaert and Frank (2004), and three verdicts: keep, keep_simpler (simpler and not worse) and discard. The expensive version in P6 (full searches on several inner splits) becomes the strict reference in the judge agreement study (Requirement 25). Decision D2, still to be confirmed.
+- P6 is replaced by the Judge: paired differences on the 15 folds, the corrected resampled t-test of Nadeau and Bengio (2003) in the repeated form of Bouckaert and Frank (2004), and three verdicts: keep, keep_simpler (simpler and not worse) and discard. The expensive version in P6 (full searches on several inner splits) becomes the strict reference in the judge agreement study (Requirement 25). Decision D2, confirmed on 26 October 2026.
 - P1: the thresholds move to a TOML file with a version label (`critic_thresholds.toml`). Two more kinds are added: budget_limited and wasted_budget. The thin loop starts with overfitting, high_cardinality and class_imbalance.
 - P2: strategies are split into a thin set (drop_columns, class_weight_balanced, regularised_search_space) and a full set. Data changes (frequency encoding, rare-category grouping, missing indicators) are learned inside each fold.
 - P3: the learned selectors treat each pair of strategy and diagnosis kind as an arm, with statistics from similar past datasets in the memory.
@@ -908,7 +908,7 @@ Charts already made (in `docs/imp/images`, from `scripts/plot_search_history.py`
 - Render the diagrams as images
 - Back up `experiments/` and `mlruns/` regularly (they are not in git)
 - Check whether the department wants AI-assisted tools declared (the Kiro editor includes an AI assistant)
-- Design decisions waiting for the team (spec `design.md`): D2 the Judge design (before task 8); D3 OpenML downloads and `imbalanced-learn` (before tasks 20 and 29); D4 a separate environment for AutoGluon (task 23); D5 who takes which track
+- Design decisions D2 to D4 (spec `design.md`) were confirmed on 26 October 2026. D5 (splitting the work) is not needed: Priyanshu Verma builds all tasks alone. Credit Salil Kushwah (23U02003) as the second group member in the final report
 - The spec in `.kiro/specs/autopilot-ml/` is outside the git repository, like the steering rule. Keep a copy with the report material, or move `.kiro` into the repository if the repository folder becomes the Kiro workspace
 - Find out which warnings pytest listed once on 22 October: one of three identical test runs ended with "47 passed, 350 warnings", the other two with no warnings. The output of that run was not kept, so the warning types are unknown. All tests passed every time
 

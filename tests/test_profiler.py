@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from app.services.profiler import DatasetProfiler, analyze_class_balance
+from app.services.profiler import DatasetProfile, DatasetProfiler, analyze_class_balance
 from app.services.task_detector import TaskType
 
 
@@ -107,3 +107,37 @@ def test_invalid_inputs():
         profiler.profile([1, 2, 3])  # type: ignore[arg-type]
     with pytest.raises(ValueError):
         profiler.profile(pd.DataFrame({"a": [1, 2]}), target_column="missing")
+
+
+def test_main_value_share_near_constant_columns_and_correlated_pairs():
+    rng = np.random.default_rng(3)
+    n = 200
+    base = rng.normal(size=n)
+    df = pd.DataFrame({
+        "base": base,
+        "copy": 2 * base + 0.01 * rng.normal(size=n),  # r close to 1
+        "loose": base + 2 * rng.normal(size=n),  # r about 0.45: not reported
+        "flag": ["on"] * 196 + ["off"] * 4,  # 98% one value: near-constant
+        "half": [None] * 120 + ["x"] * 80,  # empty cells count as one value: main share 0.6
+        "target": base + rng.normal(size=n),  # strongly related to base, but the target is left out
+    })
+    profile = DatasetProfiler().profile(df, target_column="target", task_type=TaskType.REGRESSION)
+    assert profile.main_value_share["flag"] == pytest.approx(0.98)
+    assert profile.main_value_share["half"] == pytest.approx(0.6)
+    assert profile.near_constant_columns == ["flag"]
+    assert [pair["columns"] for pair in profile.correlated_pairs] == [["base", "copy"]]
+    assert profile.correlated_pairs[0]["correlation"] == pytest.approx(np.corrcoef(base, df["copy"])[0, 1])
+    assert any("nearly constant" in w for w in profile.warnings) and any("highly correlated" in w for w in
+                                                                          profile.warnings)
+
+
+def test_profiles_round_trip_and_old_profiles_load():
+    df = pd.DataFrame({"a": [1.0, 2.0, 3.0, 4.0], "b": ["x", "y", "x", "x"], "y": [0, 1, 0, 1]})
+    profile = DatasetProfiler().profile(df, target_column="y", task_type=TaskType.BINARY)
+    rebuilt = DatasetProfile.from_dict(json.loads(json.dumps(profile.to_dict())))
+    assert rebuilt == profile
+    old = profile.to_dict()  # a profile saved before Phase 2 has none of the new fields
+    for key in ("main_value_share", "near_constant_columns", "correlated_pairs"):
+        old.pop(key)
+    loaded = DatasetProfile.from_dict(old)
+    assert loaded.correlated_pairs == [] and loaded.main_value_share == {} and loaded.near_constant_columns == []

@@ -678,9 +678,9 @@ mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db --port 5000 --workers 1
 python scripts/compare_seeds.py --dataset data/sample/titanic.csv --target Survived --exclude-a PassengerId,Name --exclude-b PassengerId,Name,Ticket,Cabin --seeds 1 2 3 4 5 --budget 30
 ```
 
-### 8.6 Tests (145, about 84 s on 26 October 2026)
+### 8.6 Tests (190, about 87 s on 26 October 2026)
 
-Phase 1 ended with the first three files below (47 tests, about 29 to 41 s). Phase 2 has added the others so far. Full suite on 26 October 2026 after task 5.1: 145 passed in 83.9 s on the laptop in chapter 7.
+Phase 1 ended with the first three files below (47 tests, about 29 to 41 s). Phase 2 has added the others so far. Full suite on 26 October 2026 after task 6.1: 190 passed in 86.7 s on the laptop in chapter 7.
 
 | File | Tests | What they cover |
 |---|---|---|
@@ -692,6 +692,7 @@ Phase 1 ended with the first three files below (47 tests, about 29 to 41 s). Pha
 | `tests/test_engine_extensions.py` | 28 | Without new options FLAML gets exactly the Phase 1 call; starting points, limits, weights and `max_iter` reach FLAML; `fit_config` predicts the original labels; limit conversion and starting-value checks; runner options; with `evaluate_test=False` no test row is fitted, predicted or profiled; `decision_view` has no test information; `setup_key` stability (pinned value); 9 invalid options rejected before an experiment ID is given out |
 | `tests/test_search_summary.py` | 5 | A small history worked by hand, error metrics, unusable histories, and the saved EXP-001 and EXP-002 histories (search time, time of the best trial, share after it, number of trials) |
 | `tests/test_assessor.py` | 9 | One score per fold with every metric; means and standard deviations; only the fold's training rows of the Training_Part are refitted (the whole dataset is refused); class weights from each fold's training rows; a cached Setup is not refitted but a new configuration is; a failing fold fails the Assessment; unseen shares per fold against a hand-made answer; regression; two separate Assessments with real FLAML refits agree within 1e-12 |
+| `tests/test_critic.py` | 44 | Hand-made profiles and Assessments, no FLAML: each thin rule at high, at moderate, exactly at a threshold and just below it, with its evidence numbers; gaps and recall as means over folds; the smallest class in multiclass; no imbalance rule for regression; excluded and numeric columns skipped; fixed output order and repeatable output; the version label on every Diagnosis; an empty list when nothing applies; the choice of diagnostic metric; the default thresholds file holds the design values; missing, unreadable and invalid thresholds files are refused with a clear message |
 | `tests/test_synthetic.py` | 32 | Same seed gives the same data; problem order does not matter; each of the 8 problems measured at its requested strength in both the dataset and the fresh sample (imbalance ratio, share of changed labels, correlation of copies, distinct share of IDs, share of the main value, unseen share of categories, empty share); our profiler flags the planted ID, constant and high-cardinality columns; clean data has none of them; a model scores the same on the fresh sample as in cross-validation; 11 invalid requests rejected |
 
 ### 8.7 Code listings worth including in the report
@@ -954,7 +955,8 @@ Future scope (beyond the planned phases):
 | 2026-10-26 | Spec task 5: `app/services/assessor.py` (Algorithm 9) and `app/services/search_summary.py` (Algorithm 10); the runner saves the search summary; cache key widened to setup key plus configuration (design updated); 5 search-summary tests, two of them on the saved EXP-001 and EXP-002 histories; throwaway Assessor check on Titanic (section 5.4) | ee11363 |
 | 2026-10-26 | Spec task 5.1: 9 Assessor tests in `tests/test_assessor.py`, including two separate Assessments with real FLAML refits (LightGBM, 12 trees, 240 rows, 15 folds each) that agree within 1e-12; 145 tests in total, all passing in 83.9 s | 10a172f |
 | 2026-10-26 | Guard: the runner refuses datasets with repeated row labels (section 4.7), with one new test in `tests/test_automl_runner.py` | 6fa465d |
-| 2026-10-26 | Spec task 6: thin Critic (`app/services/critic.py`, Algorithm 11) with thresholds file `critic_thresholds.toml` (`v0-start`); one threshold added to the design (`min_ratio_for_recall`); throwaway check on Titanic gave the expected Diagnoses (section 5.4) | see the commit of this date |
+| 2026-10-26 | Spec task 6: thin Critic (`app/services/critic.py`, Algorithm 11) with thresholds file `critic_thresholds.toml` (`v0-start`); one threshold added to the design (`min_ratio_for_recall`); throwaway check on Titanic gave the expected Diagnoses (section 5.4) | 1d49fe4 |
+| 2026-10-26 | Spec task 6.1: 44 Critic tests in `tests/test_critic.py`; 190 tests in total, all passing in 86.7 s | see the commit of this date |
 
 ---
 

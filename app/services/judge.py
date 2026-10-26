@@ -77,10 +77,11 @@ def corrected_resampled_t(differences: np.ndarray, test_train_ratio: float) -> t
         raise ValueError("Need at least 2 finite paired differences.")
     if test_train_ratio <= 0:
         raise ValueError("test_train_ratio must be positive.")
-    variance = float(d.var(ddof=1))
-    if variance == 0:
+    # Compare the values, not the variance: the mean of equal values can carry rounding noise,
+    # which would give a tiny non-zero variance and a meaningless, huge t.
+    if np.ptp(d) == 0:
         raise ValueError("All differences are equal, so the t statistic is not defined.")
-    return float(d.mean() / np.sqrt((1 / len(d) + test_train_ratio) * variance)), len(d) - 1
+    return float(d.mean() / np.sqrt((1 / len(d) + test_train_ratio) * d.var(ddof=1))), len(d) - 1
 
 
 class Judge:

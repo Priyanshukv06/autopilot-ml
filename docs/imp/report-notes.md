@@ -193,6 +193,7 @@ In order (dates and commits in Appendix B):
 | Saved models are pickle files, which can run code when loaded | Documented: only load files this app created |
 | MLflow stores absolute file paths | Documented: moving the project folder breaks file links in old MLflow runs; the JSON records still work |
 | A dataset with repeated row labels would silently pair features with the wrong target values: the runner matches rows by label (`df.loc[y.index]`) and splits by position (found while reviewing task 3, 26 October 2026; CSV uploads always have a plain row index, so no run was affected) | The runner refuses such a dataset with a clear message before an experiment starts; any unique index works (test: a shuffled index gives the same test metrics as the plain one) |
+| Equal paired differences could still give a tiny non-zero variance through rounding of their mean, and so a meaningless, huge t statistic (found by the Judge tests, task 8.1, 26 October 2026) | `corrected_resampled_t` checks whether the values themselves are all equal; the Judge treats a standard deviation of at most 1e-12 (the refit tolerance) as equal and then decides on the mean alone |
 | FLAML never searches the upper value of an integer range, but its validity check accepts it (found in the source, task 3, 26 October 2026) | Limits are written inclusive ("at most 32") and the engine adds 1 for FLAML; starting values are checked against the range FLAML really searches |
 
 ### 4.8 Phase 1 review
@@ -981,7 +982,9 @@ Future scope (beyond the planned phases):
 | 2026-10-26 | Spec task 6.1: 44 Critic tests in `tests/test_critic.py`; 190 tests in total, all passing in 86.7 s | 6b1ac70 |
 | 2026-10-26 | Spec task 7: Strategy_Catalogue (`app/services/strategies.py`: drop_columns, class_weight_balanced, regularised_search_space) and the rule-based Strategy_Engine (`app/services/strategy_engine.py`), Algorithm 12 in section 5.4 | 32db280 |
 | 2026-10-26 | Spec task 7.1: 21 Strategy tests and 8 Strategy_Engine tests; 219 tests in total, all passing in 86.7 s | a8629f3 |
-| 2026-10-26 | Spec task 8: Judge with the corrected resampled t-test (`app/services/judge.py`, Algorithm 13 with a worked example in section 5.4) | see the commit of this date |
+| 2026-10-26 | Spec task 8: Judge with the corrected resampled t-test (`app/services/judge.py`, Algorithm 13 with a worked example in section 5.4) | 064396a |
+| 2026-10-26 | Fix found by the Judge tests: equal differences are detected from the values, not from a rounded variance (section 4.7) | 4f1aa53 |
+| 2026-10-26 | Spec task 8.1: 25 Judge tests in `tests/test_judge.py` (the worked example by hand, every verdict, error metrics, equal differences, records, errors); 244 tests in total, all passing in 87.6 s | see the commit of this date |
 
 ---
 

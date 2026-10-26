@@ -16,7 +16,13 @@ from sklearn.metrics import accuracy_score, f1_score, mean_squared_error, r2_sco
 from sklearn.model_selection import train_test_split
 
 from app.core.config import build_settings
-from app.services.automl_runner import AutoMLRunner, EngineResult, ExperimentError, unseen_category_warnings
+from app.services.automl_runner import (
+    AutoMLRunner,
+    EngineResult,
+    ExperimentConfig,
+    ExperimentError,
+    unseen_category_warnings,
+)
 from app.services.evaluator import Evaluator, metric_warnings, validate_primary_metric
 from app.services.profiler import ClassBalance
 from app.services.task_detector import TaskType
@@ -154,6 +160,22 @@ def test_too_few_rows(settings):
     runner = AutoMLRunner(settings=settings, enable_mlflow=False)
     with pytest.raises(ExperimentError, match="At least"):
         runner.run(make_classification_frame().head(10), "label")
+
+
+def test_repeated_row_labels_are_refused_but_any_unique_index_works(settings):
+    runner = AutoMLRunner(settings=settings, engine=LogisticEngine(), enable_mlflow=False)
+    repeated = breast_cancer_frame()
+    repeated.index = [0, *range(len(repeated) - 1)]  # label 0 twice
+    with pytest.raises(ExperimentError, match="repeated row labels"):
+        runner.run(repeated, "diagnosis")
+    assert not any(settings.experiments_dir.glob("EXP-*"))  # refused before an ID is given out
+
+    shuffled = breast_cancer_frame()
+    shuffled.index = np.random.default_rng(0).permutation(len(shuffled)) * 10  # unique, not 0..n-1
+    config = ExperimentConfig(target_column="diagnosis", task_type=TaskType.BINARY, time_budget=10)
+    result = runner.run_experiment(shuffled, config, compute_importance=False)
+    plain = runner.run_experiment(breast_cancer_frame(), config, compute_importance=False)
+    assert result.test_metrics == plain.test_metrics  # the same rows, matched with the same labels
 
 
 def test_search_noise_is_recognised():

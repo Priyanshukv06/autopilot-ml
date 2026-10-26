@@ -192,6 +192,7 @@ In order (dates and commits in Appendix B):
 | Streamlit 1.65 deprecates `use_container_width` | `width="stretch"` |
 | Saved models are pickle files, which can run code when loaded | Documented: only load files this app created |
 | MLflow stores absolute file paths | Documented: moving the project folder breaks file links in old MLflow runs; the JSON records still work |
+| A dataset with repeated row labels would silently pair features with the wrong target values: the runner matches rows by label (`df.loc[y.index]`) and splits by position (found while reviewing task 3, 26 October 2026; CSV uploads always have a plain row index, so no run was affected) | The runner refuses such a dataset with a clear message before an experiment starts; any unique index works (test: a shuffled index gives the same test metrics as the plain one) |
 | FLAML never searches the upper value of an integer range, but its validity check accepts it (found in the source, task 3, 26 October 2026) | Limits are written inclusive ("at most 32") and the engine adds 1 for FLAML; starting values are checked against the range FLAML really searches |
 
 ### 4.8 Phase 1 review
@@ -941,7 +942,8 @@ Future scope (beyond the planned phases):
 | 2026-10-26 | Spec task 4: `research/` package and the synthetic data generator `research/synthetic.py` with 8 problem kinds and a fresh sample (section 5.4, Algorithm 8); section 5.4 started with Algorithm 7 from task 3 | d5bd0ac |
 | 2026-10-26 | Spec task 4.1: 32 generator tests in `tests/test_synthetic.py`; 131 tests in total, all passing in 65.8 s. A planned check that another seed is a different problem was dropped: logistic regression trained on the seed-10 binary dataset (1,000 rows) scored accuracy 0.758 on its own fresh sample (20,000 rows) and still 0.715 on seed 11's (5,000 rows) | c786048 |
 | 2026-10-26 | Spec task 5: `app/services/assessor.py` (Algorithm 9) and `app/services/search_summary.py` (Algorithm 10); the runner saves the search summary; cache key widened to setup key plus configuration (design updated); 5 search-summary tests, two of them on the saved EXP-001 and EXP-002 histories; throwaway Assessor check on Titanic (section 5.4) | ee11363 |
-| 2026-10-26 | Spec task 5.1: 9 Assessor tests in `tests/test_assessor.py`, including two separate Assessments with real FLAML refits (LightGBM, 12 trees, 240 rows, 15 folds each) that agree within 1e-12; 145 tests in total, all passing in 83.9 s | see the commit of this date |
+| 2026-10-26 | Spec task 5.1: 9 Assessor tests in `tests/test_assessor.py`, including two separate Assessments with real FLAML refits (LightGBM, 12 trees, 240 rows, 15 folds each) that agree within 1e-12; 145 tests in total, all passing in 83.9 s | 10a172f |
+| 2026-10-26 | Guard: the runner refuses datasets with repeated row labels (section 4.7), with one new test in `tests/test_automl_runner.py` | see the commit of this date |
 
 ---
 

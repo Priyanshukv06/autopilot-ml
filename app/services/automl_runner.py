@@ -1064,6 +1064,13 @@ class AutoMLRunner:
     ) -> tuple[pd.DataFrame, pd.Series, TaskType, str, list[str]]:
         if not isinstance(df, pd.DataFrame) or df.empty:
             raise ExperimentError("The dataset is empty.")
+        # Rows are matched with their target values by label (df.loc[y.index]) and splits are row
+        # positions, so repeated labels would silently pair features with the wrong rows.
+        if df.index.has_duplicates:
+            raise ExperimentError(
+                "The dataset has repeated row labels, so rows cannot be matched with their target values. "
+                "Reset the index first, for example with df.reset_index(drop=True)."
+            )
         target = config.target_column
         if target not in df.columns:
             raise ExperimentError(f"Target column '{target}' not found in the dataset.")

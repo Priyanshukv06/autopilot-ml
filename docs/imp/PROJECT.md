@@ -2,7 +2,7 @@
 
 Main project document, B.Tech Computer Science major project.
 
-Current status: the Phase 1 baseline (profiling, task detection, FLAML search, evaluation, MLflow tracking, dashboard) is implemented. The autonomous layer (planner, critic, strategy engine, experiment memory, resource manager) is planned and not built yet. No benchmark results exist yet, so this document makes no performance claims.
+Current status (26 October 2026): the Phase 1 baseline (profiling, task detection, FLAML search, evaluation, MLflow tracking, dashboard) and the Phase 2 rule-based autonomous layer (Session loop, planner, assessor, critic, strategy engine, judge, resource manager, experiment memory, and the autonomous mode of the dashboard) are implemented and tested. Phase 3 (learned strategy choice from the memory, the benchmark against other systems) is planned and not built yet. The only measurements so far are the component studies and the Phase 2 comparison with FLAML alone on the four sample datasets (`report-notes.md`, chapter 9); this document makes no other performance claims.
 
 ## Abstract
 
@@ -63,13 +63,14 @@ The baseline handles the first goal with a single AutoML run. The research syste
 AutoPilot-ML puts an experiment loop around the AutoML engine:
 
 1. Dataset intelligence: profile the data and detect the task (implemented).
-2. Experiment planning: choose the next experiment configuration from the profile, the memory and the remaining budget (planned).
+2. Experiment planning: build the first Setup and each candidate Setup from the profile, the chosen change and the remaining budget (implemented in Phase 2; using the memory to choose is Phase 3, planned).
 3. AutoML core: run the engine. FLAML today, AutoGluon later as a comparison (FLAML implemented).
-4. Evaluation: metrics, errors and resource usage on a held-out split (implemented).
-5. Critic: structured diagnosis of each experiment (planned).
-6. Strategy engine: candidate improvements ranked by expected gain per unit of cost (planned).
-7. Experiment memory: what was tried, on what kind of data, at what cost, with what effect (planned; the baseline already writes the raw records).
-8. Resource manager: share time, experiments and CPU across the loop and decide when to stop (planned).
+4. Evaluation: metrics, errors and resource usage on a held-out split (implemented), and, inside a Session, Assessments on fixed folds of the training part (implemented in Phase 2).
+5. Critic: structured diagnosis of each experiment (implemented in Phase 2: 12 kinds, thresholds tuned by a study).
+6. Strategy engine: candidate improvements ranked by a rule table (implemented in Phase 2: 9 Strategies, ranked by severity and cost); ranking by expected gain per unit of cost learned from the memory is Phase 3 (planned).
+7. Judge: keeps a change only if the fold differences support it (implemented in Phase 2).
+8. Experiment memory: what was tried, on what kind of data, at what cost, with what effect (implemented in Phase 2: written and shown; read for decisions in Phase 3, planned).
+9. Resource manager: share time, experiments and CPU across the loop and decide when to stop (implemented in Phase 2).
 
 ## 7. Architecture
 
@@ -86,7 +87,7 @@ AutoPilot-ML puts an experiment loop around the AutoML engine:
                     Task Detection                (implemented)
                            │
                            ▼
-                  Experiment Planner              (planned)
+                  Experiment Planner              (implemented, Phase 2)
                            │
                            ▼
                  AutoML Core (FLAML)              (implemented)
@@ -98,17 +99,17 @@ AutoPilot-ML puts an experiment loop around the AutoML engine:
            Metrics       Errors     Resources      (recorded today)
               └────────────┼────────────┘
                            ▼
-                        Critic                    (planned)
+                        Critic                    (implemented, Phase 2)
                            ▼
-                    Strategy Engine               (planned)
+                    Strategy Engine               (implemented, Phase 2: rules)
               ┌────────────┼────────────┐
               ▼            ▼            ▼
-          Features       Model         Data       (planned)
+          Features       Model         Data       (implemented, Phase 2: 9 Strategies)
               └────────────┼────────────┘
                            ▼
-                    Next Experiment               (planned)
+                Next Experiment + Judge           (implemented, Phase 2)
                            ▼
-                   Experiment Memory              (planned; raw records exist)
+                   Experiment Memory              (implemented, Phase 2: written; used in Phase 3)
                            └──────────► next cycle
 ```
 
@@ -155,7 +156,23 @@ Gives each experiment an ID (EXP-001, EXP-002, ...), creating its folder atomica
 
 ### 8.6 Dashboard (implemented, `app/main.py`, `app/components/`)
 
-There are seven sections: Dataset, Target, Experiment Configuration, Run AutoML, Results, Explainability and Experiment History. The experiment runs in a background thread so the page stays responsive. The progress bar is estimated from elapsed time against the budget, because FLAML does not report progress during the search.
+There are seven sections: Dataset, Target, Experiment Configuration, Run AutoML, Results, Explainability and Experiment History. The experiment runs in a background thread so the page stays responsive. The progress bar is estimated from elapsed time against the budget, because FLAML does not report progress during the search. Since Phase 2 the sidebar has a mode switch; the autonomous mode is described in 8.7.
+
+### 8.7 Autonomous layer (implemented in Phase 2)
+
+A Session runs the loop on one dataset within a total time, a maximum number of Experiments and a number of CPU cores. It makes the training and test parts once (the same split as Phase 1) and 3 x 5 fixed folds of the training part; no decision ever reads the test part. The parts, all in `app/services/`:
+
+- Planner (`experiment_planner.py`): the first Setup (the user's settings with identifier-like and constant columns left out) and each candidate (a Strategy applied to a copy of the Accepted_Setup, warm-started from its best configurations).
+- Assessor (`assessor.py`): refits a Setup's best configuration on all 15 folds, with any data changes learned inside each fold, and records the fold scores.
+- Critic (`critic.py`, thresholds in `critic_thresholds.toml`): 12 kinds of Diagnoses with severity and evidence; thresholds tuned by the critic study.
+- Strategy catalogue and engine (`strategies.py`, `strategy_engine.py`, data changes in `transforms.py`): 9 Strategies and a rule table that ranks the Proposals by severity, cost and table order; each change is tried once per Session.
+- Judge (`judge.py`): corrected resampled t-test on the paired fold differences; keep, keep_simpler (simpler and not worse by more than 0.005) or discard; alpha 0.20, from the judge study.
+- Resource manager (`resource_manager.py`): 35% of the time for the first Experiment, later budgets from the measured time left, stop rules (Stop pressed, error, time, Experiments, no Proposals, three discards in a row).
+- Experiment memory (`experiment_memory.py`): one record per Verdict in `experiments/memory/memory.jsonl`; nearest past datasets and per-Strategy statistics are available for Phase 3.
+- Records: `experiments/SES-###/session.json` after every step, step files per Experiment, and an MLflow parent run per Session.
+- Dashboard autonomous mode (`app/components/autopilot_viewer.py`) and command line (`scripts/run_autopilot.py`).
+
+The plain-language explanation is in [how-it-works.md](how-it-works.md), section 9, and the class-level view in [architecture.md](architecture.md).
 
 ## 9. Current implementation
 
@@ -166,12 +183,13 @@ There are seven sections: Dataset, Target, Experiment Configuration, Run AutoML,
 - Evaluation: independent test split, FLAML's internal validation score and a trivial baseline.
 - Explainability: permutation importance, the model's own importance, confusion matrix, ROC curve, residual plots.
 - Tracking: local MLflow (SQLite) plus JSON records.
-- Tests: 47 pytest tests for the profiler, the task detector, the runner (with short real FLAML runs), the evaluator, failure handling and a custom engine.
-- Not implemented: planner, critic, strategy engine, memory, resource manager, SHAP, automatic target detection, feature engineering, resampling.
+- Autonomous layer (Phase 2): see 8.7.
+- Tests: 47 pytest tests at the end of Phase 1; 468 after Phase 2, including short real FLAML runs, whole Sessions with a fake clock, the dashboard through Streamlit's AppTest, and smoke tests of the studies (`report-notes.md`, section 8.6).
+- Not implemented: learned strategy choice and the benchmark (Phase 3), SHAP, automatic target detection, feature engineering beyond the 9 Strategies, resampling.
 
-## 10. Proposed modules (planned)
+## 10. Proposed modules (written for the Phase 1 review)
 
-The detailed and current design of these modules is the Kiro spec in `.kiro/specs/autopilot-ml/` (requirements, design and ordered tasks). It adds two components to the list below: the Assessor, which refits a setup's best configuration on 15 fixed folds of the training data, and the Judge, which keeps a change only when the paired fold differences support it (corrected resampled t-test). The summary below is kept as written for the Phase 1 review.
+Status since Phase 2: the modules below are built as rule-based versions (8.7). The Critic was evaluated as planned, by precision and recall on synthetic datasets with planted problems, and the Judge by its false-keep rate and power (`report-notes.md`, sections 9.12 and 9.13). The memory, the learned strategy choice and the evaluation against other systems are Phase 3. The detailed design is the Kiro spec in `.kiro/specs/autopilot-ml/` (requirements, design and ordered tasks); it added two components to the list below: the Assessor, which refits a setup's best configuration on 15 fixed folds of the training data, and the Judge, which keeps a change only when the paired fold differences support it (corrected resampled t-test). The summary below is kept as written for the Phase 1 review.
 
 Every planned module comes with a way to evaluate it:
 
@@ -181,7 +199,9 @@ Every planned module comes with a way to evaluate it:
 - `experiment_memory.py`: `record(entry)`, `similar(meta_features, k)`, `strategy_stats(...)`. Evaluated by an ablation with and without memory on datasets the memory has never seen.
 - `resource_manager.py`: `allocate(total_budget, history)` and `should_stop(...)`. Evaluated by final score and gain per unit of cost under fixed budgets, against an even split of the budget.
 
-## 11. Autonomous loop (planned)
+## 11. Autonomous loop (sketch from the Phase 1 review)
+
+Built in Phase 2 in a refined form: every Setup is assessed on the same folds, and the Judge decides whether a change replaces the Accepted_Setup; the memory is written but not yet used for the choice. The current loop is in [how-it-works.md](how-it-works.md), section 9.
 
 ```text
 profile  = DatasetProfiler.profile(df, target)
@@ -202,17 +222,17 @@ while budget.remaining() and not budget.should_stop(history):
 return best, history
 ```
 
-## 12. Experiment memory (planned)
+## 12. Experiment memory (version 1 built in Phase 2; use for decisions planned for Phase 3)
 
-Each record will hold the dataset meta-features (from `DatasetProfile.meta_features()`), the diagnoses before the experiment, the strategy applied, the engine, the model family and hyperparameters, the primary score before and after, and the cost in wall-clock and CPU seconds.
+Version 1 writes one JSON line per Verdict and can already find the nearest past datasets and summarise each Strategy on them; the plan below is from the Phase 1 review. Each record will hold the dataset meta-features (from `DatasetProfile.meta_features()`), the diagnoses before the experiment, the strategy applied, the engine, the model family and hyperparameters, the primary score before and after, and the cost in wall-clock and CPU seconds.
 
 For example, a record might read "severe class imbalance + class_weight + LightGBM gave a change in F1 of x for y seconds", where x and y are measured values.
 
 To use the memory on a new dataset, the meta-features are standardised and the k nearest past datasets are found. For each strategy we then look at the average change in score, the average gain per second and how many times it was tried on those neighbours. The memory starts as the existing JSON records (or SQLite). A vector store such as FAISS or Chroma would only be added if the number of records made it necessary.
 
-## 13. Strategy engine (planned)
+## 13. Strategy engine (rule version built in Phase 2; learned ranking planned for Phase 3)
 
-A first rule table, from diagnosis to candidate strategies:
+The rule table as planned for the Phase 1 review is below. The built version (Phase 2) implements the rows for overfitting (smaller trees), underfitting and a still-improving search (more search time), class imbalance (class weights), heavy missingness (indicators or dropping), high cardinality (frequency encoding, grouping rare values, or dropping), identifier and constant columns (drop), redundant features (drop one of the pair), weak model families (fewer families) and an unreliable validation score (a smoother search metric). SMOTE, target encoding, threshold tuning and feature interactions are not built. A first rule table, from diagnosis to candidate strategies:
 
 - Overfitting (large train vs validation/test gap): a search space biased towards regularisation, fewer or shallower trees, feature selection.
 - Underfitting (low train and test scores): more budget, more expressive model families, feature interactions.
@@ -225,7 +245,9 @@ A first rule table, from diagnosis to candidate strategies:
 
 The ranking will be developed in three steps: a fixed priority order first, then a multi-armed bandit whose reward is the gain in score divided by cost, then priors taken from the experiment memory. Each step is compared with the previous one on the same benchmark.
 
-## 14. Resource-aware optimisation (planned)
+## 14. Resource-aware optimisation (built in Phase 2 as the Resource_Manager)
+
+Built: the time, Experiment and CPU limits, budgets from measured time, and the stop rules (8.7); each step's utility (validation gain per second) is recorded. Not built: stopping because no remaining change is expected to be worth its cost, which needs the memory (Phase 3). The plan from the Phase 1 review:
 
 The user gives a maximum time (say 10 minutes), a maximum number of experiments (say 15) and a number of CPU cores (say 2). The aim is to get the largest improvement for the least compute:
 

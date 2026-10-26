@@ -1,14 +1,14 @@
 # How AutoPilot-ML works today, and how FLAML works inside it
 
-This guide explains the current system (the Phase 1 baseline) in plain language: what each part does, how the parts fit together, and what FLAML does, step by step, when we ask it to find a model. It ends with the limits of the current setup and where the next phase connects to it.
+This guide explains the current system in plain language. Sections 1 to 8 cover the single experiment (the Phase 1 baseline): what each part does, how the parts fit together, what FLAML does, step by step, when we ask it to find a model, and the limits of one experiment. Section 9 covers the autonomous layer built on top of it in Phase 2, which answers those limits with a loop.
 
 Everything here has been checked. The numbers come from our own runs, mostly EXP-001 (Titanic, 60 second budget, seed 42). The descriptions of FLAML come from reading the source code of FLAML 2.7.0, the version we use (Appendix C lists the files).
 
 - To see the diagrams, open this file in Kiro and press Ctrl+Shift+V (Markdown preview). The diagrams are drawn by Mermaid; the charts are PNG files in the `images` folder next to this file.
 - The technical reference for the same code is `architecture.md`. The notes for the final report are in `report-notes.md`.
-- Not covered here: how the planned parts (critic, judge, strategy engine, planner, memory, resource manager) will work. Section 9 only shows where they will connect.
+- Not covered here: Phase 3 (choosing changes from the memory, the benchmark against other systems), which is planned and not built.
 
-Last updated: 22 October 2026
+Last updated: 26 October 2026 (section 9 added)
 
 ## Contents
 
@@ -19,8 +19,8 @@ Last updated: 22 October 2026
 5. How the data is split, and the three scores
 6. How FLAML works inside
 7. One real run from start to finish: EXP-001
-8. What the current setup cannot do yet
-9. Where the next phase connects
+8. What a single experiment cannot do
+9. The autonomous layer (Phase 2)
 - Appendix A. Where each step lives in the code
 - Appendix B. Commands
 - Appendix C. Sources
@@ -647,9 +647,9 @@ The charts were drawn with `python scripts/plot_search_history.py --experiment E
 
 ---
 
-## 8. What the current setup cannot do yet
+## 8. What a single experiment cannot do
 
-The baseline works, and its numbers are honest. These are its limits, each one seen in our own runs:
+The baseline works, and its numbers are honest. These are the limits of one experiment, each one seen in our own runs; section 9 shows how the autonomous layer answers them:
 
 | Limit | What we saw |
 |---|---|
@@ -662,37 +662,133 @@ The baseline works, and its numbers are honest. These are its limits, each one s
 
 ---
 
-## 9. Where the next phase connects
+## 9. The autonomous layer (Phase 2)
+
+Phase 2 puts a loop around the single experiment of sections 1 to 8. One run of the loop is a **Session**. It does what we did by hand between EXP-001 and EXP-002: look at the result, find out what is wrong, change one thing, run again, and keep the change only if it really helps. Every part below is built and tested; the numbers that set its thresholds come from two studies on synthetic data (section 9.6).
+
+### 9.1 The loop in one picture
 
 ```mermaid
-flowchart LR
-    PROF["Profiler and task detector<br/>(built)"] --> PLAN["Planner<br/>(planned)"]
-    PLAN --> RUN["AutoMLRunner with FLAML<br/>(built)"]
-    RUN --> EVAL["Evaluation<br/>(built)"]
-    EVAL --> CRIT["Critic<br/>(planned)"]
-    CRIT --> STRAT["Strategy engine<br/>(planned)"]
-    STRAT --> JUDGE["Judge: fair comparison<br/>(planned)"]
-    JUDGE --> PLAN
-    EVAL --> MEM[("Experiment memory<br/>(planned)")]
-    MEM --> STRAT
-    RES["Resource manager<br/>(planned)"] -.-> PLAN
-    RES -.-> STRAT
-    classDef planned stroke-dasharray: 5 5
-    class PLAN,CRIT,STRAT,JUDGE,MEM,RES planned
+flowchart TD
+    START["Session starts:<br/>training part 80%, test part 20%<br/>15 fixed folds of the training part"] --> FIRST["Planner: first Setup<br/>(ID-like and constant columns left out)"]
+    FIRST --> SEARCH["FLAML search on the training part<br/>(test rows never used)"]
+    SEARCH --> ASSESS["Assessor: refit the best configuration<br/>on each of the 15 folds"]
+    ASSESS --> JUDGE{"Judge: candidate against<br/>the Accepted Setup"}
+    JUDGE -->|keep or keep_simpler| ACCEPT["The candidate becomes<br/>the Accepted Setup"]
+    JUDGE -->|discard| STAY["The Accepted Setup stays"]
+    ACCEPT --> MEM[("Experiment memory:<br/>one record per Verdict")]
+    STAY --> MEM
+    MEM --> CRITIC["Critic: Diagnoses of the Accepted Setup"]
+    CRITIC --> STRAT["Strategy engine: ranked Proposals<br/>(changes not tried yet)"]
+    STRAT --> RES{"Resource manager:<br/>stop, or the next search budget"}
+    RES -->|go on| CAND["Planner: candidate Setup =<br/>Accepted Setup + one change"]
+    CAND --> SEARCH
+    RES -->|stop| FINAL["Final evaluation:<br/>first and final model on the test part, once"]
 ```
 
-The dashed boxes are planned. Each one answers one limit from section 8:
+The first Setup skips the Judge: after its Assessment it becomes the Accepted Setup and goes straight to the Critic.
 
-| Planned part | Answers the limit | Plugs in at | Uses what the baseline already records |
-|---|---|---|---|
-| Critic | "Nothing explains why a model is weak" | After each experiment's result | Train, validation and test scores; data flags; unseen-label notes; the trial history |
-| Strategy engine | "FLAML only changes models and settings" | Between the critic and the planner | The critic's diagnoses and, later, the memory |
-| Judge | "The validation score is optimistic and one split is noisy" | Before a change is kept | Validation scores over several splits of the training part, never the test part |
-| Planner | "One click runs one experiment" | Before the runner | `ExperimentConfig`, which the runner already accepts |
-| Experiment memory | "Every run starts from zero" | Around the `experiments/` records | The meta-features and results in every `summary.json` |
-| Resource manager | "The whole budget goes into one search" | Around the whole loop | Training time, total time, and the improvements over time in every trial history |
+### 9.2 Words used in the loop
 
-How each of these will work is the next thing we study, starting with the judge and the critic.
+| Word | Meaning |
+|---|---|
+| Session | One run of the loop on one dataset, with one budget. Its record is `experiments/SES-###/session.json` |
+| Setup | Everything that defines one Experiment except the search result: the columns used, the data changes, class weights, limits on the search space, the learner families, the search metric, the time budget |
+| Accepted Setup | The best Setup so far. A candidate replaces it only if the Judge says so |
+| Session folds | 3 repeats of 5-fold cross-validation on the training part, made once per Session: 15 folds, the same for every Setup |
+| Assessment | The best configuration of a Setup's search, refitted on each of the 15 folds (no new search), with its score on each fold |
+| Diagnosis | A problem the Critic finds, with a kind, a severity (low, moderate, high), the columns involved, the evidence numbers and a sentence |
+| Strategy, Proposal | A Strategy is a kind of change (for example "drop a column"); a Proposal is one concrete change for this Setup (for example "drop `Ticket`"), with the Diagnoses it answers |
+| Verdict | The Judge's answer: `keep` (clearly better), `keep_simpler` (simpler and not worse) or `discard` |
+| Test part | The 20% of rows set aside at the start. Only the final evaluation reads it |
+
+### 9.3 The parts, one by one
+
+**Splits** (`app/services/splits.py`). The training and test parts are made exactly as in Phase 1, with the user's seed, so a Session and a single experiment with the same seed use the same rows. The 15 folds are made from the training part only, with seed + 1, stratified for classification.
+
+**Planner** (`app/services/experiment_planner.py`). The first Setup is the user's settings with the identifier-like and constant columns of the training part left out. Each later candidate is a copy of the Accepted Setup with one Strategy applied. Its search starts from the best configuration of each learner family found so far (a warm start), and it gets the search time the Resource manager gives it.
+
+**Assessor** (`app/services/assessor.py`). FLAML's own validation score is the number it optimised, from its own folds, so it is a little optimistic and cannot be compared fairly between two searches. The Assessor takes the winning configuration of a search and trains it again on the training rows of each of the 15 folds, then scores it on that fold's validation rows. Data changes (below) are learned again inside each fold, from that fold's training rows only. It records every metric on the fold's training and validation rows, the recall of each class, the share of validation rows with a category the fold's training rows never had, and the trivial baseline's score. Two Setups are therefore compared on exactly the same rows. A Setup whose configuration was assessed before is not refitted again.
+
+**Critic** (`app/services/critic.py`, thresholds in `critic_thresholds.toml`). Twelve rules read the training-part profile, the Assessment and how the search spent its time. "m" is the primary metric (or F1, accuracy, ROC-AUC or R2 when the primary metric is a loss), and all values are means over the 15 folds. Thresholds are version `v1-critic-study`:
+
+| Diagnosis | Fires when | Severity |
+|---|---|---|
+| overfitting | training m minus validation m is at least 0.11 | moderate; high from 0.20 |
+| underfitting | the gap is below 0.03 and the skill over the trivial baseline is below 0.50 | moderate; high below 0.25 |
+| budget_limited | the search's best score still rose by at least 0.005 in the last quarter of its time | moderate; high from 0.02 |
+| wasted_budget | at least half of the search time came after the best configuration was found | moderate; high from 75% |
+| class_imbalance | the largest class is at least 3 times the smallest, or (from 1.5 times) the smallest class's recall is below 0.5 | moderate; high from 9 times, or recall below 0.3 |
+| missing_values | a used column is at least 30% empty | moderate; high from 70% |
+| high_cardinality | a used text column has more than 50 values, or on average 30% of validation rows have a value the fold never saw | moderate; high from 60% unseen |
+| identifier_column | a used column looks like an ID on the training part | high |
+| constant_column | a used column has one value, or the same value in at least 98% of rows | low |
+| redundant_features | two used numeric columns have a correlation of at least 0.95 | moderate; high from 0.99 |
+| unreliable_validation | the validation score varies over the folds with a standard deviation of at least 0.05 | moderate; high from 0.08 |
+| weak_model_families | a learner family is at least 0.10 behind the best family and used at least 5% of the search time | low |
+
+**Strategies and the Strategy engine** (`app/services/strategies.py`, `app/services/strategy_engine.py`). Nine Strategies, each a small change to a copy of the Setup:
+
+| Strategy | What it changes | Answers |
+|---|---|---|
+| drop_columns | leaves columns out | identifier, constant, high-cardinality, mostly empty (if high) and redundant columns; overfitting together with a high-cardinality column |
+| frequency_encode | replaces a text column by how often each value occurs | high_cardinality |
+| group_rare_categories | puts rare values of a text column into one group | high_cardinality |
+| missing_indicator | adds a "was empty" column for a numeric column | missing_values |
+| class_weight_balanced | weights the rows so that every class counts the same | class_imbalance |
+| regularised_search_space | smaller trees: at most 32 leaves for LightGBM and XGBoost, at least 10 rows per LightGBM leaf, depth at most 4, at most 64 leaves for the forests | overfitting |
+| restrict_model_families | searches only the families that were competitive | weak_model_families |
+| more_search_time | the same Setup with up to twice the search time | underfitting, budget_limited |
+| smoother_search_metric | lets FLAML optimise log loss while the primary metric stays the same | unreliable_validation, class_imbalance |
+
+The engine turns the Diagnoses into Proposals with a fixed rule table and ranks them: the most severe Diagnosis answered first, then the cheaper change, then the order of the table. A change already tried in the Session, one that does not apply (for example class weights in regression) and one that conflicts with the Accepted Setup are left out. wasted_budget has no Strategy: the Resource manager shortens the next search instead.
+
+**Data changes** (`app/services/transforms.py`). Frequency encoding, grouping rare values and missing indicators are learned from training rows only (from each fold's training rows during an Assessment) and saved together with the model, so a saved model still takes the original columns.
+
+**Judge** (`app/services/judge.py`). For each of the 15 folds, d = candidate score minus Accepted score, signed so that positive is better. The folds share most of their training rows, so their scores are not independent; the corrected resampled t-test (Nadeau and Bengio, 2003) allows for this by using (1/15 + 1/4) times the variance of d instead of 1/15 of it. Then:
+
+- `keep` if the mean of d is above 0 and p(better) is at most 0.20;
+- otherwise `keep_simpler` if the candidate is simpler (for example it uses fewer columns), the mean of d is at least -0.005 and p(worse) is above 0.20;
+- otherwise `discard`.
+
+**Resource manager** (`app/services/resource_manager.py`). The first search gets 35% of the total time. Every later search gets the time left divided by the Experiments left, where "time left" is measured, not counted from the budgets handed out, and keeps back 1.2 times the previous step's Assessment and other time for the next Assessment. After a wasted_budget Diagnosis the next search gets at most 1.5 times the time the last search needed to find its best. The Session stops, in this order, when Stop is pressed, after an error, when the time left is under 5 s, after the maximum number of Experiments, when no Proposal is left, or after three discards in a row.
+
+**Experiment memory** (`app/services/experiment_memory.py`). After every Verdict one line is added to `experiments/memory/memory.jsonl`: a description of the dataset (its meta-features), the Diagnoses answered, the Strategy, the Verdict, the Judge's mean difference and its spread, and the cost in seconds. It can already find the most similar past datasets and summarise how each Strategy did on them. In Phase 2 nothing reads it for a decision; Phase 3 will use it to choose the next change.
+
+**Records** (`app/services/experiment_tracker.py`, `app/services/autopilot.py`). `session.json` is rewritten after every step, so a crash keeps the finished steps. Each Experiment of a Session keeps its `summary.json` and also `assessment.json`, `diagnoses.json` and `decision.json`, so every Diagnosis and Verdict can be worked out again from the files. In MLflow each Session is a parent run with its Experiments as child runs.
+
+**Dashboard and command line** (`app/components/autopilot_viewer.py`, `scripts/run_autopilot.py`). In the sidebar choose **Autonomous run**: set the time, the maximum number of Experiments and the CPU cores, press Start, and watch the steps, the score chart and the Diagnoses; Stop ends the Session after the current step. At the end the first and final model are shown side by side on the test part. The same Session runs from the command line with `scripts/run_autopilot.py`.
+
+### 9.4 One Session, step by step
+
+1. Check the settings, drop rows without a target, and make the training and test parts and the 15 folds. Profile the training part only.
+2. Reserve `SES-###` and write `session.json` with the status "running".
+3. First Experiment: search the first Setup with 35% of the time, assess it on the 15 folds and diagnose it. It becomes the Accepted Setup. If this fails, the Session ends with an error record.
+4. Ask the Strategy engine for Proposals and the Resource manager whether to go on and with how much time. Build the candidate, search it, assess it and let the Judge compare it with the Accepted Setup. A kept candidate becomes the Accepted Setup and is diagnosed. A failed candidate counts as a discard and the Session goes on. Write one memory record per Verdict and rewrite `session.json`.
+5. Repeat step 4 until a stop rule applies.
+6. Final evaluation, the only time the test part is read: score the first and the final model once each.
+
+### 9.5 Keeping the test part out of every decision
+
+Inside a Session, experiments run with `evaluate_test=False`: no test score, test predictions, importance on test rows or test notes are made, and the profile behind the Diagnoses is made from the training part only. The Session checks every Experiment result for this, and a test feeds the Session marked rows to show that no test row reaches FLAML, the Assessor or the Critic.
+
+### 9.6 Where the thresholds and settings come from
+
+- **Critic study** (`research/critic_study.py`): 270 synthetic datasets with one planted problem each (or none) and a fresh sample of 20,000 rows that gives the true answer. Thresholds were tuned on five seeds and checked on five others. The data-level Diagnoses had no false alarm; overfitting reached precision 0.88 and recall 0.91; unreliable validation was weak (precision 0.27). Details: `report-notes.md`, section 9.12.
+- **Judge study** (`research/judge_study.py`): 84 pairs of Setups whose true difference was measured on a fresh sample. Alpha 0.20 had the most power without more harmful changes kept, so it became the default; 15 folds were kept, because 25 accepted the same changes at five thirds of the cost. On the reporting seeds: 0 of 18 harmful changes kept, 10 of 12 helpful ones kept as better. Details: section 9.13 of the report notes.
+
+### 9.7 What the autonomous layer cannot do yet
+
+| Limit | Why it matters |
+|---|---|
+| The order of changes is a fixed rule table, and the memory does not choose yet | A change that never helps on this kind of data is still tried; Phase 3 adds learned choice |
+| One change at a time, each tried at most once | Two changes that only help together are not found |
+| Each Assessment refits a configuration 15 times | It takes a share of the budget, more on bigger data |
+| Both scores the Judge compares come from configurations FLAML chose on the same training part | Both are a little optimistic; pairing removes much of this, not all; the judge agreement study (Phase 3) measures it |
+| FLAML picks learner families using measured times | Two runs with the same seed can take different paths and end with different models |
+| The unreliable-validation Diagnosis is weak in the critic study | Its Proposal is cheap and still has to pass the Judge |
+
+The Phase 2 measurement against FLAML alone is in `report-notes.md`, section 9.14.
 
 ---
 
@@ -712,6 +808,18 @@ How each of these will work is the next thing we study, starting with the judge 
 | Save the model and files | `app/services/automl_runner.py` | `_save_model`, `_write_artifacts` |
 | Track | `app/services/experiment_tracker.py` | `allocate_experiment_id`, `log_run`, `save_record`, `history_frame` |
 | Settings | `app/core/config.py` | `Settings`, `get_settings` |
+| Session loop and final evaluation | `app/services/autopilot.py` | `AutopilotSession.run`, `SessionSettings`, `_final_evaluation` |
+| Training and test parts, folds | `app/services/splits.py` | `make_outer_split`, `make_session_folds` |
+| First and candidate Setups | `app/services/experiment_planner.py` | `Planner.first_setup`, `Planner.candidate` |
+| Assessment | `app/services/assessor.py` | `Assessor.assess` |
+| How a search spent its time | `app/services/search_summary.py` | `summarize_search` |
+| Diagnoses | `app/services/critic.py` | `Critic.diagnose`, `CriticThresholds.load` |
+| Strategies and their ranking | `app/services/strategies.py`, `app/services/strategy_engine.py` | `CATALOGUE`, `propose`, `RulesSelector.rank` |
+| Data changes | `app/services/transforms.py` | `DataPipeline`, `PipelineModel` |
+| Verdicts | `app/services/judge.py` | `Judge.compare`, `corrected_resampled_t` |
+| Budgets and stop rules | `app/services/resource_manager.py` | `ResourceManager.first_budget`, `next_budget`, `check_stop` |
+| Memory | `app/services/experiment_memory.py` | `ExperimentMemory.add`, `similar`, `strategy_stats` |
+| Autonomous mode in the dashboard | `app/components/autopilot_viewer.py` | `render_session_settings`, `render_session_run`, `render_memory_records` |
 
 ## Appendix B. Commands
 

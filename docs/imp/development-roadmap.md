@@ -21,7 +21,7 @@ If this page and the spec disagree, the spec is right, and this page should be f
 
 Done when: a CSV can go from upload to a tracked, explained model that can be reloaded, both from the UI and from Python, and the tests pass. This is met, and the Phase 1 review was completed in October 2026.
 
-## Phase 2: Rule-based autonomous loop (next)
+## Phase 2: Rule-based autonomous loop (done)
 
 Goal: given a dataset, a target and a budget, the system runs the loop by itself: diagnose, propose a change, test it fairly on 15 folds of the training data, keep or drop it, and stop within the budget. The test part is used only once, at the end.
 
@@ -34,7 +34,9 @@ Goal: given a dataset, a target and a budget, the system runs the loop by itself
 
 Done when: the loop runs unattended on the development datasets within the budget; every decision is recorded with its evidence, effect and cost; nothing in the decision path reads the test part (checked by a test); the critic study, the judge study and the Phase 2 measurement are in the report notes; all tests pass.
 
-## Phase 3: Learning and evaluation
+Status (27 October 2026): done. All milestones are built and tested (468 tests). Phase 2 measurement, 4 sample datasets x 3 seeds at 300 s: the loop's final test scores matched FLAML alone on average (4 better, 4 equal, 4 worse) using about two thirds of the time (report notes, section 9.14).
+
+## Phase 3: Learning and evaluation (next)
 
 Tasks 20 to 28: development and evaluation datasets (fixed in advance and kept apart), learned strategy choice (Thompson sampling and UCB1 over past outcomes from similar datasets), ablation switches, comparison systems (manual baseline, FLAML alone, AutoGluon), a resumable benchmark (budgets of 2, 5 and 10 minutes, at least 5 seeds), the statistics (Friedman and Nemenyi, Wilcoxon with Holm's correction, effect sizes, time-to-target), the judge agreement study, and the final documents.
 

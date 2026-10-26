@@ -1,7 +1,7 @@
 # Architecture
 
-This page describes the code as it is now (the Phase 1 baseline) and shows where the planned autonomous parts will connect. The planned parts do not exist in the code yet. For a plain-language walkthrough of the same system and of how FLAML works inside it, see [how-it-works.md](how-it-works.md).
-
+This page describes the code as it is now: the Phase 1 baseline (one experiment) and the Phase 2 autonomous layer (a Session of experiments). Phase 3 (learned strategy choice, the benchmark) is planned and does not exist in the code yet. For a plain-language walkthrough of the same system and of how FLAML works inside it, see [how-it-works.md](how-it-works.md); the full design and the code shapes are in the spec's `design.md`.
+ 
 ## Layers
 
 ```text
@@ -11,6 +11,7 @@ Core                  app/core/                         settings (.env) and logg
 External libraries    FLAML, scikit-learn, MLflow,      used as normal dependencies,
                       pandas, Plotly                    never modified
 Local storage         experiments/, models/, mlruns/    no cloud, no server
+Research code         research/, scripts/, results/     studies and measurements; the app never imports it
 ```
 
 We stick to three rules:
@@ -31,7 +32,22 @@ We stick to three rules:
 - `ExperimentConfig` (`services/automl_runner.py`): everything needed to repeat an experiment. The planned planner will produce these.
 - `AutoMLEngine`, `FLAMLEngine` → `EngineResult` (`services/automl_runner.py`): the engine interface and its FLAML implementation.
 - `AutoMLRunner` → `ExperimentResult` (`services/automl_runner.py`): runs one experiment from start to finish.
-- `ExperimentTracker` (`services/experiment_tracker.py`): MLflow runs, JSON records, experiment IDs and the history table.
+- `ExperimentTracker` (`services/experiment_tracker.py`): MLflow runs, JSON records, experiment and Session IDs, the history tables, and atomic writes of `session.json` and the step files.
+
+Autonomous layer (Phase 2):
+
+- `AutopilotSession` → `SessionResult` (`services/autopilot.py`): runs a Session; `SessionSettings` (base Setup, `SessionBudget`, 5 folds x 3 repeats, `JudgeSettings`, thresholds file, selector) and `SessionStep` (one per Experiment). `run(df, settings, progress, stop_requested, on_update)`.
+- `make_outer_split` → `OuterSplit`, `make_session_folds` → `SessionFolds` (`services/splits.py`): the Phase 1 split and the fixed folds, each with a fingerprint.
+- `Planner` (`services/experiment_planner.py`): `first_setup`, `candidate`, `safe_exclusions`.
+- `Assessor` → `Assessment` of `FoldScore`s (`services/assessor.py`): refits on the folds, with a cache per Setup and configuration.
+- `summarize_search` → `SearchSummary` (`services/search_summary.py`): search time, time to the best trial, share after it, gain in the last quarter.
+- `Critic` → `Diagnosis` (`services/critic.py`), with `CriticThresholds` read from `critic_thresholds.toml` (`tomllib`).
+- `StrategySpec`, `Strategy` and `CATALOGUE` (`services/strategies.py`); `propose` → `Proposal`, `RulesSelector` (`services/strategy_engine.py`).
+- `DataStepSpec`, `DataPipeline`, `PipelineModel` (`services/transforms.py`): the data changes and the model wrapper that applies them to raw rows.
+- `Judge` → `JudgeDecision`, `JudgeSettings`, `corrected_resampled_t` (`services/judge.py`).
+- `ResourceManager`, `SessionBudget`, `StepCost`, `StopReason` (`services/resource_manager.py`).
+- `ExperimentMemory`, `MemoryRecord`, `StrategyStats`, `dataset_fingerprint` (`services/experiment_memory.py`).
+- `FLAMLEngine.fit_config` refits one fixed configuration, and `fit` accepts `starting_points`, `search_space_limits`, `sample_weight` and `max_iter` (all FLAML's public options; FLAML is not changed).
 
 ## What happens during one experiment
 
@@ -71,7 +87,9 @@ A few things worth knowing:
 
 ## Data passed around
 
-`ExperimentConfig` (input): `target_column`, `task_type` (None means detect it), `primary_metric` (None means the default for the task), `time_budget`, `random_seed`, `test_size`, `excluded_columns`, `estimator_list` (None means the engine decides), `dataset_name`, `n_jobs`.
+`ExperimentConfig` (input): `target_column`, `task_type` (None means detect it), `primary_metric` (None means the default for the task), `time_budget`, `random_seed`, `test_size`, `excluded_columns`, `estimator_list` (None means the engine decides), `dataset_name`, `n_jobs`. Phase 2 added the Setup fields `data_steps`, `class_weight`, `search_metric`, `search_space_limits` and `starting_points` (and `max_iter`, for tests); with their defaults the runner behaves exactly as in Phase 1. A Setup's identity is its `setup_key`, a hash of the fields that change what is learned; the time budget, the trial limit, the starting points, the dataset name and the CPU cores are left out.
+
+Phase 2 records: `ExperimentResult` gained `schema_version` 2, `search_metric`, `test_evaluated`, `best_config_per_estimator`, `search_summary`, `session_id`, `parent_experiment_id`, `proposal`, `setup_key`, `setup` and `profile_rows`; Phase 1 records still load. A Session step holds the Proposal, the Diagnoses it answered, the brief Assessment (mean and spread of the primary metric over the folds), the Judge's decision and the `StepCost` (budget, search, Assessment and other seconds, overrun, utility).
 
 `ExperimentResult` (output, saved as `summary.json`): the ID and time; the dataset, target, task and metric; the budget, seed and test size; the engine and its version; the train/test sizes and feature columns; the best estimator and its configuration; the validation, test and train scores; the full test, train and baseline metrics; the timings and number of trials; the leaderboard; the feature importances; the dataset meta-features; the warnings; the model path, the result folder and the MLflow run ID.
 
@@ -99,16 +117,64 @@ mlruns/artifacts/                  MLflow copies of the model and the files abov
 
 These three folders are generated and are not committed to git.
 
-## Where the planned parts connect
+## What happens during one Session
 
-- `experiment_planner.py` comes before `AutoMLRunner.run_experiment`. It reads the profile, the memory and the remaining budget, and outputs an `ExperimentConfig`, which the runner already accepts.
-- `critic.py` comes after each `ExperimentResult`. It reads the train vs test metrics, class balance, column flags, unseen-category notes, leaderboard and timings, and outputs structured diagnoses such as `{"overfitting": "high", "imbalance": "severe"}`.
-- `strategy_engine.py` sits between the critic and the planner. It turns diagnoses (plus memory statistics) into ranked strategies, and each strategy is a change to the config: excluded columns, model list, metric, resampling, class weights.
-- `experiment_memory.py` reads and writes the `experiments/` records. It stores meta-features, config, result and cost, and finds strategies that helped on similar datasets.
-- `resource_manager.py` wraps the planner loop. It takes the user's budget (time, experiments, CPU), and decides per-experiment budgets, when to stop, and how much each experiment was worth.
-- `AutoGluonEngine` will implement `AutoMLEngine` and return an `EngineResult` like `FLAMLEngine` does.
+```mermaid
+sequenceDiagram
+    participant S as AutopilotSession
+    participant RM as ResourceManager
+    participant P as Planner
+    participant R as AutoMLRunner
+    participant A as Assessor
+    participant C as Critic
+    participant E as Strategy engine
+    participant J as Judge
+    participant M as ExperimentMemory
+    S->>S: outer split (Phase 1 rule), 3 x 5 folds, profile of the training part
+    S->>RM: first_budget()
+    S->>P: first_setup(base, profile)
+    S->>R: run_experiment(setup, split, evaluate_test=False)
+    S->>A: assess(training part, setup, result)
+    S->>C: diagnose(profile, setup, assessment, search summary)
+    loop until a stop rule applies
+        S->>E: propose(diagnoses, accepted setup, profile, tried)
+        S->>RM: check_stop(proposals left), next_budget(proposal)
+        S->>P: candidate(accepted setup, result, proposal, budget)
+        S->>R: run_experiment(candidate, split, evaluate_test=False)
+        S->>A: assess(training part, candidate, result)
+        S->>J: compare(accepted assessment, candidate assessment, simpler)
+        S->>M: add(record of the Verdict)
+        S->>C: diagnose(...) if the candidate was kept
+        S->>S: rewrite session.json, call on_update
+    end
+    S->>S: Final_Evaluation: first and final model on the test part
+```
 
-Most of what these modules need is already recorded by the baseline: train and test metrics for overfitting, class balance and column flags for data problems, leaderboards and trial histories for search behaviour, timings for cost, and meta-features for comparing datasets.
+- Every Experiment of a Session runs with `evaluate_test=False`, `compute_importance=False` and `profile_rows="train"`; the Session raises an error if a result says the test part was used.
+- A failed candidate (search, Assessment or Judge) is recorded as a discard and the loop goes on; a failed first Experiment ends the Session with status "failed" and stop reason "error".
+- Settings errors (bad selector, folds, thresholds file, data) are raised before any file is written.
+
+## Files of a Session
+
+```text
+experiments/SES-002/session.json        settings, code version, split and fold fingerprints, every step
+                                        (proposal, Diagnoses, brief Assessment, decision, cost),
+                                        stop reason and Final_Evaluation; rewritten after every step
+experiments/SES-002/train_profile.json  the training-part profile behind the Diagnoses
+experiments/EXP-0xx/                    each Experiment's usual files (no test files), plus
+    assessment.json                     every fold score
+    diagnoses.json                      the Diagnoses of a kept Setup
+    decision.json                       the Judge's numbers and reason
+experiments/memory/memory.jsonl         one record per Verdict, append-only
+experiments/studies/                    saved inputs of the critic study (for replay)
+results/studies/, results/phase2/       summary CSV files (in git)
+```
+
+## Planned for Phase 3
+
+- Learned strategy choice: `random`, `thompson` and `ucb1` selectors next to `rules`, reading `ExperimentMemory.strategy_stats` for the nearest past datasets.
+- Ablation switches in `SessionSettings` (`use_memory`, `use_critic`, `use_resource_manager`).
+- Comparison systems (`research/systems.py`): a manual LightGBM, FLAML alone, AutoGluon (an `AutoMLEngine` in its own environment if needed) and the AutoPilot variants; a resumable benchmark and its statistics.
 
 ## Why it is built this way
 
@@ -119,3 +185,8 @@ Most of what these modules need is already recorded by the baseline: train and t
 - **JSON records next to MLflow:** small, readable and independent of the engine, which is what the experiment memory needs.
 - **Permutation importance first:** it works on the original columns for every model FLAML can return. SHAP can be added when it is actually needed.
 - **Rule-based task detection with an override:** easy to explain and to test. Unclear cases, such as integer codes, are reported with lower confidence.
+- **Assessments on fixed folds instead of FLAML's validation score:** FLAML's score is optimistic and comes from its own folds, so two searches cannot be compared fairly with it; refits on the same 15 folds can, fold by fold.
+- **Search once, judge cheaply:** each Setup gets one search; the Judge compares refits, not repeated searches, so judging fits inside the loop's budget.
+- **Decisions as pure functions of saved records:** the Critic, the Strategy engine and the Judge only read their inputs, which are saved, so every Diagnosis and Verdict can be replayed and tested.
+- **Thresholds in a versioned file:** the Critic's numbers can be tuned by a study and frozen under a label without changing code.
+- **The test part read once, at the end:** decisions use only the training part, so the final scores are not chosen by the test rows they are measured on.

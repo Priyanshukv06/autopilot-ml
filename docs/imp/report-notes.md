@@ -96,11 +96,11 @@ The baseline solves part 1 with one AutoML run. The research system works on bot
 | No. | Objective | Status |
 |---|---|---|
 | O1 | Baseline: profiling, task detection, FLAML training, held-out evaluation, explanations, experiment tracking, dashboard | Done (Phase 1) |
-| O2 | Critic: automatic, structured diagnosis of each experiment, with evidence | Planned |
-| O3 | Strategy engine: map diagnoses to candidate changes and rank them (rules, then bandits, then memory) | Planned |
-| O4 | Planner and autonomous loop, with a fair comparison of every change over several splits | Planned |
-| O5 | Experiment memory: reuse what worked on similar datasets | Planned |
-| O6 | Resource manager: share the time and CPU budget and decide when to stop (utility = improvement / cost) | Planned |
+| O2 | Critic: automatic, structured diagnosis of each experiment, with evidence | Done (Phase 2: 12 kinds, measured by the critic study) |
+| O3 | Strategy engine: map diagnoses to candidate changes and rank them (rules, then bandits, then memory) | Rules done (Phase 2: 9 Strategies); bandits and memory planned (Phase 3) |
+| O4 | Planner and autonomous loop, with a fair comparison of every change over several splits | Done (Phase 2: Assessor on 15 folds and the Judge, measured by the judge study) |
+| O5 | Experiment memory: reuse what worked on similar datasets | Recording done (Phase 2); reuse planned (Phase 3) |
+| O6 | Resource manager: share the time and CPU budget and decide when to stop (utility = improvement / cost) | Done (Phase 2: budgets, stop rules and the utility of each step recorded); stopping on expected utility needs the memory (Phase 3) |
 | O7 | Evaluation against a manual baseline, FLAML and AutoGluon, with ablations, on public datasets and several seeds | Planned |
 
 - Scope: CSV, single-table tabular data; binary, multiclass and regression; laptop CPU; fully offline.
@@ -159,7 +159,7 @@ In order (dates and commits in Appendix B):
 - FLAML searches on the training part and validates each trial with 5-fold cross-validation or a holdout split, using its own rule (section 5.2).
 - Reported for every run: test metrics, train metrics, FLAML's validation score, a trivial baseline on the same test rows, training time and number of trials.
 - Comparing two setups: both are run on the same splits (same seed) and compared split by split (`scripts/compare_seeds.py`), with a paired t-test and a Wilcoxon signed-rank test on the differences. For a single split, a paired bootstrap over the test rows gave a confidence interval for the difference (section 9.3).
-- Planned for Phase 2: the loop decides on validation data only, over several splits; the test set only reports the final result (P6 in section 5.3).
+- Since Phase 2: the loop decides on the training part only, over 15 fixed folds (Assessor and Judge, sections 5.4 and 9.13); the test part only reports the first and the final model at the end. Component studies use synthetic data with a fresh sample as the truth, with separate tuning and reporting seeds. The loop against FLAML alone: same total budget, same split and columns, 3 seeds per dataset, compared pair by pair (section 9.14).
 
 ### 4.6 Design decisions
 
@@ -519,7 +519,7 @@ Trial runs on 26 October 2026 in a temporary folder, not kept (Titanic, seed 42)
 
 To put these in the report, paste each block into mermaid.live and export PNG or SVG, or use a Mermaid preview extension in the editor. The call sequence of one experiment is in `architecture.md`.
 
-More diagrams are in `how-it-works.md`: the layers (what we wrote and what we use), the code map, the dashboard's background worker (sequence diagram), the data split, inside one FLAML call, FLAML's search loop, CFO's step rule, and where the planned parts connect. All diagrams in the maintained documents parse with Mermaid 11.15.0, the version in Kiro's Markdown preview (checked on 22 October 2026).
+More diagrams are in `how-it-works.md`: the layers (what we wrote and what we use), the code map, the dashboard's background worker (sequence diagram), the data split, inside one FLAML call, FLAML's search loop, CFO's step rule, and where the planned parts connect. All diagrams in the maintained documents parse with Mermaid 11.15.0, the version in Kiro's Markdown preview (checked on 22 October 2026, and again on 27 October 2026 after the Phase 2 diagrams were added: all 18 blocks in `how-it-works.md`, `architecture.md` and this file).
 
 ### 6.1 Block diagram: current baseline
 
@@ -622,28 +622,29 @@ flowchart TD
     Q --> Z
 ```
 
-### 6.6 Flowchart: autonomous loop (planned)
+### 6.6 Flowchart: autonomous loop (built in Phase 2)
 
 ```mermaid
 flowchart TD
-    A(["Start: dataset, target, budget"]) --> B["Profile and detect the task"]
-    B --> C["Planner: first configuration, using memory of similar datasets"]
-    C --> D["Run experiment"]
-    D --> E["Critic: diagnoses with evidence"]
-    E --> F["Strategy engine: rank changes by expected gain per second"]
-    F --> G{"Budget left and expected gain worth the cost?"}
-    G -->|No| H["Return the best pipeline and the experiment log"] --> Z(["End"])
-    G -->|Yes| I["Planner: apply the top strategy"]
-    I --> J["Compare old and new setup over several splits on validation data"]
-    J --> K{"Better on most splits?"}
-    K -->|Yes| L["Keep the change"]
-    K -->|No| M["Discard the change"]
-    L --> N["Memory: record diagnosis, strategy, effect and cost"]
+    A(["Start: dataset, target, total time, maximum Experiments, CPU cores"]) --> B["Training part 80% and test part 20%, 3 x 5 folds of the training part, profile of the training part"]
+    B --> C["Planner: first Setup without ID-like and constant columns"]
+    C --> D["FLAML search on the training part, 35% of the time"]
+    D --> E["Assessor: refit the best configuration on the 15 folds"]
+    E --> F["Critic: Diagnoses with evidence"]
+    F --> G["Strategy engine: Proposals ranked by severity, cost and table order"]
+    G --> H{"Resource manager: stop?"}
+    H -->|Stop pressed, error, time, Experiments, no Proposal or 3 discards in a row| Z["Final evaluation: first and final model on the test part"] --> DONE(["End"])
+    H -->|go on| I["Planner: candidate = Accepted Setup + the top Proposal, warm-started, with the next budget"]
+    I --> J["FLAML search, then Assessor on the same 15 folds"]
+    J --> K{"Judge: corrected resampled t-test on the fold differences"}
+    K -->|keep or keep_simpler| L["The candidate becomes the Accepted Setup"]
+    K -->|discard| M["The Accepted Setup stays"]
+    L --> N["Memory: one record of the Verdict, its effect and its cost"]
     M --> N
-    N --> E
+    N --> F
 ```
 
-Still to add: render the diagrams as images; update 6.6 when the loop is built.
+The draft of this flowchart (Phase 1 review) used the memory to plan the first Setup and ranked changes by expected gain per second; both need the memory and are Phase 3. Still to add: render the diagrams as images.
 
 ---
 
@@ -720,6 +721,32 @@ Sources: Titanic, Kaggle "Titanic: Machine Learning from Disaster" training set 
 
 Total: 3,711 lines in 22 Python files (2,981 in `app/`, 469 in `tests/`, 261 in `scripts/`), including comments and blank lines.
 
+After Phase 2 (26 October 2026, code of commit 940225a), counted the same way:
+
+| File | Lines | Main parts |
+|---|---|---|
+| `app/services/automl_runner.py` | 1,326 | Phase 1 runner, plus the Setup fields, warm starts, search-space limits, sample weights, `fit_config` and the options that keep the test part out of a Session |
+| `app/services/autopilot.py` | 620 | `AutopilotSession`, `SessionSettings`, `SessionStep`, `SessionResult`, the records and the Final_Evaluation |
+| `app/services/critic.py` (+ `critic_thresholds.toml`, 64) | 453 | `Critic`, `Diagnosis`, `CriticThresholds` |
+| `app/services/profiler.py` | 376 | Phase 1 profiler, plus main-value shares, near-constant columns and correlated pairs |
+| `app/services/strategies.py` | 356 | the 9 Strategies, `CATALOGUE`, `REGULARISED_LIMITS` |
+| `app/services/experiment_tracker.py` | 347 | Phase 1 tracker, plus Session IDs, `session.json`, step files, MLflow parent and child runs |
+| `app/services/assessor.py` | 233 | `Assessor`, `Assessment`, `FoldScore` |
+| `app/services/transforms.py` | 208 | `DataStepSpec`, `DataPipeline`, `PipelineModel` |
+| `app/services/resource_manager.py` | 208 | `ResourceManager`, `SessionBudget`, `StepCost`, `StopReason` |
+| `app/services/strategy_engine.py` | 200 | the rule table, `propose`, `Proposal`, `RulesSelector` |
+| `app/services/experiment_memory.py` | 200 | `ExperimentMemory`, `MemoryRecord`, `StrategyStats` |
+| `app/services/splits.py` | 167 | `make_outer_split`, `make_session_folds` |
+| `app/services/judge.py` | 158 | `Judge`, `JudgeSettings`, `JudgeDecision`, `corrected_resampled_t` |
+| `app/services/search_summary.py`, `experiment_planner.py` | 72, 42 | `summarize_search`; `Planner` |
+| `app/components/autopilot_viewer.py` | 523 | the autonomous mode of the dashboard |
+| `app/main.py` | 134 | page layout, mode switch and sidebar |
+| `research/` (5 files) | 1,154 | `synthetic.py` 287, `critic_study.py` 422, `judge_study.py` 212, `phase2.py` 229 |
+| `scripts/` (5 files) | 613 | `run_autopilot.py` 96, `run_study.py` 166, `run_phase2.py` 90, plus the two Phase 1 scripts |
+| `tests/` (22 files) | 4,461 | 468 tests |
+
+Total: 13,400 lines in 62 Python files (7,172 in `app/`, 1,154 in `research/`, 613 in `scripts/`, 4,461 in `tests/`), plus the 64-line thresholds file.
+
 ### 8.2 Main interfaces
 
 ```python
@@ -785,11 +812,15 @@ python -m pytest -q
 streamlit run app/main.py --server.address localhost --browser.gatherUsageStats false
 mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db --port 5000 --workers 1
 python scripts/compare_seeds.py --dataset data/sample/titanic.csv --target Survived --exclude-a PassengerId,Name --exclude-b PassengerId,Name,Ticket,Cabin --seeds 1 2 3 4 5 --budget 30
+python scripts/run_autopilot.py --dataset data/sample/titanic.csv --target Survived --seconds 300 --max-experiments 8 --cores -1 --seed 42
+python scripts/run_study.py critic run      # and: critic analyse [--freeze LABEL]
+python scripts/run_study.py judge run       # and: judge analyse
+python scripts/run_phase2.py run            # and: run_phase2.py analyse
 ```
 
-### 8.6 Tests (465, about 176 s on 26 October 2026)
+### 8.6 Tests (468, about 174 s on 27 October 2026)
 
-Phase 1 ended with the first three files below (47 tests, about 29 to 41 s). Phase 2 has added the others so far. Full suite on 26 October 2026 after task 16: 457 passed in 139.7 s on the laptop in chapter 7; without the 4 study smoke tests marked slow (`python -m pytest -q -m "not slow"`, marker registered in `pytest.ini`), 453 passed in 123.6 s. After task 17: 458 passed in 150.4 s. After task 18.1: 465 passed in 175.8 s; without the 9 tests marked slow (4 study smoke tests and the 5 dashboard tests), 456 passed in 127.6 s. The counts below were taken from pytest's list of collected tests.
+Phase 1 ended with the first three files below (47 tests, about 29 to 41 s). Phase 2 has added the others so far. Full suite on 26 October 2026 after task 16: 457 passed in 139.7 s on the laptop in chapter 7; without the 4 study smoke tests marked slow (`python -m pytest -q -m "not slow"`, marker registered in `pytest.ini`), 453 passed in 123.6 s. After task 17: 458 passed in 150.4 s. After task 18.1: 465 passed in 175.8 s; without the 9 tests marked slow (4 study smoke tests and the 5 dashboard tests), 456 passed in 127.6 s. After task 19 (27 October 2026): 468 passed in 174.0 s. The counts below were taken from pytest's list of collected tests.
 
 | File | Tests | What they cover |
 |---|---|---|
@@ -813,6 +844,7 @@ Phase 1 ended with the first three files below (47 tests, about 29 to 41 s). Pha
 | `tests/test_critic_study.py` | 5 | The study's cases (every problem and strength, separate seeds, a different dataset each); with a fast stand-in engine, rows carry the truth and the evidence, the study's rule agrees with the real Critic for two sets of thresholds, tuning gives valid thresholds, and the written thresholds file loads (3 of them marked slow) |
 | `tests/test_judge_study.py` | 4 | The study's pairs and seeds; one pair with a fast stand-in engine gives one row per setting (marked slow); the false-keep rate, the power and the choice of defaults on hand-made verdicts, including when no setting is safe enough |
 | `tests/test_dashboard.py` | 5 | Streamlit's `AppTest` on `app/main.py` in a temporary project folder with the Titanic sample, real FLAML searches stopped after 3 trials, and no MLflow (all marked slow, about 40 s together): the sidebar marks the built modules and the default mode is unchanged; the single-experiment mode runs an experiment and shows its results; an autonomous run shows its steps, the first and final model and the memory records (one per Verdict); a Session whose searches fail is shown as an error and a new one can be started; Stop ends a running Session with stop reason "user" and the Final_Evaluation; no exceptions on the page |
+| `tests/test_phase2.py` | 3 | The Phase 2 measurement's runs (each Session before its FLAML run), the pairing of runs with the sign set so that positive favours the Session (also for an error metric), and the summary and Strategy counts on hand-made rows |
 | `tests/test_synthetic.py` | 32 | Same seed gives the same data; problem order does not matter; each of the 8 problems measured at its requested strength in both the dataset and the fresh sample (imbalance ratio, share of changed labels, correlation of copies, distinct share of IDs, share of the main value, unseen share of categories, empty share); our profiler flags the planted ID, constant and high-cardinality columns; clean data has none of them; a model scores the same on the fresh sample as in cross-validation; 11 invalid requests rejected |
 
 ### 8.7 Code listings worth including in the report
@@ -1080,7 +1112,40 @@ What this shows, and what it does not:
 - FLAML's learner choice depends on measured trial times, so a rerun gives somewhat different pairs: in a trial run before the study, the same seed-0 pairs "drop 20 random columns" and "smaller trees" gave true differences of -0.0072 and -0.0013 against +0.0193 and +0.0075 in the study.
 - The counts are small (22 harmful and 11 helpful pairs on the tuning seeds), so one pair moves a rate by 0.05 to 0.09, and all data is synthetic, binary and of one size.
 
-### 9.14 Still to produce
+### 9.14 Phase 2 measurement: the loop against FLAML alone (task 19, 27 October 2026)
+
+Setup: the four sample datasets (Titanic, breast cancer, penguins, California housing), seeds 1, 2 and 3, and 300 s of total time per run (the middle budget of the planned Phase 3 grid). For each dataset and seed, two runs on the same training and test parts (test share 0.2, the Phase 1 split): a Session with the default settings (rules, 3 x 5 folds, Judge alpha 0.20, thresholds `v1-critic-study`, at most 8 Experiments, first share 35%, patience 3), and one FLAML search with the whole 300 s (the Phase 1 runner) that leaves out the same columns as the Session's first Setup (`PassengerId` and `Name` on Titanic, none elsewhere). Default primary metrics: F1 (binary), macro F1 (penguins) and R2. All cores, MLflow on. Code at commit 940225a; only documents were edited while it ran, so the rows say `git_dirty`. 24 runs on 27 October 2026 from 00:06 to 01:48 (1 h 42 min), laptop of chapter 7. Raw files: `results/phase2/phase2_runs.csv` (one row per run), `phase2_pairs.csv`, `phase2_summary.csv`, `phase2_strategies.csv`; the Sessions are SES-002 to SES-013 with their Experiments in `experiments/`, and the 34 memory records they wrote.
+
+Test score of the final model, Session minus FLAML alone (positive: the Session did better):
+
+| Dataset (test rows) | Seed 1 | Seed 2 | Seed 3 | Mean | Session time (s), mean | FLAML time (s), mean | Experiments per Session |
+|---|---|---|---|---|---|---|---|
+| Titanic (179) | 0.0000 | +0.0336 | +0.0288 | +0.0208 | 197 | 304 | 4, 4, 4 |
+| Breast cancer (114) | +0.0129 | -0.0256 | -0.0347 | -0.0158 | 293 | 307 | 8, 8, 7 |
+| Penguins (69) | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 132 | 303 | 2, 2, 1 |
+| California housing (4,128) | +0.0001 | -0.0039 | -0.0069 | -0.0035 | 201 | 312 | 2, 2, 2 |
+| All 12 pairs | 4 better | 4 equal | 4 worse | +0.0004 | 206 | 306 | 3.8 |
+
+Session test scores: Titanic F1 0.750, 0.794, 0.823 (FLAML 0.750, 0.760, 0.794); breast cancer 0.951, 0.927, 0.953 (0.938, 0.952, 0.988); penguins 0.983, 0.983, 1.000 (the same); California R2 0.852, 0.849, 0.852 (0.852, 0.853, 0.858).
+
+Inside the Sessions:
+
+- Stop reasons: no Proposal left 7 times, time 4 times, three discards in a row once (Titanic seed 1). So Sessions often ended early: on average after 206 s of the 300 s, while FLAML alone always used its whole budget.
+- 34 changes were judged: `drop_columns` 25 times (19 on breast cancer, 6 on Titanic; kept 21 times, 19 of them as simpler), `restrict_model_families` 5 (kept 3, as simpler), `regularised_search_space` 3 (kept once, California seed 1, as better), `frequency_encode` once (Titanic, discarded). No candidate failed.
+- Titanic: the Critic found `Cabin` (77% empty, high-cardinality) and `Ticket` (high-cardinality) in all three seeds. In seeds 2 and 3 the Session dropped both, and the final model beat FLAML alone by 0.034 and 0.029 F1. In seed 1 the Judge discarded all three changes (dropping `Cabin`: mean fold difference -0.054; dropping `Ticket`: -0.010; frequency-encoding `Ticket`: +0.005, not significant), and the Session stopped at 196 s after three discards in a row, with the same test F1 as FLAML alone.
+- Search budgets: every first search got 105 s; the 34 candidate searches got 5 to 58 s (median 21 s).
+- Breast cancer: the Critic found redundant columns (radius, perimeter and area are almost the same measurement), and the Session dropped five or six of them as simpler and not worse. Its validation score rose (by 0.007, 0.025 and 0.005), but on the 114 test rows the final model was behind FLAML alone in two seeds. A difference of 0.03 in F1 there is two or three test rows, and the first model of seed 2 (0.952) was better on the test part than the final one (0.927), against the validation evidence.
+- California housing: each Assessment refits 15 models on 13,200 rows; the first one took 19 to 52 s, and Assessments used 19 to 41% of the Session's time. Only 2 Experiments fitted in 300 s, and the loop was slightly behind FLAML alone (mean R2 -0.003).
+- Penguins is easy (test F1 0.98 to 1.00): both reached the same test score, and the Sessions stopped after 113 to 145 s with nothing left to try.
+- First against final model of the same Session (the loop's own effect on the test part): mean +0.0065 (Titanic +0.024, breast cancer +0.000, California +0.002, penguins 0).
+
+What this shows, and what it does not:
+
+- At 300 s on these four small datasets, the rule-based loop was as good as FLAML alone on average (4 better, 4 equal, 4 worse; mean +0.0004), and it used two thirds of the time. It helped where the Critic found a real data problem that FLAML cannot fix by itself (Titanic's high-cardinality columns), and it cost a little where its changes were neutral (breast cancer) or where Assessments are expensive (California).
+- "Simpler and not worse" accepted many small changes in a row on breast cancer. Each passed the Judge alone; whether their sum helps on new rows is not tested by the Judge. This is a known property of the keep_simpler rule to check in Phase 3.
+- 3 seeds and test parts of 69 to 179 rows for three of the datasets give no statistical power: these are observations, not tested differences. The Phase 3 benchmark (more datasets, budgets of 2, 5 and 10 minutes, at least 5 seeds, the statistics of section 5) is the test for the report's claims.
+
+### 9.15 Still to produce
 
 - The planned benchmark in `research-direction.md`: six systems, OpenML datasets, several budgets and seeds, paired statistical tests.
 - Re-run sections 9.2 to 9.6 with the final code and keep the raw files.
@@ -1096,6 +1161,12 @@ Conclusions so far (Phase 1):
 2. Independent test evaluation, trivial baselines and train vs test scores make the results honest and easy to read.
 3. The first experiments show why the planned decision layer needs careful comparison: a sensible change gave a small average gain, and a single split could not tell it apart from noise.
 4. Every experiment is recorded with the information the critic, strategy engine and memory will need.
+
+Conclusions so far (Phase 2, 27 October 2026):
+
+1. The rule-based loop runs unattended within its budget, decides only on the training part, and records every Diagnosis, change, Verdict and cost so that each decision can be replayed (sections 9.11 and 9.14).
+2. Its two decision components were measured on data with known answers: the Critic's data-level Diagnoses had no false alarm, overfitting was found with precision 0.88 and recall 0.91, and the unreliable-validation Diagnosis is weak (section 9.12); the Judge kept 0 of 18 harmful changes and 10 of 12 helpful ones on the reporting seeds (section 9.13).
+3. Against FLAML alone at the same 300 s budget on the four sample datasets, the final test scores were about the same on average (4 better, 4 equal, 4 worse) with two thirds of the time used. The loop helped where a data problem FLAML cannot fix was present (Titanic) and cost a little where its changes were neutral or Assessments were expensive (section 9.14). Whether this holds on more datasets and budgets is the Phase 3 question.
 
 Future scope (beyond the planned phases):
 
@@ -1195,7 +1266,9 @@ Future scope (beyond the planned phases):
 | 2026-10-26 | Spec task 18: autonomous mode in the dashboard (`app/components/autopilot_viewer.py`, mode switch in `app/main.py`; section 8.3); the Session hands its record to the page after every save (`on_update`); sidebar: the full Critic and Strategies and the Experiment_Memory moved to built; two Phase 1 captions that called the Critic planned now point to the autonomous mode; checked with a throwaway AppTest run on Titanic in a temporary folder | fdb5243 |
 | 2026-10-26 | Spec task 18.1: 5 dashboard tests with Streamlit's `AppTest` (`tests/test_dashboard.py`, marked slow) and 2 tests of the Session's update callback; the sidebar now lists the autonomous mode as built; 465 tests passing in 175.8 s (456 without the slow ones in 127.6 s) | b15bcd2 |
 | 2026-10-26 | Judge defaults revised: the default number of fold repeats goes back to 3 (alpha stays 0.20), a recorded departure from the judge study's rule (sections 4.7 and 9.13); spec and documents updated; 465 tests passing | 7beb436 |
-| 2026-10-26 | Decided the two open points of section 4.7: the ranking tie-break and moving warm starts into a limited search space are not applied (reasons in section 4.7; the second is listed as future work) | see the commit of this date |
+| 2026-10-26 | Decided the two open points of section 4.7: the ranking tie-break and moving warm starts into a limited search space are not applied (reasons in section 4.7; the second is listed as future work) | 4200033 |
+| 2026-10-27 | Spec task 19, Phase 2 measurement tool: `research/phase2.py`, `scripts/run_phase2.py` and 3 tests | 940225a |
+| 2026-10-27 | Spec task 19: Phase 2 measurement (24 runs, 300 s each, 1 h 42 min; section 9.14, Phase 2 conclusions in chapter 10); new section 9 of `how-it-works.md`; `architecture.md`, `PROJECT.md`, the README and the roadmap describe the built autonomous layer; report notes: objectives, method, flowchart 6.6, code size, commands, data locations | see the commit of this date |
 
 ---
 
@@ -1215,6 +1288,11 @@ Screenshots to take (not taken yet unless marked):
 - [ ] MLflow run page: parameters, metrics, artifacts
 - [ ] Terminal: `47 passed`
 - [ ] Terminal: output of `scripts/compare_seeds.py`
+- [ ] Autonomous run, settings and the live view while a Session runs (timeline, score chart, Stop)
+- [ ] Autonomous run, a finished Session: the first and final model side by side ("Not used for decisions") and the Diagnosis cards
+- [ ] Autonomous run: the memory records of the dataset
+- [ ] MLflow: a Session's parent run with its Experiments as child runs
+- [ ] Terminal: output of `scripts/run_autopilot.py` (SES-001) and of `scripts/run_phase2.py analyse`
 
 Charts to make for chapter 9: test score against budget (9.5), per-seed differences (9.6), bootstrap intervals (9.3).
 
@@ -1246,5 +1324,7 @@ Charts already made (in `docs/imp/images`, from `scripts/plot_search_history.py`
 
 - Raw results of EXP-001 and EXP-002: `experiments/EXP-001/`, `experiments/EXP-002/` (summary, predictions, leaderboard, trial history, importances, profile, FLAML log), `models/EXP-00x/model.pkl`, and the MLflow store in `mlruns/`. These folders are not in git, so back them up.
 - The development runs (9.2, 9.5), the rehearsal (9.4) and the seed checks (9.6) ran in temporary folders that were deleted afterwards. Only the numbers in this file remain; re-run them for the final report.
+- Phase 2 Sessions: `experiments/SES-###/` (`session.json`, `train_profile.json`) and their Experiments `experiments/EXP-###/` (with `assessment.json`, `diagnoses.json`, `decision.json`), models in `models/EXP-###/`, MLflow parent and child runs in `mlruns/`, and the memory in `experiments/memory/memory.jsonl`. SES-001 is section 9.11; the Sessions of the Phase 2 measurement are listed in `results/phase2/phase2_runs.csv` (column `run_id`). Not in git: back them up.
+- Component studies: summary CSV files in `results/studies/` (in git); the critic study's saved inputs in `experiments/studies/critic_study_inputs.jsonl` (not in git). Phase 2 measurement: `results/phase2/` (in git).
 - Maintained documents: `docs/imp/` (this file, `PROJECT.md`, `how-it-works.md`, `architecture.md`, `development-roadmap.md`, `research-direction.md`) and the charts in `docs/imp/images/`.
 - Archived Phase 1 material: `docs/unimp/PRESENTATION.md` (demo guide; section 7 concepts, section 15 viva questions) and `docs/unimp/Project_Presentation.md` (text presented at the review).

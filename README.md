@@ -6,10 +6,11 @@ B.Tech Computer Science major project.
 
 The long-term aim is a system that takes a tabular dataset and a compute budget and runs the whole experimentation loop by itself: train a model, work out what is wrong with it, choose what to try next, run that, and keep the best result. It should also remember what worked on earlier datasets.
 
-We are building it in two stages, and this README keeps them apart:
+We are building it in stages, and this README keeps them apart:
 
-- **Current baseline (working now):** CSV → dataset profiling → task detection → FLAML AutoML → evaluation → MLflow tracking → Streamlit dashboard.
-- **Proposed research system (planned, not built yet):** experiment planner, critic, strategy engine, experiment memory and resource-aware budgeting on top of the baseline.
+- **Phase 1, the baseline (built):** CSV → dataset profiling → task detection → FLAML AutoML → evaluation → MLflow tracking → Streamlit dashboard.
+- **Phase 2, the autonomous loop (built):** a Session that searches, assesses, diagnoses, changes and judges Setups by itself within a time budget, and records every decision in an experiment memory. It runs from the dashboard or the command line.
+- **Phase 3 (planned, not built yet):** choosing changes from what the memory learned on similar datasets, and a benchmark against FLAML alone, AutoGluon and a manual baseline.
 
 The detailed project document is [docs/imp/PROJECT.md](docs/imp/PROJECT.md). To understand how the current system and FLAML work, step by step and with diagrams, read [docs/imp/how-it-works.md](docs/imp/how-it-works.md). All maintained documents are in [docs/imp](docs/imp), including the running notes for the final report. The Phase 1 review material is archived in [docs/unimp](docs/unimp).
 
@@ -27,9 +28,11 @@ AutoML tools are good at one step: choosing a model and its hyperparameters for 
 
 This project started from working with [FLAML](https://github.com/microsoft/FLAML), Microsoft Research's fast and lightweight AutoML library (Wang et al., MLSys 2021, MIT licence). FLAML finds good models quickly on ordinary hardware because its search methods (CFO and BlendSearch) take the cost of each trial into account. That is what made a fully local project like this realistic.
 
-AutoPilot-ML uses FLAML unchanged as its search engine. The baseline adds the parts around it: data profiling, task and metric handling, an independent test evaluation, explanation views, experiment tracking and a dashboard. The planned research layer sits on top of that. We do not modify FLAML, and we do not claim to outperform it. Comparing against FLAML is part of the evaluation plan.
+AutoPilot-ML uses FLAML unchanged as its search engine. The baseline adds the parts around it: data profiling, task and metric handling, an independent test evaluation, explanation views, experiment tracking and a dashboard. The autonomous layer sits on top of that. We do not modify FLAML, and we do not claim to outperform it. Comparing against FLAML is part of the evaluation plan.
 
-## What the current baseline can do
+## What it can do
+
+Single experiment (the Phase 1 baseline):
 
 - **Load data:** upload a CSV in the dashboard, or pick one of the bundled sample datasets.
 - **Profile the dataset:** rows, columns, types, missing values, duplicates, unique counts, plus flags for identifier-like, constant, high-cardinality and mostly-empty columns, and the class balance of the target.
@@ -39,6 +42,17 @@ AutoPilot-ML uses FLAML unchanged as its search engine. The baseline adds the pa
 - **Explain the model:** permutation importance on the original columns, the model's own feature importance where it has one, a confusion matrix and per-class report, a ROC curve for binary problems, and predicted-vs-actual and residual plots for regression.
 - **Track everything:** each experiment becomes an MLflow run in a local SQLite file (no server needed) with its parameters, metrics and files. A small JSON record is also written to `experiments/`, and the experiment history table in the app reads from those records.
 - **Run fully offline:** no OpenAI, Anthropic, Gemini or other paid API, no cloud service and no GPU.
+
+Autonomous run (Phase 2):
+
+- **Run a Session:** give a dataset, a target, a total time, a maximum number of Experiments and the CPU cores. The Session keeps 20% of the rows aside as the test part and never uses them for a decision.
+- **Assess fairly:** every Setup's best configuration is refitted on the same 15 folds of the training part (3 repeats of 5-fold cross-validation), so two Setups are compared fold by fold.
+- **Diagnose:** a rule-based Critic gives Diagnoses of 12 kinds (for example overfitting, underfitting, class imbalance, high-cardinality, identifier, constant and mostly-empty columns, redundant columns, an unreliable validation score, wasted search time), each with its evidence numbers. Its thresholds were tuned on synthetic data with planted problems.
+- **Change one thing at a time:** 9 Strategies answer the Diagnoses (drop columns, frequency-encode or group rare categories, add missing-value indicators, balanced class weights, smaller trees, fewer learner families, more search time, a smoother search metric). Data changes are learned inside each fold, so no validation row shapes them.
+- **Judge:** a change is kept only if the paired fold differences support it (corrected resampled t-test), or if it is simpler and not worse.
+- **Spend the budget:** the first Experiment gets 35% of the time; later ones get budgets from the measured time left; the Session stops for time, Experiments, no more changes to try, three discards in a row, or Stop.
+- **Report:** the first and the final model are scored once on the test part, side by side. Every step, Diagnosis and Verdict is saved (`experiments/SES-###/session.json`) and can be replayed.
+- **Remember:** every Verdict becomes a record in `experiments/memory/memory.jsonl`, with a description of the dataset, the change, its effect and its cost. In Phase 2 the memory is written and shown, but no decision reads it yet.
 
 ## Architecture
 
@@ -58,6 +72,23 @@ AutoMLRunner ──► stratified train/test split
                                         │
                                         ▼
                               experiment history in the dashboard
+```
+
+An autonomous run wraps this in a loop (all in `app/services/`):
+
+```text
+Session (autopilot.py) ─► outer split + 3 x 5 folds of the training part (splits.py)
+      │
+      ▼
+Planner: first Setup ─► AutoMLRunner (search only, no test rows) ─► Assessor (refit on the 15 folds)
+      ▲                                                                  │
+      │                                                                  ▼
+Planner: candidate ◄── Resource_Manager ◄── Strategy_Engine ◄────────── Critic
+      │
+      ▼
+search ─► Assessor ─► Judge: keep / keep_simpler / discard ─► Experiment_Memory ─► next step
+      ...
+Final_Evaluation: first and final model, once, on the test part
 ```
 
 The code has three layers. `app/main.py` and `app/components/` are the Streamlit UI, which only collects input and shows results. `app/services/` holds all the logic, and none of it imports Streamlit, so it can be used from a script or a notebook. `app/core/` holds settings and logging. FLAML is only touched inside `FLAMLEngine`, and MLflow only inside `ExperimentTracker`.
@@ -87,7 +118,21 @@ Dashboard (then open http://localhost:8501):
 streamlit run app/main.py --server.address localhost --browser.gatherUsageStats false
 ```
 
-The app has no login, so `--server.address localhost` keeps it reachable from your own machine only. `--browser.gatherUsageStats false` turns off Streamlit's usage statistics.
+The app has no login, so `--server.address localhost` keeps it reachable from your own machine only. `--browser.gatherUsageStats false` turns off Streamlit's usage statistics. Choose **Single experiment** or **Autonomous run** in the sidebar.
+
+An autonomous Session from the command line (prints every step; records go to `experiments/`, `models/` and `mlruns/`, or to a temporary folder with `--project-root`):
+
+```bash
+python scripts/run_autopilot.py --dataset data/sample/titanic.csv --target Survived --seconds 300 --max-experiments 8 --cores -1 --seed 42
+```
+
+The component studies and the Phase 2 measurement (each restarts where it stopped; summary CSV files go to `results/`):
+
+```bash
+python scripts/run_study.py critic run      # then: critic analyse [--freeze LABEL]
+python scripts/run_study.py judge run       # then: judge analyse
+python scripts/run_phase2.py run            # then: run_phase2.py analyse
+```
 
 MLflow UI, to browse every run (then open http://127.0.0.1:5000):
 
@@ -97,7 +142,7 @@ mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db --port 5000 --workers 1
 
 On Windows, `--workers 1` is needed. With several workers we got a socket error (WinError 10022). The database file is created by the first experiment.
 
-Tests:
+Tests (`-m "not slow"` skips the study smoke tests and the dashboard tests):
 
 ```bash
 python -m pytest -q
@@ -147,7 +192,7 @@ _To be added: dataset profile, results, explainability, experiment history and t
 5. Look at the test scores against the trivial baseline, the train vs test gap, the leaderboard and the feature importance.
 6. Exclude `Ticket` and `Cabin` as well, run again, and compare both runs in the experiment history and in MLflow.
 
-Step 6 is the kind of decision the planned critic and strategy engine are meant to make automatically. In the baseline you make it by hand.
+In the single-experiment mode you make the decision of step 6 by hand. In the autonomous mode the Session makes it: in the first Session on Titanic (SES-001, 300 s) the Critic found overfitting and the two high-cardinality columns, the Session dropped `Cabin` (kept as simpler) and then `Ticket` (kept as better, p = 0.010), and the final model's test F1 was 0.724 against 0.684 for its first model.
 
 ## Technology stack
 
@@ -165,34 +210,34 @@ Exact versions are pinned in `requirements.txt`. Optuna and SHAP are part of the
 
 - CSV and single-table tabular data only. No text, images, time series or clustering.
 - You choose the target column yourself. Automatic target detection is not implemented.
-- One click runs one experiment. There is no automatic diagnosis or follow-up experiment yet.
-- No feature engineering, resampling (such as SMOTE) or class weighting beyond what FLAML's learners do internally.
-- ID-like and constant columns are suggested for exclusion. High-cardinality columns are only flagged.
+- The autonomous loop changes one thing at a time, tries each change at most once per Session, and follows a fixed rule order. The memory is recorded but does not choose anything yet (Phase 3).
+- Its data changes are the 9 Strategies above. There is no other feature engineering and no resampling (SMOTE is an optional extra, not built).
+- Every Setup is refitted 15 times for its Assessment, which takes a share of the budget, more so on bigger data.
+- The Judge compares refits of configurations that FLAML chose on the same training part, so both scores are a little optimistic; pairing removes much of this, not all.
+- In the single-experiment mode, ID-like and constant columns are suggested for exclusion and high-cardinality columns are only flagged.
 - FLAML's search is limited by time, so two runs with the same seed can differ slightly.
 - Permutation importance can understate features that are strongly correlated with each other. SHAP is not integrated yet.
 - Models are saved with pickle, so only load model files this app created.
 - MLflow stores absolute artifact paths. If you move the project folder, file links in old MLflow runs break (the JSON records are not affected).
 - It is a single-user local app with no login. Keep it on localhost.
 
-## Proposed autonomous architecture (planned)
+## Autonomous layer modules (Phase 2, built)
 
-```text
-Dataset ─► Profiler + task detection ─► Experiment planner* ─► FLAML ─► Evaluation
-                                              ▲                            │
-                                              │                            ▼
-                                       Strategy engine* ◄──────────── Critic*
-                                              ▲                            │
-                                              │                            ▼
-                                     Resource manager*           Experiment memory*
-```
+All in `app/services/`:
 
-\* not built yet. Each one will be a module in `app/services/`:
+- `autopilot.py`: the Session loop, its records and the Final_Evaluation.
+- `splits.py`: the outer split (the same as Phase 1) and the fixed folds of the training part.
+- `experiment_planner.py`: the first Setup and each candidate Setup, warm-started from the best configurations found so far.
+- `assessor.py`: refits a Setup's best configuration on every fold and records the fold scores.
+- `critic.py` with `critic_thresholds.toml`: the Diagnoses and their thresholds (version `v1-critic-study`).
+- `strategies.py` and `strategy_engine.py`: the 9 Strategies and the rule table that ranks them.
+- `transforms.py`: the data changes, learned on training rows only and saved with the model.
+- `judge.py`: the corrected resampled t-test and the keep, keep_simpler and discard rules.
+- `resource_manager.py`: the budgets of each step and the stop rules.
+- `experiment_memory.py`: the memory records, the nearest past datasets and per-Strategy statistics.
+- `search_summary.py`: how a search spent its time, for the budget Diagnoses.
 
-- `experiment_planner.py`: picks the next experiment configuration from the profile, the memory and the remaining budget.
-- `critic.py`: produces structured diagnoses such as overfitting, underfitting, class imbalance, problem columns and wasted compute.
-- `strategy_engine.py`: maps diagnoses to candidate fixes (class weights, SMOTE, feature selection, regularisation, a different model family) and ranks them.
-- `experiment_memory.py`: stores dataset meta-features, the strategy, the model, the result and the cost, and finds what worked on similar datasets.
-- `resource_manager.py`: enforces the time, experiment and CPU budgets and decides when to stop.
+The studies that tuned the Critic and the Judge, and the Phase 2 measurement, are in `research/`.
 
 ## Research direction
 
@@ -205,8 +250,8 @@ We plan to compare six systems: a manual baseline, FLAML, AutoGluon, AutoPilot-M
 ## Roadmap
 
 1. Baseline: profiling, task detection, FLAML, evaluation, MLflow, dashboard, history (done)
-2. Rule-based loop: assessor, critic, strategy catalogue and rule engine, judge, resource manager, planner, records and experiment memory, dashboard autonomous mode (next)
-3. Learned strategy selection (bandits, memory-based), benchmark datasets, AutoGluon baseline, ablation study
+2. Rule-based loop: assessor, critic, strategy catalogue and rule engine, judge, resource manager, planner, records and experiment memory, dashboard autonomous mode, critic and judge studies, measurement against FLAML alone (done)
+3. Learned strategy selection (bandits, memory-based), benchmark datasets, AutoGluon baseline, ablation study (next)
 4. Optional extras: SMOTE, more data strategies, SHAP, local LLM explanations, an API, packaging
 
 The summary is in [docs/imp/development-roadmap.md](docs/imp/development-roadmap.md). The detailed plan is a Kiro spec (requirements, design and ordered tasks) in the workspace folder `.kiro/specs/autopilot-ml/`, one level above this repository.
@@ -214,9 +259,8 @@ The summary is in [docs/imp/development-roadmap.md](docs/imp/development-roadmap
 ## Future work
 
 - Automatic target detection and data leakage checks
-- Feature engineering and data-level fixes: encoding high-cardinality columns, resampling, outlier handling
+- More feature engineering and data-level fixes: target encoding, resampling, outlier handling
 - SHAP explanations for the whole model and for single predictions
-- Explicit CPU limits and stopping rules in the resource manager
 - An optional local LLM (for example through Ollama) to explain diagnoses in plain language. The decisions themselves stay rule-based or learned, and measurable.
 - FastAPI service, Docker image, PostgreSQL-backed tracking for multi-user use
 
@@ -225,14 +269,19 @@ The summary is in [docs/imp/development-roadmap.md](docs/imp/development-roadmap
 ```text
 autopilot-ml/
 ├── app/
-│   ├── main.py             Streamlit entry point
-│   ├── components/         UI sections
+│   ├── main.py             Streamlit entry point (mode switch)
+│   ├── components/         UI sections, including autopilot_viewer.py (autonomous mode)
 │   ├── core/               settings and logging
-│   └── services/           profiler, task detector, AutoML runner, evaluator, tracker
+│   └── services/           Phase 1 services and the autonomous layer (see above)
+├── research/               synthetic data, the critic and judge studies, the Phase 2 measurement
+├── results/                summary CSV files of the studies and measurements (in git)
 ├── data/sample/            small public demo datasets
-├── scripts/                compare_seeds.py: compare two setups over several splits
+├── scripts/                run_autopilot.py: one Session from the command line
+│                           run_study.py: the critic and judge studies
+│                           run_phase2.py: Sessions against FLAML alone
+│                           compare_seeds.py: compare two setups over several splits
 │                           plot_search_history.py: charts of one experiment's search
-├── experiments/            JSON experiment records (generated, not in git)
+├── experiments/            JSON records of experiments and Sessions, and the memory (generated, not in git)
 ├── models/                 saved models (generated, not in git)
 ├── mlruns/                 MLflow database and files (generated, not in git)
 ├── tests/                  pytest tests

@@ -1,12 +1,29 @@
 # Thresholds of the Critic (app/services/critic.py), read with Python's tomllib.
 # Starting values from the spec (design.md section 6). They are tuned by the critic study
 # (task 16) and then frozen under a new version label. Every Diagnosis records the version.
+# Gaps, skills, gains and spreads are in units of the diagnostic metric (F1, accuracy, ROC-AUC or R2).
 version = "v0-start"
 
 [overfitting]
-# gap = mean over the folds of (training score - validation score), in units of the diagnostic metric
+# gap = mean over the folds of (training score - validation score)
 moderate_gap = 0.10
 high_gap = 0.20
+
+[underfitting]
+# Only when gap < max_gap. skill = (validation - baseline) / (1 - baseline), means over the folds
+max_gap = 0.03
+moderate_skill = 0.50
+high_skill = 0.25
+
+[budget_limited]
+# Improvement of the search's best score in the last quarter of the search time (bounded metrics only)
+moderate_gain = 0.005
+high_gain = 0.02
+
+[wasted_budget]
+# Share of the search time after the best configuration was found
+moderate_share = 0.50
+high_share = 0.75
 
 [class_imbalance]
 # ratio = rows of the largest class / rows of the smallest class, in the Training_Part
@@ -18,9 +35,33 @@ high_recall = 0.3
 # The recall test applies only from this ratio on: with balanced classes, class weights change nothing.
 min_ratio_for_recall = 1.5
 
+[missing_values]
+# Share of empty cells of a used column in the Training_Part
+moderate_share = 0.40
+high_share = 0.70
+
 [high_cardinality]
 # distinct = different values of a used text column in the Training_Part (more than this is moderate)
 moderate_distinct = 50
 # unseen = mean over the folds of the share of validation rows with a value not seen in the fold's training rows
 moderate_unseen = 0.30
 high_unseen = 0.60
+
+[constant_column]
+# A used column with one value, or with the same value in at least this share of rows (severity low)
+near_constant_share = 0.99
+
+[redundant_features]
+# Absolute Pearson correlation of two used numeric columns in the Training_Part
+moderate_correlation = 0.95
+high_correlation = 0.99
+
+[unreliable_validation]
+# Standard deviation of the validation score over the folds
+moderate_std = 0.05
+high_std = 0.08
+
+[weak_model_families]
+# A family at least min_gap behind the best family that used at least min_time_share of the search time
+min_gap = 0.10
+min_time_share = 0.05

@@ -19,6 +19,8 @@ from pandas.api.types import is_bool_dtype, is_datetime64_any_dtype, is_float_dt
 from app.services.task_detector import TaskType
 
 _ID_NAME_PATTERN = re.compile(r"(^id$|[_\s-]id$|Id$|ID$)")
+NEAR_CONSTANT_SHARE = 0.95  # reported in the profile; the Critic applies its own threshold
+CORRELATION_REPORT_LEVEL = 0.90  # pairs reported in the profile; the Critic applies its own thresholds
 
 
 @dataclass
@@ -100,6 +102,12 @@ class DatasetProfile:
     class_balance: ClassBalance | None = None
     target_summary: dict[str, float] | None = None
     warnings: list[str] = field(default_factory=list)
+    # Added in Phase 2 (profiles saved before have them empty).
+    main_value_share: dict[str, float] = field(default_factory=dict)  # share of rows with the most common value
+    near_constant_columns: list[str] = field(default_factory=list)  # 2+ values, main share >= NEAR_CONSTANT_SHARE
+    # Numeric feature pairs with |Pearson r| >= CORRELATION_REPORT_LEVEL, each {"columns": [a, b], "correlation": r}
+    # with a before b in the data; the target is left out.
+    correlated_pairs: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         """JSON-serialisable representation (used for MLflow artifacts)."""
@@ -222,6 +230,20 @@ class DatasetProfiler:
         if duplicate_rows:
             warnings.append(f"{duplicate_rows} duplicate rows ({duplicate_rows / max(n_rows, 1):.1%}).")
 
+        # The most common value's share of all rows, with empty cells counted as one more value.
+        main_share = {
+            str(column): float(df[column].value_counts(dropna=False).iloc[0] / n_rows) if n_rows else 0.0
+            for column in df.columns
+        }
+        near_constant = [c.name for c in details if c.unique > 1 and main_share[c.name] >= NEAR_CONSTANT_SHARE
+                         and c.name != target_column]
+        for column in near_constant:
+            warnings.append(f"'{column}' is nearly constant: {main_share[column]:.1%} of rows have the same value.")
+        pairs = self._correlated_pairs(df, numerical)
+        for pair in pairs:
+            a, b = pair["columns"]
+            warnings.append(f"'{a}' and '{b}' are highly correlated (r = {pair['correlation']:+.3f}).")
+
         missing_values = {c.name: c.missing for c in details}
         total_missing = int(sum(missing_values.values()))
         total_cells = n_rows * df.shape[1]
@@ -249,12 +271,29 @@ class DatasetProfiler:
             column_details=details,
             target_column=target_column,
             warnings=warnings,
+            main_value_share=main_share,
+            near_constant_columns=near_constant,
+            correlated_pairs=pairs,
         )
         if target_column is not None:
             self._profile_target(profile, df[target_column], task_type)
         return profile
 
     # ----------------------------------------------------------------- helpers
+    @staticmethod
+    def _correlated_pairs(df: pd.DataFrame, numerical: list[str]) -> list[dict[str, Any]]:
+        """Pairs of numeric feature columns with |Pearson r| >= CORRELATION_REPORT_LEVEL (pairwise complete rows)."""
+        if len(numerical) < 2:
+            return []
+        with np.errstate(invalid="ignore", divide="ignore"):
+            matrix = df[numerical].astype(float).corr().to_numpy()
+        pairs = []
+        for i, a in enumerate(numerical):
+            for j in range(i + 1, len(numerical)):
+                r = matrix[i, j]
+                if np.isfinite(r) and abs(r) >= CORRELATION_REPORT_LEVEL:
+                    pairs.append({"columns": [str(a), str(numerical[j])], "correlation": float(r)})
+        return pairs
     def _profile_column(self, series: pd.Series, n_rows: int) -> ColumnProfile:
         missing = int(series.isna().sum())
         missing_ratio = missing / n_rows if n_rows else 0.0

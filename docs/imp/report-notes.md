@@ -445,6 +445,25 @@ Why the correction: the 15 folds share most of their training rows, so their sco
 
 Since every deadline lies inside T, the steps end at most one step's overrun after T, and that overrun is recorded.
 
+**Algorithm 11, completed: all twelve Diagnoses** (task 13). Rules, in this order (m is the diagnostic metric; thresholds `v0-start`, starting values from the design, to be tuned in task 16):
+
+| Diagnosis | Evidence | Moderate | High |
+|---|---|---|---|
+| overfitting | gap = mean of (training m - validation m) over the folds | 0.10 or more | 0.20 or more |
+| underfitting | skill = (validation m - baseline m) / (1 - baseline m), only if the gap is below 0.03 | below 0.50 | below 0.25 |
+| budget_limited | gain of the search's best score in the last quarter of its time (bounded metrics only) | 0.005 or more | 0.02 or more |
+| wasted_budget | share of the search time after its best configuration | 0.50 or more | 0.75 or more |
+| class_imbalance | largest / smallest class; validation recall of the smallest class | ratio 3 or more, or recall below 0.5 | ratio 9 or more, or recall below 0.3 |
+| missing_values | share of empty cells of a used column | 0.40 or more | 0.70 or more |
+| high_cardinality | different values of a used text column; share of validation rows with a value unseen in the fold's training rows | more than 50 values, or 0.30 or more unseen | 0.60 or more unseen |
+| identifier_column | the profiler's identifier flag | | always high |
+| constant_column | one value, or the same value in 99% or more of rows | low | |
+| redundant_features | absolute correlation of two used numeric columns | 0.95 or more | 0.99 or more |
+| unreliable_validation | standard deviation of validation m over the folds | 0.05 or more | 0.08 or more |
+| weak_model_families | a learner family 0.10 or more behind the best family that used 5% or more of the search time | low | |
+
+The profiler now also reports, on the rows it is given, each column's most common value share, near-constant columns and highly correlated numeric pairs. On the saved SES-001 records the full Critic adds "missing values high" for `Cabin` (77% empty) to the first Setup's Diagnoses, and finds "budget limited" (the search's best F1 still rose by 0.006 in its last quarter) and "weak model families" for the final Setup.
+
 **Algorithm 16: Data_Steps** (`app/services/transforms.py`, task 12). A Data_Step is learned from the rows it is fitted on and then applied unchanged to other rows; no step reads the target.
 
 | Step | Learned from the training rows | Applied to other rows |
@@ -1069,7 +1088,8 @@ Future scope (beyond the planned phases):
 | 2026-10-26 | Spec task 11.2: first real Session on Titanic, SES-001 (300 s budget, at most 8 Experiments, seed 42; EXP-003 to EXP-006): stopped with no Proposals left after 206.0 s; refit validation F1 0.706 to 0.763; test F1 of the first and final model 0.684 and 0.724; records checked by hand (section 9.11); two weaknesses noted (section 4.7) | 49cb088 |
 | 2026-10-26 | Dashboard sidebar: the first version of the autonomous layer moved from "planned" to "implemented" (section 8.3); the app renders without errors; 305 tests passing in 114.1 s | 173454a |
 | 2026-10-26 | Spec task 12: Data_Steps (`app/services/transforms.py`, Algorithm 16) used by the runner (fitted on the Training_Part, saved with the model) and by the Assessor (fitted on each fold) | 8f4dc5f |
-| 2026-10-26 | Spec task 12.1: 20 Data_Step tests in `tests/test_transforms.py`; 326 tests in total, all passing in 108.9 s | see the commit of this date |
+| 2026-10-26 | Spec task 12.1: 20 Data_Step tests in `tests/test_transforms.py`; 326 tests in total, all passing in 108.9 s | c82a09d |
+| 2026-10-26 | Spec task 13: the full Critic (all twelve Diagnoses, section 5.4) and the profiler's near-constant columns and correlated pairs; checked on the saved SES-001 records | see the commit of this date |
 
 ---
 

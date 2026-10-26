@@ -5,8 +5,8 @@ Assessment on the Session_Folds and the search summary. It is a pure function of
 the Diagnoses of a finished Session can be recomputed from its records. All thresholds come from
 ``critic_thresholds.toml``, and every Diagnosis records that file's version label.
 
-Thin version (task 6): overfitting, class_imbalance and high_cardinality. The other kinds are
-added in task 13.
+All twelve kinds of Requirement 5.2 (the thin version of task 6 had overfitting, class_imbalance
+and high_cardinality; task 13 added the others).
 """
 
 from __future__ import annotations
@@ -22,9 +22,11 @@ import numpy as np
 
 from app.services.assessor import Assessment
 from app.services.automl_runner import ExperimentConfig
+from app.services.evaluator import METRICS
 from app.services.profiler import DatasetProfile
 from app.services.search_summary import SearchSummary
 from app.services.task_detector import TaskType
+from app.services.transforms import as_specs
 
 DEFAULT_THRESHOLDS_PATH = Path(__file__).with_name("critic_thresholds.toml")
 
@@ -78,25 +80,47 @@ class ThresholdsError(ValueError):
     """The thresholds file is missing or invalid."""
 
 
-# Every threshold the implemented rules read, as "section.name".
+# Every threshold the rules read, as "section.name".
 REQUIRED_THRESHOLDS = (
     "overfitting.moderate_gap",
     "overfitting.high_gap",
+    "underfitting.max_gap",
+    "underfitting.moderate_skill",
+    "underfitting.high_skill",
+    "budget_limited.moderate_gain",
+    "budget_limited.high_gain",
+    "wasted_budget.moderate_share",
+    "wasted_budget.high_share",
     "class_imbalance.moderate_ratio",
     "class_imbalance.high_ratio",
     "class_imbalance.moderate_recall",
     "class_imbalance.high_recall",
     "class_imbalance.min_ratio_for_recall",
+    "missing_values.moderate_share",
+    "missing_values.high_share",
     "high_cardinality.moderate_distinct",
     "high_cardinality.moderate_unseen",
     "high_cardinality.high_unseen",
+    "constant_column.near_constant_share",
+    "redundant_features.moderate_correlation",
+    "redundant_features.high_correlation",
+    "unreliable_validation.moderate_std",
+    "unreliable_validation.high_std",
+    "weak_model_families.min_gap",
+    "weak_model_families.min_time_share",
 )
 # Pairs (less severe, more severe) that must be in this order: (a, b) means a <= b.
 _ORDERED = (
     ("overfitting.moderate_gap", "overfitting.high_gap"),
+    ("underfitting.high_skill", "underfitting.moderate_skill"),  # for skill, high is the lower one
+    ("budget_limited.moderate_gain", "budget_limited.high_gain"),
+    ("wasted_budget.moderate_share", "wasted_budget.high_share"),
     ("class_imbalance.moderate_ratio", "class_imbalance.high_ratio"),
     ("class_imbalance.high_recall", "class_imbalance.moderate_recall"),
+    ("missing_values.moderate_share", "missing_values.high_share"),
     ("high_cardinality.moderate_unseen", "high_cardinality.high_unseen"),
+    ("redundant_features.moderate_correlation", "redundant_features.high_correlation"),
+    ("unreliable_validation.moderate_std", "unreliable_validation.high_std"),
 )
 
 
@@ -179,11 +203,26 @@ class Critic:
             raise ValueError("The Critic needs a completed Assessment.")
         used = self._used_columns(profile, config)
         metric = diagnostic_metric(task_type, primary_metric)
-        found: list[Diagnosis | None] = [self._overfitting(assessment, metric)]
+        search_metric = config.search_metric or primary_metric
+        treated = {c for step in as_specs(config.data_steps)
+                   if step.kind in ("frequency_encode", "group_rare_categories") for c in step.columns}
+        found: list[Diagnosis | None] = [
+            self._overfitting(assessment, metric),
+            self._underfitting(assessment, metric),
+            self._budget_limited(search, search_metric),
+            self._wasted_budget(search),
+        ]
         if task_type.is_classification:
             found.append(self._class_imbalance(profile, assessment))
+        found.extend(self._missing_values(profile, column) for column in used)
         found.extend(self._high_cardinality(profile, assessment, column) for column in used
-                     if column in profile.categorical_features)
+                     if column in profile.categorical_features and column not in treated)
+        found.extend(self._identifier_column(profile, column) for column in used)
+        found.extend(self._constant_column(profile, column) for column in used)
+        found.extend(self._redundant_features(pair) for pair in profile.correlated_pairs
+                     if all(c in used for c in pair["columns"]))
+        found.append(self._unreliable_validation(assessment, metric))
+        found.append(self._weak_model_families(search, search_metric))
         return [d for d in found if d is not None]
 
     # ------------------------------------------------------------------ rules
@@ -254,11 +293,148 @@ class Critic:
                         "column for those rows.")
         return self._make(DiagnosisKind.HIGH_CARDINALITY, severity, (column,), evidence, message)
 
+    def _underfitting(self, assessment: Assessment, metric: str) -> Diagnosis | None:
+        """Low skill over the trivial baseline while the training score is not higher than the validation score."""
+        t = self.thresholds
+        train, validation = assessment.values(metric, "train"), assessment.values(metric, "validation")
+        baseline = assessment.values(metric, "baseline")
+        if metric == "roc_auc":  # the baseline gives no probabilities; a constant scores 0.5
+            baseline = np.where(np.isfinite(baseline), baseline, 0.5)
+        both = np.isfinite(train) & np.isfinite(validation) & np.isfinite(baseline)
+        if not both.any():
+            return None
+        gap = float(np.mean(train[both] - validation[both]))
+        v, b = float(validation[both].mean()), float(baseline[both].mean())
+        if gap >= t["underfitting.max_gap"] or 1 - b <= 1e-9:
+            return None
+        skill = (v - b) / (1 - b)
+        severity = self._level(skill < t["underfitting.high_skill"], skill < t["underfitting.moderate_skill"])
+        if severity is None:
+            return None
+        return self._make(
+            DiagnosisKind.UNDERFITTING, severity, (),
+            {"metric": metric, "skill": skill, "validation_mean": v, "baseline_mean": b, "gap": gap},
+            f"The model scores {v:.3f} on validation rows against {b:.3f} for the trivial baseline ({metric}); it "
+            f"closes only {skill:.0%} of the distance to a perfect score, and it does no better on its own training "
+            f"rows (gap {gap:+.3f}), so it is too simple or has too little time.",
+        )
+
+    def _budget_limited(self, search: SearchSummary | None, search_metric: str) -> Diagnosis | None:
+        """The search was still improving at the end. Only for bounded metrics, where the gain has a fixed scale."""
+        if search is None or search.gain_last_quarter is None or search_metric not in _BOUNDED_METRICS:
+            return None
+        t, gain = self.thresholds, float(search.gain_last_quarter)
+        severity = self._level(gain >= t["budget_limited.high_gain"], gain >= t["budget_limited.moderate_gain"])
+        if severity is None:
+            return None
+        return self._make(
+            DiagnosisKind.BUDGET_LIMITED, severity, (),
+            {"metric": search_metric, "gain_last_quarter": gain, "search_seconds": search.search_seconds},
+            f"The search was still improving at the end: its best {search_metric} rose by {gain:.3f} in the last "
+            f"quarter of its {search.search_seconds:.0f} s, so more time may help.",
+        )
+
+    def _wasted_budget(self, search: SearchSummary | None) -> Diagnosis | None:
+        if search is None or search.search_seconds <= 0:
+            return None
+        t, share = self.thresholds, float(search.share_after_best)
+        severity = self._level(share >= t["wasted_budget.high_share"], share >= t["wasted_budget.moderate_share"])
+        if severity is None:
+            return None
+        return self._make(
+            DiagnosisKind.WASTED_BUDGET, severity, (),
+            {"share_after_best": share, "time_to_best": search.time_to_best, "search_seconds": search.search_seconds},
+            f"The search found its best configuration after {search.time_to_best:.1f} s of {search.search_seconds:.1f} s "
+            f"and found nothing better in the remaining {share:.0%} of the time.",
+        )
+
+    def _missing_values(self, profile: DatasetProfile, column: str) -> Diagnosis | None:
+        t, share = self.thresholds, float(profile.missing_ratio.get(column, 0.0))
+        severity = self._level(share >= t["missing_values.high_share"], share >= t["missing_values.moderate_share"])
+        if severity is None:
+            return None
+        return self._make(DiagnosisKind.MISSING_VALUES, severity, (column,), {"missing_share": share},
+                          f"'{column}' is empty in {share:.0%} of the training rows.")
+
+    def _identifier_column(self, profile: DatasetProfile, column: str) -> Diagnosis | None:
+        if column not in profile.id_like_columns:
+            return None
+        distinct = int(profile.unique_counts.get(column, 0))
+        return self._make(DiagnosisKind.IDENTIFIER_COLUMN, Severity.HIGH, (column,),
+                          {"distinct_values": distinct, "rows": int(profile.rows)},
+                          f"'{column}' looks like an identifier ({distinct} different values in {profile.rows} training "
+                          "rows); a model can only memorise it, it cannot learn from it.")
+
+    def _constant_column(self, profile: DatasetProfile, column: str) -> Diagnosis | None:
+        distinct = int(profile.unique_counts.get(column, 0))
+        share = float(profile.main_value_share.get(column, 1.0 if distinct <= 1 else 0.0))
+        if distinct > 1 and share < self.thresholds["constant_column.near_constant_share"]:
+            return None
+        text = "has one value only" if distinct <= 1 else f"has the same value in {share:.1%} of the training rows"
+        return self._make(DiagnosisKind.CONSTANT_COLUMN, Severity.LOW, (column,),
+                          {"distinct_values": distinct, "main_value_share": share},
+                          f"'{column}' {text}, so it carries almost no information.")
+
+    def _redundant_features(self, pair: dict[str, Any]) -> Diagnosis | None:
+        t, r = self.thresholds, float(pair["correlation"])
+        severity = self._level(abs(r) >= t["redundant_features.high_correlation"],
+                               abs(r) >= t["redundant_features.moderate_correlation"])
+        if severity is None:
+            return None
+        a, b = pair["columns"]
+        return self._make(DiagnosisKind.REDUNDANT_FEATURES, severity, (str(a), str(b)), {"correlation": r},
+                          f"'{a}' and '{b}' carry nearly the same information (correlation {r:+.3f} on the training "
+                          "rows); one of them is enough.")
+
+    def _unreliable_validation(self, assessment: Assessment, metric: str) -> Diagnosis | None:
+        values = assessment.values(metric, "validation")
+        values = values[np.isfinite(values)]
+        if len(values) < 2:
+            return None
+        t, sd = self.thresholds, float(values.std(ddof=1))
+        severity = self._level(sd >= t["unreliable_validation.high_std"], sd >= t["unreliable_validation.moderate_std"])
+        if severity is None:
+            return None
+        return self._make(
+            DiagnosisKind.UNRELIABLE_VALIDATION, severity, (),
+            {"metric": metric, "std": sd, "mean": float(values.mean()), "folds": len(values)},
+            f"The validation {metric} varies a lot between folds (standard deviation {sd:.3f} over {len(values)} "
+            "folds), so a single score says little and small differences between Setups are hard to see.",
+        )
+
+    def _weak_model_families(self, search: SearchSummary | None, search_metric: str) -> Diagnosis | None:
+        """Learner families clearly behind the best one that still took a real share of the search time."""
+        if search is None or search_metric not in _BOUNDED_METRICS or len(search.best_per_family) < 2:
+            return None
+        t = self.thresholds
+        sign = 1.0 if METRICS[search_metric].greater_is_better else -1.0
+        best_family = max(search.best_per_family, key=lambda f: (sign * search.best_per_family[f], f))
+        best = search.best_per_family[best_family]
+        total = sum(search.seconds_per_family.values()) or 1.0
+        weak = {}
+        for family in sorted(search.best_per_family):
+            gap = sign * (best - search.best_per_family[family])
+            time_share = search.seconds_per_family.get(family, 0.0) / total
+            if gap >= t["weak_model_families.min_gap"] and time_share >= t["weak_model_families.min_time_share"]:
+                weak[family] = (gap, time_share)
+        if not weak:
+            return None
+        evidence: dict[str, float | str] = {"families": ",".join(weak), "best_family": best_family,
+                                            "metric": search_metric}
+        for family, (gap, time_share) in weak.items():
+            evidence[f"gap.{family}"] = gap
+            evidence[f"time_share.{family}"] = time_share
+        names = ", ".join(f"{f} ({g:.3f} behind, {s:.0%} of the time)" for f, (g, s) in weak.items())
+        return self._make(DiagnosisKind.WEAK_MODEL_FAMILIES, Severity.LOW, (), evidence,
+                          f"These learner families were far behind {best_family} ({search_metric}) but still used "
+                          f"search time: {names}.")
+
     # ---------------------------------------------------------------- helpers
     @staticmethod
     def _used_columns(profile: DatasetProfile, config: ExperimentConfig) -> list[str]:
-        """Feature columns of the Setup, sorted by name."""
-        skipped = {profile.target_column, *config.excluded_columns}
+        """Feature columns of the Setup, sorted by name: not the target, not excluded, not dropped by a Data_Step."""
+        dropped = {c for step in as_specs(config.data_steps) if step.kind == "drop_columns" for c in step.columns}
+        skipped = {profile.target_column, *config.excluded_columns, *dropped}
         return sorted(str(c) for c in profile.column_names if c not in skipped)
 
     @staticmethod

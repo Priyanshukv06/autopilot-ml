@@ -24,9 +24,18 @@ from app.services.task_detector import TaskType
 THRESHOLDS = {
     "version": "test-1",
     "overfitting": {"moderate_gap": 0.125, "high_gap": 0.25},
+    # The rules of the full version, set so that the thin-rule tests below do not trigger them by accident.
+    "underfitting": {"max_gap": 0.03, "moderate_skill": 0.25, "high_skill": 0.125},
+    "budget_limited": {"moderate_gain": 0.005, "high_gain": 0.02},
+    "wasted_budget": {"moderate_share": 0.5, "high_share": 0.75},
     "class_imbalance": {"moderate_ratio": 3, "high_ratio": 9, "moderate_recall": 0.5, "high_recall": 0.25,
                         "min_ratio_for_recall": 1.5},
+    "missing_values": {"moderate_share": 0.4, "high_share": 0.7},
     "high_cardinality": {"moderate_distinct": 50, "moderate_unseen": 0.25, "high_unseen": 0.5},
+    "constant_column": {"near_constant_share": 0.99},
+    "redundant_features": {"moderate_correlation": 0.95, "high_correlation": 0.99},
+    "unreliable_validation": {"moderate_std": 0.05, "high_std": 0.08},
+    "weak_model_families": {"min_gap": 0.1, "min_time_share": 0.05},
 }
 CRITIC = Critic(CriticThresholds.from_mapping(THRESHOLDS))
 CONFIG = ExperimentConfig(target_column="target")
@@ -221,11 +230,19 @@ def test_default_thresholds_file_has_the_design_values():
     assert thresholds.version == "v0-start"
     assert thresholds.values == {
         "overfitting.moderate_gap": 0.10, "overfitting.high_gap": 0.20,
+        "underfitting.max_gap": 0.03, "underfitting.moderate_skill": 0.50, "underfitting.high_skill": 0.25,
+        "budget_limited.moderate_gain": 0.005, "budget_limited.high_gain": 0.02,
+        "wasted_budget.moderate_share": 0.50, "wasted_budget.high_share": 0.75,
         "class_imbalance.moderate_ratio": 3.0, "class_imbalance.high_ratio": 9.0,
         "class_imbalance.moderate_recall": 0.5, "class_imbalance.high_recall": 0.3,
         "class_imbalance.min_ratio_for_recall": 1.5,
+        "missing_values.moderate_share": 0.40, "missing_values.high_share": 0.70,
         "high_cardinality.moderate_distinct": 50.0, "high_cardinality.moderate_unseen": 0.30,
         "high_cardinality.high_unseen": 0.60,
+        "constant_column.near_constant_share": 0.99,
+        "redundant_features.moderate_correlation": 0.95, "redundant_features.high_correlation": 0.99,
+        "unreliable_validation.moderate_std": 0.05, "unreliable_validation.high_std": 0.08,
+        "weak_model_families.min_gap": 0.10, "weak_model_families.min_time_share": 0.05,
     }
 
 

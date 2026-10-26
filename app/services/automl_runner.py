@@ -1283,6 +1283,9 @@ class AutoMLRunner:
             "project": "autopilot-ml",
             "phase": "session" if result.session_id else "baseline",
         }
+        if result.session_id:
+            tags["session_id"] = result.session_id
         artifact_list: list[tuple[Path, str | None]] = [(model_path, "model")]
         artifact_list += [(path, "results") for path in artifacts]
-        return self.tracker.log_run(result.experiment_id, params, metrics, tags, artifact_list)
+        return self.tracker.log_run(result.experiment_id, params, metrics, tags, artifact_list,
+                                    parent_run_id=self.tracker.session_run_id(result.session_id))

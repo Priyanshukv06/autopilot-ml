@@ -676,6 +676,7 @@ Phase 2 extensions (spec task 3, 26 October 2026). Every new option defaults to 
 - `AutoMLRunner.run_experiment(..., split=None, evaluate_test=True, compute_importance=True, profile_rows="all", session_id=None, parent_experiment_id=None, proposal=None)`. With `evaluate_test=False` the test part is not used at all (no test metrics, baseline, predictions, importance or test-row notes). With `class_weight="balanced"` the runner passes scikit-learn's balanced sample weights to FLAML.
 - `ExperimentResult` gains `schema_version` (2), `search_metric`, `test_evaluated`, `best_config_per_estimator`, `search_summary`, `session_id`, `parent_experiment_id`, `proposal`, `setup_key`, `setup` and `profile_rows`.
 - `decision_view(result)` returns the record without the test score, test and baseline metrics, permutation importance and warnings, and without the meta-features unless the profile was made from the training part only. Decision components only ever see this view.
+- Task 10, records and tracking (`app/services/experiment_tracker.py`): `allocate_session_id()` reserves `SES-###` by creating its folder, as for experiments. `save_session`, `save_record` and `save_step_file` (`assessment.json`, `diagnoses.json`, `decision.json`) write JSON to a temporary file and then rename it over the old file, so a crash while writing never leaves a half-written record. `load_records()` reads Phase 1 records as schema version 1. `history_frame()` has a Session column, and `session_history_frame()` lists Sessions with their first and final validation and test scores. MLflow gets one parent run per Session (`start_session_run`, `finish_session_run`) and the runner logs each Experiment of a Session as its child run (tag `mlflow.parentRunId`).
 - Task 5: `Assessor(engine, folds, task_type, primary_metric, n_jobs, seed).assess(X_train, y_train, config, result)` returns an `Assessment` (one `FoldScore` per fold; `values(metric, part)`, `summary()`, `to_dict()`). `summarize_search(history, metric)` returns a `SearchSummary`, which the runner now saves in every record (`search_summary`). `unseen_category_shares(X_train, X_other)` gives the unseen share per categorical column; the Phase 1 test-row note now uses it, with the same text.
 
 ### 8.3 Dashboard sections
@@ -712,7 +713,7 @@ python scripts/compare_seeds.py --dataset data/sample/titanic.csv --target Survi
 
 ### 8.6 Tests (285, about 88 s on 26 October 2026)
 
-Phase 1 ended with the first three files below (47 tests, about 29 to 41 s). Phase 2 has added the others so far. Full suite on 26 October 2026 after task 9.1: 285 passed in 88.2 s on the laptop in chapter 7.
+Phase 1 ended with the first three files below (47 tests, about 29 to 41 s). Phase 2 has added the others so far. Full suite on 26 October 2026 after task 9.1: 285 passed in 88.4 s on the laptop in chapter 7.
 
 | File | Tests | What they cover |
 |---|---|---|
@@ -999,7 +1000,8 @@ Future scope (beyond the planned phases):
 | 2026-10-26 | Fix found by the Judge tests: equal differences are detected from the values, not from a rounded variance (section 4.7) | 032674e |
 | 2026-10-26 | Spec task 8.1: 25 Judge tests in `tests/test_judge.py` (the worked example by hand, every verdict, error metrics, equal differences, records, errors); 244 tests in total, all passing in 87.6 s | 00954da |
 | 2026-10-26 | Spec task 9: Resource_Manager (`app/services/resource_manager.py`, Algorithm 14): deadlines per step for measuring overruns, reserve from the previous step, stop rules in order | 733c86e |
-| 2026-10-26 | Spec task 9.1: 41 Resource_Manager tests with a fake clock, including 20 simulated Sessions; 285 tests in total, all passing in 88.2 s | see the commit of this date |
+| 2026-10-26 | Spec task 9.1: 41 Resource_Manager tests with a fake clock, including 20 simulated Sessions; 285 tests in total, all passing in 88.4 s | 47b55b7 |
+| 2026-10-26 | Spec task 10: records and tracking for Sessions (session IDs, atomic JSON writes, step files, Phase 1 records read as version 1, Session column, session history, MLflow parent and child runs; section 8.2) | see the commit of this date |
 
 ---
 

@@ -58,6 +58,7 @@ SESSION_SCHEMA_VERSION = 1
 CODE_ROOT = Path(__file__).resolve().parents[2]  # the repository of this code, for the code version
 SELECTORS: dict[str, Callable[[], StrategySelector]] = {"rules": RulesSelector}  # Phase 3 adds the others
 Progress = Callable[[str, int, str], None]
+RecordUpdate = Callable[[dict[str, Any]], None]  # receives a copy of session.json after every save
 AssessorFactory = Callable[..., Assessor]
 _LIBRARIES = ("flaml", "scikit-learn", "pandas", "numpy", "lightgbm", "xgboost", "mlflow")
 
@@ -186,7 +187,10 @@ class AutopilotSession:
         session: SessionSettings,
         progress: Progress | None = None,
         stop_requested: Callable[[], bool] | None = None,
+        on_update: RecordUpdate | None = None,
     ) -> SessionResult:
+        """``on_update`` is called with a copy of the session record each time ``session.json`` is
+        written (for the dashboard's live view); an error in it is logged and never stops the Session."""
         notify = progress or (lambda stage, step, message: None)
         stop_requested = stop_requested or (lambda: False)
         thresholds, selector = self._check(session)
@@ -210,7 +214,8 @@ class AutopilotSession:
         session_id = self.tracker.allocate_session_id()
         rm = ResourceManager(session.budget, self.clock)
         state = _State(self, session_id, session, base, thresholds, split, folds,
-                       [*notes, *split_notes, *fold_notes], self.planner.safe_exclusions(base, profile))
+                       [*notes, *split_notes, *fold_notes], self.planner.safe_exclusions(base, profile),
+                       on_update=on_update)
         write_json_atomic(self.tracker.session_dir(session_id) / "train_profile.json", to_jsonable(profile.to_dict()))
         state.save()
         state.start_mlflow(base)
@@ -507,11 +512,12 @@ class _State:
 
     def __init__(self, owner: AutopilotSession, session_id: str, session: SessionSettings, base: ExperimentConfig,
                  thresholds: CriticThresholds, split: OuterSplit, folds: SessionFolds, notes: list[str],
-                 first_exclusions: list[str]) -> None:
+                 first_exclusions: list[str], on_update: RecordUpdate | None = None) -> None:
         """``base`` is the user's base Setup with the task type, primary metric and CPU cores resolved."""
         self.owner = owner
         self.session_id = session_id
         self.session = session
+        self.on_update = on_update
         self.steps: list[SessionStep] = []
         self.start = owner.clock()
         self.record: dict[str, Any] = {
@@ -544,7 +550,13 @@ class _State:
     def save(self) -> None:
         self.record["steps"] = [step.to_dict() for step in self.steps]
         self.record["total_seconds"] = round(self.owner.clock() - self.start, 2)
-        self.owner.tracker.save_session(self.session_id, to_jsonable(self.record))
+        record = to_jsonable(self.record)  # new containers: what on_update gets shares nothing with self.record
+        self.owner.tracker.save_session(self.session_id, record)
+        if self.on_update is not None:
+            try:
+                self.on_update(record)
+            except Exception:  # a viewer must never stop a Session
+                logger.exception("The update callback of %s failed", self.session_id)
 
     def add_step(self, step: SessionStep) -> None:
         self.steps.append(step)

@@ -78,7 +78,8 @@ def render_dataset_profile(dataset: LoadedDataset) -> DatasetProfile:
                 st.warning(warning, icon="⚠️")
         else:
             st.success("No data-quality issues detected by the baseline checks.")
-        st.caption("Rule-based checks. Automatic diagnosis and remediation are planned (Critic / Strategy Engine).")
+        st.caption("Rule-based checks. In the autonomous mode the Critic turns many of these problems into "
+                   "Diagnoses and the Strategy_Engine proposes fixes.")
     with tab_targets:
         st.dataframe(
             compute_target_candidates(df),

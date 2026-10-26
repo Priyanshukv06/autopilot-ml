@@ -1,4 +1,4 @@
-"""AutoPilot-ML Streamlit dashboard (Phase 1 baseline).
+"""AutoPilot-ML Streamlit dashboard: the single-experiment mode (Phase 1) and the autonomous mode.
 
 Run from the project root:
     streamlit run app/main.py
@@ -17,8 +17,17 @@ if str(PROJECT_ROOT) not in sys.path:
 import streamlit as st  # noqa: E402
 
 from app import __version__  # noqa: E402
-from app.components.dataset_profiler import render_dataset_profile, render_target_selection  # noqa: E402
-from app.components.dataset_uploader import render_dataset_uploader  # noqa: E402
+from app.components.autopilot_viewer import (  # noqa: E402
+    render_memory_records,
+    render_session_run,
+    render_session_settings,
+)
+from app.components.dataset_profiler import (  # noqa: E402
+    TargetSelection,
+    render_dataset_profile,
+    render_target_selection,
+)
+from app.components.dataset_uploader import LoadedDataset, render_dataset_uploader  # noqa: E402
 from app.components.experiment_viewer import (  # noqa: E402
     LAST_RESULT_KEY,
     render_experiment_config,
@@ -29,56 +38,75 @@ from app.components.results_viewer import render_explainability, render_results 
 from app.core.config import Settings, get_settings  # noqa: E402
 from app.core.logging_config import setup_logging  # noqa: E402
 
+SINGLE, AUTONOMOUS = "Single experiment", "Autonomous run"
 
-def render_sidebar(settings: Settings) -> None:
+
+def render_sidebar(settings: Settings) -> str:
+    """The mode switch and the module statuses; returns the chosen mode."""
     with st.sidebar:
         st.markdown("## AutoPilot-ML")
-        st.caption(f"Phase 1 baseline · v{__version__}")
+        st.caption(f"v{__version__}")
+        mode = st.radio("Mode", [SINGLE, AUTONOMOUS], key="mode",
+                        help="Single experiment: one FLAML search, scored on the test part (the Phase 1 baseline). "
+                        "Autonomous run: a Session that diagnoses, changes and judges Setups on its own.")
         st.markdown("**Implemented (current baseline)**")
         st.markdown(
             "- ✅ Dataset profiler\n- ✅ Task detection\n- ✅ FLAML AutoML search\n"
             "- ✅ Test-set evaluation + trivial baselines\n- ✅ Permutation feature importance\n"
             "- ✅ MLflow tracking (local)\n- ✅ Experiment history"
         )
-        st.markdown("**Autonomous layer, first version (command line: `scripts/run_autopilot.py`)**")
+        st.markdown("**Autonomous layer (command line: `scripts/run_autopilot.py`)**")
         st.markdown(
-            "- ✅ Experiment planner and session loop\n- ✅ Critic (3 diagnoses)\n"
-            "- ✅ Strategy engine (3 strategies)\n- ✅ Judge (corrected t-test)\n- ✅ Resource manager"
+            "- ✅ Experiment planner and session loop\n- ✅ Critic (12 diagnoses, thresholds from the critic study)\n"
+            "- ✅ Strategy engine (9 strategies)\n- ✅ Judge (corrected t-test)\n- ✅ Resource manager\n"
+            "- ✅ Experiment memory (written and shown, not used for decisions yet)"
         )
         st.markdown("**Planned, not implemented**")
         st.markdown(
-            "- 🕒 Autonomous mode in this dashboard\n- 🕒 Full critic and strategies\n- 🕒 Experiment memory"
+            "- 🕒 Autonomous mode in this dashboard\n- 🕒 Learned strategy choice from the memory\n"
+            "- 🕒 Benchmark against FLAML alone and AutoGluon"
         )
         st.divider()
         st.caption("Runs fully locally: no paid APIs, no cloud services.")
         st.caption(f"MLflow store: `{settings.mlflow_tracking_uri}`")
+    return mode
 
 
 def main() -> None:
     st.set_page_config(page_title="AutoPilot-ML", layout="wide")
     settings = get_settings()
     setup_logging(settings.log_level)
-    render_sidebar(settings)
+    mode = render_sidebar(settings)
 
     st.title("AutoPilot-ML")
-    st.caption("Autonomous Machine Learning Experimentation & Self-Optimization Framework · Phase 1 baseline")
+    if mode == SINGLE:
+        st.caption("Single experiment: one FLAML search on the training split, scored on the held-out test split.")
+    else:
+        st.caption("Autonomous run: a Session of Experiments. Every change is judged on the training part; "
+                   "the test part is scored once, at the end.")
 
     st.header("1 · Dataset")
     dataset = render_dataset_uploader(settings)
+    selection = None
     if dataset is not None:
         profile = render_dataset_profile(dataset)
-
         st.header("2 · Target")
         selection = render_target_selection(dataset, profile)
-
-        if selection is not None:
-            st.header("3 · Experiment Configuration")
-            config = render_experiment_config(settings, selection, dataset)
-
-            st.header("4 · Run AutoML")
-            render_run_section(dataset.df, config, settings)
     else:
         st.info("Upload a CSV file or choose a bundled sample dataset to begin.")
+
+    if mode == AUTONOMOUS:
+        render_autonomous_mode(settings, dataset, selection)
+    else:
+        render_single_mode(settings, dataset, selection)
+
+
+def render_single_mode(settings: Settings, dataset: LoadedDataset | None, selection: TargetSelection | None) -> None:
+    if selection is not None:
+        st.header("3 · Experiment Configuration")
+        config = render_experiment_config(settings, selection, dataset)
+        st.header("4 · Run AutoML")
+        render_run_section(dataset.df, config, settings)
 
     result = st.session_state.get(LAST_RESULT_KEY)
     if result is not None:
@@ -89,6 +117,19 @@ def main() -> None:
 
     st.header("7 · Experiment History")
     render_experiment_history(settings)
+
+
+def render_autonomous_mode(settings: Settings, dataset: LoadedDataset | None,
+                           selection: TargetSelection | None) -> None:
+    plan = None
+    if selection is not None:
+        st.header("3 · Session settings")
+        plan = render_session_settings(settings, selection, dataset)
+    st.header("4 · Autonomous run")
+    render_session_run(dataset.df if selection is not None else None, plan, settings)
+    if selection is not None:
+        st.header("5 · Experiment memory for this dataset")
+        render_memory_records(settings, dataset.df, selection.target)
 
 
 if __name__ == "__main__":

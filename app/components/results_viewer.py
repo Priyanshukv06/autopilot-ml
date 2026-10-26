@@ -96,8 +96,8 @@ def _render_train_vs_test(result: ExperimentResult) -> None:
         column_config={"Train": number, "Test": number, "Gap (train − test)": number},
     )
     st.caption(
-        "A large train/test gap can indicate overfitting. Automatic diagnosis of this gap is planned "
-        "(Critic module) and is not performed in the baseline."
+        "A large train/test gap can indicate overfitting. This mode only shows it; in the autonomous mode "
+        "the Critic diagnoses it on the training part and the Strategy_Engine tries a fix."
     )
 
 

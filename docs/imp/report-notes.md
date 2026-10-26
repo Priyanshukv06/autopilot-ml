@@ -667,9 +667,9 @@ mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db --port 5000 --workers 1
 python scripts/compare_seeds.py --dataset data/sample/titanic.csv --target Survived --exclude-a PassengerId,Name --exclude-b PassengerId,Name,Ticket,Cabin --seeds 1 2 3 4 5 --budget 30
 ```
 
-### 8.6 Tests (131, about 66 s on 26 October 2026)
+### 8.6 Tests (145, about 84 s on 26 October 2026)
 
-Phase 1 ended with the first three files below (47 tests, about 29 to 41 s). Phase 2 has added the others so far. Full suite on 26 October 2026 after task 4.1: 131 passed in 65.8 s on the laptop in chapter 7.
+Phase 1 ended with the first three files below (47 tests, about 29 to 41 s). Phase 2 has added the others so far. Full suite on 26 October 2026 after task 5.1: 145 passed in 83.9 s on the laptop in chapter 7.
 
 | File | Tests | What they cover |
 |---|---|---|
@@ -679,6 +679,8 @@ Phase 1 ended with the first three files below (47 tests, about 29 to 41 s). Pha
 | `tests/test_flaml_capabilities.py` | 9 | The FLAML features the autonomous layer relies on (section 5.2): starting points, fixed refits and their repeatability, sample weights, `custom_hp`, invalid starting points, the resampler, and that the upper value of an integer range is never searched |
 | `tests/test_splits.py` | 15 | Outer split equal to Phase 1 (including EXP-001's saved test rows), session folds, stratification fallbacks, fingerprints |
 | `tests/test_engine_extensions.py` | 28 | Without new options FLAML gets exactly the Phase 1 call; starting points, limits, weights and `max_iter` reach FLAML; `fit_config` predicts the original labels; limit conversion and starting-value checks; runner options; with `evaluate_test=False` no test row is fitted, predicted or profiled; `decision_view` has no test information; `setup_key` stability (pinned value); 9 invalid options rejected before an experiment ID is given out |
+| `tests/test_search_summary.py` | 5 | A small history worked by hand, error metrics, unusable histories, and the saved EXP-001 and EXP-002 histories (search time, time of the best trial, share after it, number of trials) |
+| `tests/test_assessor.py` | 9 | One score per fold with every metric; means and standard deviations; only the fold's training rows of the Training_Part are refitted (the whole dataset is refused); class weights from each fold's training rows; a cached Setup is not refitted but a new configuration is; a failing fold fails the Assessment; unseen shares per fold against a hand-made answer; regression; two separate Assessments with real FLAML refits agree within 1e-12 |
 | `tests/test_synthetic.py` | 32 | Same seed gives the same data; problem order does not matter; each of the 8 problems measured at its requested strength in both the dataset and the fresh sample (imbalance ratio, share of changed labels, correlation of copies, distinct share of IDs, share of the main value, unseen share of categories, empty share); our profiler flags the planted ID, constant and high-cardinality columns; clean data has none of them; a model scores the same on the fresh sample as in cross-validation; 11 invalid requests rejected |
 
 ### 8.7 Code listings worth including in the report
@@ -938,7 +940,8 @@ Future scope (beyond the planned phases):
 | 2026-10-26 | Spec task 3.1: 28 tests in `tests/test_engine_extensions.py` and one more FLAML check (integer upper bound never searched); 99 tests in total, all passing in 64.8 s (section 8.6) | e54e69c |
 | 2026-10-26 | Spec task 4: `research/` package and the synthetic data generator `research/synthetic.py` with 8 problem kinds and a fresh sample (section 5.4, Algorithm 8); section 5.4 started with Algorithm 7 from task 3 | d5bd0ac |
 | 2026-10-26 | Spec task 4.1: 32 generator tests in `tests/test_synthetic.py`; 131 tests in total, all passing in 65.8 s. A planned check that another seed is a different problem was dropped: logistic regression trained on the seed-10 binary dataset (1,000 rows) scored accuracy 0.758 on its own fresh sample (20,000 rows) and still 0.715 on seed 11's (5,000 rows) | c786048 |
-| 2026-10-26 | Spec task 5: `app/services/assessor.py` (Algorithm 9) and `app/services/search_summary.py` (Algorithm 10); the runner saves the search summary; cache key widened to setup key plus configuration (design updated); 5 search-summary tests, two of them on the saved EXP-001 and EXP-002 histories; throwaway Assessor check on Titanic (section 5.4) | see the commit of this date |
+| 2026-10-26 | Spec task 5: `app/services/assessor.py` (Algorithm 9) and `app/services/search_summary.py` (Algorithm 10); the runner saves the search summary; cache key widened to setup key plus configuration (design updated); 5 search-summary tests, two of them on the saved EXP-001 and EXP-002 histories; throwaway Assessor check on Titanic (section 5.4) | ee11363 |
+| 2026-10-26 | Spec task 5.1: 9 Assessor tests in `tests/test_assessor.py`, including two separate Assessments with real FLAML refits (LightGBM, 12 trees, 240 rows, 15 folds each) that agree within 1e-12; 145 tests in total, all passing in 83.9 s | see the commit of this date |
 
 ---
 

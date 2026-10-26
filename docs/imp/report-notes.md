@@ -654,9 +654,9 @@ mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db --port 5000 --workers 1
 python scripts/compare_seeds.py --dataset data/sample/titanic.csv --target Survived --exclude-a PassengerId,Name --exclude-b PassengerId,Name,Ticket,Cabin --seeds 1 2 3 4 5 --budget 30
 ```
 
-### 8.6 Tests (99, about 65 s on 26 October 2026)
+### 8.6 Tests (131, about 66 s on 26 October 2026)
 
-Phase 1 ended with the first three files below (47 tests, about 29 to 41 s). Phase 2 has added the last three so far. Full suite on 26 October 2026 after task 3.1: 99 passed in 64.8 s on the laptop in chapter 7.
+Phase 1 ended with the first three files below (47 tests, about 29 to 41 s). Phase 2 has added the others so far. Full suite on 26 October 2026 after task 4.1: 131 passed in 65.8 s on the laptop in chapter 7.
 
 | File | Tests | What they cover |
 |---|---|---|
@@ -666,6 +666,7 @@ Phase 1 ended with the first three files below (47 tests, about 29 to 41 s). Pha
 | `tests/test_flaml_capabilities.py` | 9 | The FLAML features the autonomous layer relies on (section 5.2): starting points, fixed refits and their repeatability, sample weights, `custom_hp`, invalid starting points, the resampler, and that the upper value of an integer range is never searched |
 | `tests/test_splits.py` | 15 | Outer split equal to Phase 1 (including EXP-001's saved test rows), session folds, stratification fallbacks, fingerprints |
 | `tests/test_engine_extensions.py` | 28 | Without new options FLAML gets exactly the Phase 1 call; starting points, limits, weights and `max_iter` reach FLAML; `fit_config` predicts the original labels; limit conversion and starting-value checks; runner options; with `evaluate_test=False` no test row is fitted, predicted or profiled; `decision_view` has no test information; `setup_key` stability (pinned value); 9 invalid options rejected before an experiment ID is given out |
+| `tests/test_synthetic.py` | 32 | Same seed gives the same data; problem order does not matter; each of the 8 problems measured at its requested strength in both the dataset and the fresh sample (imbalance ratio, share of changed labels, correlation of copies, distinct share of IDs, share of the main value, unseen share of categories, empty share); our profiler flags the planted ID, constant and high-cardinality columns; clean data has none of them; a model scores the same on the fresh sample as in cross-validation; 11 invalid requests rejected |
 
 ### 8.7 Code listings worth including in the report
 
@@ -922,7 +923,8 @@ Future scope (beyond the planned phases):
 | 2026-10-26 | Spec task 2.1: 15 split tests in `tests/test_splits.py`, including a check that the new rule gives exactly the test rows, in the same order, saved by EXP-001 (Titanic, seed 42); 70 tests in total, all passing | 49c5aab |
 | 2026-10-26 | Spec task 3: engine and runner extensions (starting points, search-space limits, class weights, separate search metric, `max_iter`, `fit_config`, `run_experiment` options for Sessions, `decision_view`, new record fields; section 8.2); found that FLAML's integer upper bounds are exclusive (section 5.2); a throwaway run on Titanic (10 s, seed 42, `max_iter=8`, temporary folder) showed every option reaching FLAML; all 70 tests still pass | 77ed822 |
 | 2026-10-26 | Spec task 3.1: 28 tests in `tests/test_engine_extensions.py` and one more FLAML check (integer upper bound never searched); 99 tests in total, all passing in 64.8 s (section 8.6) | e54e69c |
-| 2026-10-26 | Spec task 4: `research/` package and the synthetic data generator `research/synthetic.py` with 8 problem kinds and a fresh sample (section 5.4, Algorithm 8); section 5.4 started with Algorithm 7 from task 3 | see the commit of this date |
+| 2026-10-26 | Spec task 4: `research/` package and the synthetic data generator `research/synthetic.py` with 8 problem kinds and a fresh sample (section 5.4, Algorithm 8); section 5.4 started with Algorithm 7 from task 3 | d5bd0ac |
+| 2026-10-26 | Spec task 4.1: 32 generator tests in `tests/test_synthetic.py`; 131 tests in total, all passing in 65.8 s. A planned check that another seed is a different problem was dropped: logistic regression trained on the seed-10 binary dataset (1,000 rows) scored accuracy 0.758 on its own fresh sample (20,000 rows) and still 0.715 on seed 11's (5,000 rows) | see the commit of this date |
 
 ---
 

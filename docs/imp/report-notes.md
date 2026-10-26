@@ -420,6 +420,17 @@ Throwaway check on 26 October 2026 (Titanic, setup A, seed-42 split, session fol
 
 On the Titanic Diagnoses of Algorithm 11 this gives: drop `Ticket` (high; answers overfitting and high cardinality), drop `Cabin` (moderate), then smaller trees (moderate).
 
+**Algorithm 13: Judge** (`app/services/judge.py`, task 8; settings alpha 0.10, minimum gain 0, non-inferiority margin 0.005, decision D2)
+
+1. Check that both Assessments are complete, use the same folds (same fingerprint and number of folds) and the same primary metric; otherwise stop with an error, and the Session discards the candidate.
+2. On each fold j, d_j = candidate score minus accepted score on the validation rows, with the sign flipped for error metrics (RMSE, MAE, MSE, log loss), so positive always means the candidate is better. Folds where either score is missing are left out (at least 2 must remain).
+3. Count wins, losses and ties (|d_j| at most 1e-12, the refit tolerance of task 1).
+4. Corrected resampled t: t = mean(d) / sqrt((1/J + r) x var(d)), with J folds, r = validation rows per training row in a fold (1/4 for 5 folds) and var with J - 1 in the denominator; p(better) = P(T > t) and p(worse) = P(T < t) for Student's t with J - 1 degrees of freedom.
+5. Keep if mean(d) > minimum gain and p(better) <= alpha. Otherwise keep the simpler Setup if the candidate is simpler, mean(d) >= -margin and p(worse) > alpha. Otherwise discard.
+6. If all differences are equal (standard deviation at most 1e-12), decide on the mean alone and record no p-values.
+
+Why the correction: the 15 folds share most of their training rows, so their scores are not independent. With 15 folds the variance of the mean is taken as (1/15 + 1/4) times the fold variance instead of 1/15 of it. Worked example: d = (0.02, 0.01, 0.03, -0.01, 0.02) gives mean 0.014 and variance 0.00023, corrected t = 1.376 with 4 degrees of freedom and p(better) = 0.120, so the change is not kept at alpha 0.10; an uncorrected paired t-test would give t = 2.064 and p = 0.054 and would keep it.
+
 **Algorithm 10: search summary** (`app/services/search_summary.py`, task 5): from the trial history, the search time (end of the last trial), the time of the best trial (the first one if tied), the share of the search time after it, the gain of the best score in the last quarter of the time (signed so that positive is better), the number of trials, and the best score and total trial time of each learner family. On the saved EXP-001 and EXP-002 histories it gives exactly the numbers of section 9.10 (best at 42.9 s and 23.2 s; 17.1 s and 36.8 s after the best; XGBoost 34.6 s in EXP-001).
 
 ---
@@ -969,7 +980,8 @@ Future scope (beyond the planned phases):
 | 2026-10-26 | Spec task 6: thin Critic (`app/services/critic.py`, Algorithm 11) with thresholds file `critic_thresholds.toml` (`v0-start`); one threshold added to the design (`min_ratio_for_recall`); throwaway check on Titanic gave the expected Diagnoses (section 5.4) | 1d49fe4 |
 | 2026-10-26 | Spec task 6.1: 44 Critic tests in `tests/test_critic.py`; 190 tests in total, all passing in 86.7 s | 6b1ac70 |
 | 2026-10-26 | Spec task 7: Strategy_Catalogue (`app/services/strategies.py`: drop_columns, class_weight_balanced, regularised_search_space) and the rule-based Strategy_Engine (`app/services/strategy_engine.py`), Algorithm 12 in section 5.4 | 32db280 |
-| 2026-10-26 | Spec task 7.1: 21 Strategy tests and 8 Strategy_Engine tests; 219 tests in total, all passing in 86.7 s | see the commit of this date |
+| 2026-10-26 | Spec task 7.1: 21 Strategy tests and 8 Strategy_Engine tests; 219 tests in total, all passing in 86.7 s | a8629f3 |
+| 2026-10-26 | Spec task 8: Judge with the corrected resampled t-test (`app/services/judge.py`, Algorithm 13 with a worked example in section 5.4) | see the commit of this date |
 
 ---
 

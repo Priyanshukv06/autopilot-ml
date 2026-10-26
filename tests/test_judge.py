@@ -10,6 +10,7 @@ from app.services.judge import Judge, JudgeError, JudgeSettings, corrected_resam
 
 ACCEPTED = [0.70, 0.72, 0.68, 0.71, 0.69]
 WORKED = [0.02, 0.01, 0.03, -0.01, 0.02]  # the worked example in design.md and the report notes
+RULES = JudgeSettings(alpha=0.10)  # the rule tests below were written for alpha 0.10, the default before task 17
 
 
 def assessment(scores, metric="f1", fingerprint="folds-1", failed=False):
@@ -17,7 +18,7 @@ def assessment(scores, metric="f1", fingerprint="folds-1", failed=False):
     return Assessment("key", "EXP-001", "lgbm", {}, metric, fingerprint, folds, 1.0, failed=failed)
 
 
-def compare(differences, simpler=False, metric="f1", settings=None, accepted=ACCEPTED):
+def compare(differences, simpler=False, metric="f1", settings=RULES, accepted=ACCEPTED):
     candidate = [a + d for a, d in zip(accepted, differences)]
     judge = Judge(settings, test_train_ratio=0.25)
     return judge.compare(assessment(accepted, metric), assessment(candidate, metric), candidate_is_simpler=simpler)
@@ -37,8 +38,13 @@ def test_corrected_t_and_p_values_against_hand_computation():
     assert decision.t_better == pytest.approx(1.37612, abs=1e-5)
     assert decision.p_better == pytest.approx(0.1204, abs=1e-4)  # Student's t, 4 degrees of freedom
     assert decision.p_worse == pytest.approx(1 - decision.p_better)
-    # Without the correction, t = 0.014 / sqrt(0.00023 / 5) = 2.064 and p = 0.054: it would be kept.
+    # Without the correction, t = 0.014 / sqrt(0.00023 / 5) = 2.064 and p = 0.054: it would be kept at 0.10.
     assert decision.verdict == "discard"
+    assert compare(WORKED, settings=JudgeSettings()).verdict == "keep"  # p = 0.120 is below the default 0.20
+
+
+def test_the_defaults_are_the_judge_study_choice():
+    assert JudgeSettings() == JudgeSettings(alpha=0.20, min_gain=0.0, non_inferiority_margin=0.005)
 
 
 def test_corrected_t_refuses_unusable_input():
@@ -75,7 +81,7 @@ def test_simpler_but_clearly_worse_is_discarded():
 def test_minimum_gain():
     small_but_sure = [0.015, 0.016, 0.014, 0.015, 0.015]
     assert compare(small_but_sure).verdict == "keep"
-    assert compare(small_but_sure, settings=JudgeSettings(min_gain=0.02)).verdict == "discard"
+    assert compare(small_but_sure, settings=JudgeSettings(alpha=0.10, min_gain=0.02)).verdict == "discard"
 
 
 def test_error_metrics_have_the_sign_flipped():

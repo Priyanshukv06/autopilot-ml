@@ -2,8 +2,8 @@
 
 The Judge compares two Assessments on the same Session_Folds, fold by fold, on the Primary_Metric,
 with the corrected resampled t-test (Nadeau and Bengio, 2003; Bouckaert and Frank, 2004). The
-correction matters because the folds overlap: an ordinary paired t-test over 15 folds would be far
-too confident.
+correction matters because the folds overlap: an ordinary paired t-test over a Session's 25 folds
+would be far too confident.
 
 Decision rules (design.md section 9), with d = candidate minus accepted on each fold, signed so that
 positive is better:
@@ -33,7 +33,7 @@ class JudgeError(ValueError):
 
 @dataclass(frozen=True)
 class JudgeSettings:
-    alpha: float = 0.10
+    alpha: float = 0.20  # chosen by the judge study (task 17); 0.10 before it
     min_gain: float = 0.0
     non_inferiority_margin: float = 0.005
 

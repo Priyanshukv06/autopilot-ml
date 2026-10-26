@@ -67,7 +67,7 @@ class SessionSettings:
     base: ExperimentConfig  # target, task, primary metric, seed, test share, exclusions
     budget: SessionBudget
     n_splits: int = 5
-    n_repeats: int = 3
+    n_repeats: int = 5  # chosen by the judge study (task 17); 3 before it
     judge: JudgeSettings = field(default_factory=JudgeSettings)
     thresholds_path: Path | None = None
     selector: str = "rules"

@@ -136,6 +136,7 @@ def run_session(tmp_path, *, total=1000, experiments=6, patience=3, shifts=None,
         base=base or ExperimentConfig(target_column="target", task_type=TaskType.BINARY, primary_metric="f1",
                                       dataset_name="synthetic"),
         budget=SessionBudget(total_seconds=total, max_experiments=experiments, patience=patience),
+        n_repeats=3,  # the scripted Assessor scores 15 folds (BASE_SCORES)
     )
     result = session.run(data, plan, stop_requested=stop)
     record = json.loads((settings.experiments_dir / result.session_id / "session.json").read_text(encoding="utf-8"))

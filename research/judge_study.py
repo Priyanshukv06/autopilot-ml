@@ -112,6 +112,7 @@ def _search_and_assess(engine: AutoMLEngine, data: Any, config: ExperimentConfig
     X = data.frame.drop(columns=[TARGET, *config.excluded_columns])
     y = data.frame[TARGET]
     weights = compute_sample_weight("balanced", y) if config.class_weight == "balanced" else None
+    work_dir.mkdir(parents=True, exist_ok=True)  # FLAML writes its search log here
     result = engine.fit(X, y, task_type=TaskType.BINARY, metric=METRIC, time_budget=time_budget, seed=seed,
                         n_jobs=n_jobs, estimator_list=None, work_dir=work_dir, max_iter=max_iter,
                         search_space_limits=config.search_space_limits or None, sample_weight=weights)
@@ -139,7 +140,6 @@ def run_pair(pair: StudyPair, *, work_dir: Path, engine: AutoMLEngine | None = N
     folds, _ = make_session_folds(data.frame[TARGET], TaskType.BINARY, N_SPLITS, max(REPEATS), seed=pair.seed + 1)
     setup_a = ExperimentConfig(target_column=TARGET, task_type=TaskType.BINARY, primary_metric=METRIC)
     setup_b = kind.change(setup_a, data)
-    work_dir.mkdir(parents=True, exist_ok=True)
     result_a, assessment_a, fresh_a = _search_and_assess(engine, data, setup_a, folds, pair.seed, n_jobs,
                                                          work_dir / "a", max_iter, time_budget)
     result_b, assessment_b, fresh_b = _search_and_assess(engine, data, setup_b, folds, pair.seed, n_jobs,

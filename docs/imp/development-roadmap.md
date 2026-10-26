@@ -23,7 +23,7 @@ Done when: a CSV can go from upload to a tracked, explained model that can be re
 
 ## Phase 2: Rule-based autonomous loop (next)
 
-Goal: given a dataset, a target and a budget, the system runs the loop by itself: diagnose, propose a change, test it fairly on 25 folds of the training data, keep or drop it, and stop within the budget. The test part is used only once, at the end.
+Goal: given a dataset, a target and a budget, the system runs the loop by itself: diagnose, propose a change, test it fairly on 15 folds of the training data, keep or drop it, and stop within the budget. The test part is used only once, at the end.
 
 | Milestone | Tasks in `tasks.md` | Result |
 |---|---|---|
@@ -46,7 +46,7 @@ Tasks 29 to 35: SMOTE through FLAML's resampler, target encoding and token featu
 
 Confirmed on 26 October 2026 (details in `design.md`):
 
-- D2: the Judge refits fixed configurations on the Session's folds and uses the corrected resampled t-test. The judge study (task 17) set the defaults to 5 repeats of 5 folds (25 folds; 15 before) and alpha 0.20 (0.10 before).
+- D2: the Judge refits fixed configurations on the Session's folds and uses the corrected resampled t-test. The judge study (task 17) set alpha to 0.20 (0.10 before). The default stays 3 repeats of 5 folds (15 folds): 5 repeats accepted the same changes at five thirds of the cost.
 - D3: small public OpenML datasets are downloaded once; `imbalanced-learn` is added only for the optional SMOTE task.
 - D4: AutoGluon gets its own conda environment if it does not install next to our pinned libraries (checked at the start of task 23).
 - D5: not needed. Priyanshu Verma builds all tasks; Salil Kushwah is credited in the final report.

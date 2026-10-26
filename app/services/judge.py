@@ -2,7 +2,7 @@
 
 The Judge compares two Assessments on the same Session_Folds, fold by fold, on the Primary_Metric,
 with the corrected resampled t-test (Nadeau and Bengio, 2003; Bouckaert and Frank, 2004). The
-correction matters because the folds overlap: an ordinary paired t-test over a Session's 25 folds
+correction matters because the folds overlap: an ordinary paired t-test over a Session's 15 folds
 would be far too confident.
 
 Decision rules (design.md section 9), with d = candidate minus accepted on each fold, signed so that

@@ -6,7 +6,10 @@ import numpy as np
 import pytest
 
 from app.services.assessor import Assessment, FoldScore
+from app.services.automl_runner import ExperimentConfig
+from app.services.autopilot import SessionSettings
 from app.services.judge import Judge, JudgeError, JudgeSettings, corrected_resampled_t
+from app.services.resource_manager import SessionBudget
 
 ACCEPTED = [0.70, 0.72, 0.68, 0.71, 0.69]
 WORKED = [0.02, 0.01, 0.03, -0.01, 0.02]  # the worked example in design.md and the report notes
@@ -45,6 +48,8 @@ def test_corrected_t_and_p_values_against_hand_computation():
 
 def test_the_defaults_are_the_judge_study_choice():
     assert JudgeSettings() == JudgeSettings(alpha=0.20, min_gain=0.0, non_inferiority_margin=0.005)
+    plan = SessionSettings(base=ExperimentConfig(target_column="t"), budget=SessionBudget(60, 2))
+    assert plan.n_repeats == 3 and plan.judge == JudgeSettings()  # 3 repeats kept (report notes 9.13)
 
 
 def test_corrected_t_refuses_unusable_input():

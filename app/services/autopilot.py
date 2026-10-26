@@ -41,6 +41,7 @@ from app.services.automl_runner import (
 )
 from app.services.critic import Critic, CriticThresholds, Diagnosis, DiagnosisKind, ThresholdsError
 from app.services.evaluator import Evaluator
+from app.services.experiment_memory import ExperimentMemory, MemoryRecord, dataset_fingerprint
 from app.services.experiment_planner import Planner
 from app.services.experiment_tracker import ExperimentTracker, write_json_atomic
 from app.services.judge import Judge, JudgeDecision, JudgeSettings
@@ -147,6 +148,7 @@ class _Context:
     judge: Judge
     rm: ResourceManager
     notify: Progress
+    dataset_fingerprint: str = ""
 
     def diagnose(self, config: ExperimentConfig, result: ExperimentResult, assessment: Assessment) -> list[Diagnosis]:
         search = SearchSummary(**result.search_summary) if result.search_summary else None
@@ -163,13 +165,16 @@ class AutopilotSession:
         clock: Callable[[], float] = time.monotonic,
         enable_mlflow: bool = True,
         assessor_factory: AssessorFactory = Assessor,
+        memory: ExperimentMemory | None = None,
     ) -> None:
+        """``memory``: where every Verdict is recorded; by default ``experiments/memory/memory.jsonl``."""
         self.settings = settings or get_settings()
         self.engine = engine or FLAMLEngine()
         self.tracker = tracker or ExperimentTracker.from_settings(self.settings)
         self.clock = clock
         self.enable_mlflow = enable_mlflow
         self.assessor_factory = assessor_factory
+        self.memory = memory or ExperimentMemory(self.settings.experiments_dir / "memory" / "memory.jsonl")
         self.runner = AutoMLRunner(settings=self.settings, engine=self.engine, tracker=self.tracker,
                                    enable_mlflow=enable_mlflow)
         self.planner = Planner()
@@ -217,7 +222,7 @@ class AutopilotSession:
             assessor=self.assessor_factory(self.engine, folds, task_type, metric, session.budget.n_jobs,
                                            base.random_seed),
             critic=Critic(thresholds), judge=Judge(session.judge, test_train_ratio=folds.test_train_ratio),
-            rm=rm, notify=notify,
+            rm=rm, notify=notify, dataset_fingerprint=dataset_fingerprint(dataframe, base.target_column),
         )
 
         # 3-4. The first Experiment, its Assessment and its Diagnoses.
@@ -337,8 +342,37 @@ class AutopilotSession:
             assessment=_brief(assessment, ctx.metric), decision=decision.to_dict(), accepted=kept,
             cost=cost.to_dict(), status="completed", setup_key=result.setup_key,
         ))
+        self._remember(ctx, proposal, result, decision, cost.wall_seconds, cost.utility)
         ctx.notify("step", index, _step_text(state.steps[-1]))
         return _Accepted(candidate, result, assessment, new_diagnoses) if kept else accepted
+
+    def _remember(self, ctx: _Context, proposal: Proposal, result: ExperimentResult, decision: JudgeDecision,
+                  cost_seconds: float, utility: float | None) -> None:
+        """One Experiment_Memory record per Verdict (Requirement 14.1). It is only written in Phase 2."""
+        record = MemoryRecord(
+            record_id=f"{ctx.session_id}/{result.experiment_id}",
+            created_at=datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"),
+            session_id=ctx.session_id,
+            experiment_id=result.experiment_id,
+            dataset_name=result.dataset_name,
+            dataset_fingerprint=ctx.dataset_fingerprint,
+            task_type=ctx.task_type.value,
+            primary_metric=ctx.metric,
+            meta_features=to_jsonable(ctx.profile.meta_features()),
+            diagnoses=[{"kind": kind, "severity": severity} for kind, severity in proposal.answered],
+            strategy=proposal.spec.to_dict(),
+            verdict=decision.verdict,
+            mean_difference=decision.mean_difference,
+            std_difference=decision.std_difference,
+            n_folds=decision.n_folds,
+            cost_seconds=round(cost_seconds, 3),
+            utility=utility,
+            engine=f"{result.engine}=={result.engine_version}",
+        )
+        try:
+            self.memory.add(record)
+        except Exception:  # the memory must never stop a Session
+            logger.exception("Could not add a record to the Experiment_Memory")
 
     def _search(self, ctx: _Context, config: ExperimentConfig, parent: str | None,
                 proposal: dict[str, Any] | None) -> ExperimentResult:

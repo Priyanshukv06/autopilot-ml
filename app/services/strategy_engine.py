@@ -107,6 +107,8 @@ class Proposal:
     complexity: str
     reason: str
     rule_position: tuple[int, int]  # (row in the rule table, candidate in the row); the earliest if several
+    # (kind, severity) of each Diagnosis it answers, in the Critic's order (for the Experiment_Memory)
+    answered: tuple[tuple[str, str], ...] = ()
 
     def ranking_key(self) -> tuple[int, int, tuple[int, int], str]:
         return (SEVERITY_ORDER[self.severity], COST_ORDER[self.cost_class], self.rule_position, self.spec.key())
@@ -121,6 +123,7 @@ class Proposal:
             "complexity": self.complexity,
             "reason": self.reason,
             "rule_position": list(self.rule_position),
+            "answered": [{"kind": kind, "severity": severity} for kind, severity in self.answered],
         }
 
 
@@ -185,6 +188,7 @@ def propose(
                 complexity=strategy.complexity,
                 reason=f"{strategy.describe(spec.params)}. Answers: {'; '.join(_answer_text(d) for d in answered)}.",
                 rule_position=entry["position"],
+                answered=tuple((d.kind.value, d.severity.value) for d in answered),
             )
         )
     return RulesSelector().rank(proposals)

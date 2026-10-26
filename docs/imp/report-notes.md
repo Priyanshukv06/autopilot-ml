@@ -481,6 +481,10 @@ Since every deadline lies inside T, the steps end at most one step's overrun aft
 
 The profiler now also reports, on the rows it is given, each column's most common value share, near-constant columns and highly correlated numeric pairs. On the saved SES-001 records the full Critic adds "missing values high" for `Cabin` (77% empty) to the first Setup's Diagnoses, and finds "budget limited" (the search's best F1 still rose by 0.006 in its last quarter) and "weak model families" for the final Setup.
 
+**Algorithm 17: Experiment_Memory, version 1** (`app/services/experiment_memory.py`, task 15). After every Verdict the Session appends one line to `experiments/memory/memory.jsonl`: the dataset's fingerprint (a hash of its column names and types, number of rows and target) and the Meta_Features of its training part, the task and metric, the Diagnoses the Proposal answered (kind and severity), the Strategy and its parameters, the Verdict, the Judge's mean and standard deviation of the differences, the number of folds, the step's cost in seconds, its Utility, the engine version and the date. The file is only appended to, and a damaged line is skipped with a warning.
+
+Finding similar datasets: average each stored dataset's Meta_Features over its records, standardise every feature over the stored datasets (dropping features that do not vary), compare only the features both datasets have, and rank by Euclidean distance (same task type only, optionally leaving one dataset out). For the k nearest datasets (5 by default), each (Strategy, diagnosis kind) gets its number of observations, its keep rate with each observation weighted by 1 / (1 + distance), its mean gain when kept and its mean cost. In Phase 2 the memory is written and shown but does not influence any decision; Phase 3's learned strategy choice will read it. SES-001 ran before the memory existed, so the memory starts with the next Session.
+
 **Algorithm 16: Data_Steps** (`app/services/transforms.py`, task 12). A Data_Step is learned from the rows it is fitted on and then applied unchanged to other rows; no step reads the target.
 
 | Step | Learned from the training rows | Applied to other rows |
@@ -1109,7 +1113,8 @@ Future scope (beyond the planned phases):
 | 2026-10-26 | Spec task 13: the full Critic (all twelve Diagnoses, section 5.4) and the profiler's near-constant columns and correlated pairs; checked on the saved SES-001 records | 00ef933 |
 | 2026-10-26 | Spec task 13.1: 68 more Critic tests (112 in `tests/test_critic.py`) and 2 profiler tests; test counts in section 8.6 corrected from pytest's list (the runner file has 21 tests and the engine file 29); 396 tests in total, all passing in 114.2 s | 39c5569 |
 | 2026-10-26 | Spec task 14: the full Strategy_Catalogue (nine Strategies) and rule table (section 5.4); a throwaway 90 s Session on Titanic used the new data Strategies end to end; existing tests updated for the longer Proposal lists | b7869fe |
-| 2026-10-26 | Spec task 14.1: 30 more Strategy tests and 8 more Strategy_Engine tests; 434 tests in total, all passing in 112.0 s | see the commit of this date |
+| 2026-10-26 | Spec task 14.1: 30 more Strategy tests and 8 more Strategy_Engine tests; 434 tests in total, all passing in 112.0 s | 4fe539c |
+| 2026-10-26 | Spec task 15: Experiment_Memory version 1 (`app/services/experiment_memory.py`, Algorithm 17); the Session adds one record per Verdict; Proposals record the severities of the Diagnoses they answer | see the commit of this date |
 
 ---
 

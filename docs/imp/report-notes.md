@@ -443,6 +443,17 @@ Why the correction: the 15 folds share most of their training rows, so their sco
 
 Since every deadline lies inside T, the steps end at most one step's overrun after T, and that overrun is recorded.
 
+**Algorithm 15: autonomous Session, thin loop** (`app/services/autopilot.py` and `app/services/experiment_planner.py`, task 11)
+
+1. Check the settings (selector, folds, thresholds file); any error stops here and nothing is written.
+2. Drop rows without a target; make the outer split (training and test parts, as in Phase 1) and 3 x 5 Session_Folds of the training part (seed + 1); fingerprint them; profile the training part only.
+3. Reserve `SES-###`, write `session.json` (status running) and the training-part profile, and open the MLflow parent run.
+4. First Setup: the user's settings plus the identifier-like and constant columns of the training part left out. Search it with the first budget, on training rows only (no test score, no importance), assess it on the 15 folds and diagnose it. If this fails, the Session stops with status failed.
+5. Loop: if the user asked to stop, stop after the current step. Ask the Strategy_Engine for Proposals for the Accepted_Setup (changes not tried yet); ask the Resource_Manager whether to stop (user, error, time, Experiments, no Proposals, patience) and for the next budget. Take the first Proposal: apply its Strategy to a copy of the Accepted_Setup, start the search from the Accepted_Setup's best configuration of each learner family, search, assess and judge it against the Accepted_Setup. If it is kept (keep or keep_simpler) it becomes the Accepted_Setup and is diagnosed; otherwise the Accepted_Setup stays. A failure is recorded and counts as a discard. Record the step's cost and rewrite `session.json`.
+6. Final_Evaluation, the only use of the test part: score the first and the final model on it once each, with permutation importance for the final model; close the MLflow run; write `session.json` (status completed).
+
+Trial runs on 26 October 2026 in a temporary folder, not kept (Titanic, seed 42): a 60 s Session (at most 5 Experiments, MLflow off) and a 40 s Session (at most 4, MLflow on) both ran end to end and stopped for time within their budgets (52.3 s and 39.8 s). In both, the first Setup left out `PassengerId` and `Name`, and the first candidate dropped `Ticket`, as the rule table says. The 40 s Session's MLflow parent run had both Experiments as child runs. The measured results of the first real Session are in chapter 9 (task 11.2).
+
 **Algorithm 10: search summary** (`app/services/search_summary.py`, task 5): from the trial history, the search time (end of the last trial), the time of the best trial (the first one if tied), the share of the search time after it, the gain of the best score in the last quarter of the time (signed so that positive is better), the number of trials, and the best score and total trial time of each learner family. On the saved EXP-001 and EXP-002 histories it gives exactly the numbers of section 9.10 (best at 42.9 s and 23.2 s; 17.1 s and 36.8 s after the best; XGBoost 34.6 s in EXP-001).
 
 ---
@@ -676,6 +687,7 @@ Phase 2 extensions (spec task 3, 26 October 2026). Every new option defaults to 
 - `AutoMLRunner.run_experiment(..., split=None, evaluate_test=True, compute_importance=True, profile_rows="all", session_id=None, parent_experiment_id=None, proposal=None)`. With `evaluate_test=False` the test part is not used at all (no test metrics, baseline, predictions, importance or test-row notes). With `class_weight="balanced"` the runner passes scikit-learn's balanced sample weights to FLAML.
 - `ExperimentResult` gains `schema_version` (2), `search_metric`, `test_evaluated`, `best_config_per_estimator`, `search_summary`, `session_id`, `parent_experiment_id`, `proposal`, `setup_key`, `setup` and `profile_rows`.
 - `decision_view(result)` returns the record without the test score, test and baseline metrics, permutation importance and warnings, and without the meta-features unless the profile was made from the training part only. Decision components only ever see this view.
+- Task 11, the Session: `AutopilotSession(settings, engine, tracker, clock, enable_mlflow).run(df, SessionSettings(base, budget, n_splits=5, n_repeats=3, judge, thresholds_path, selector="rules"), progress, stop_requested)` returns a `SessionResult` (status, steps, first and final Experiment IDs, stop reason, Final_Evaluation, total seconds). `Planner.first_setup` and `Planner.candidate` build the Setups. Command line: `python scripts/run_autopilot.py --dataset data/sample/titanic.csv --target Survived --seconds 300 --max-experiments 8 --cores -1 --seed 42`.
 - Task 10, records and tracking (`app/services/experiment_tracker.py`): `allocate_session_id()` reserves `SES-###` by creating its folder, as for experiments. `save_session`, `save_record` and `save_step_file` (`assessment.json`, `diagnoses.json`, `decision.json`) write JSON to a temporary file and then rename it over the old file, so a crash while writing never leaves a half-written record. `load_records()` reads Phase 1 records as schema version 1. `history_frame()` has a Session column, and `session_history_frame()` lists Sessions with their first and final validation and test scores. MLflow gets one parent run per Session (`start_session_run`, `finish_session_run`) and the runner logs each Experiment of a Session as its child run (tag `mlflow.parentRunId`).
 - Task 5: `Assessor(engine, folds, task_type, primary_metric, n_jobs, seed).assess(X_train, y_train, config, result)` returns an `Assessment` (one `FoldScore` per fold; `values(metric, part)`, `summary()`, `to_dict()`). `summarize_search(history, metric)` returns a `SearchSummary`, which the runner now saves in every record (`search_summary`). `unseen_category_shares(X_train, X_other)` gives the unseen share per categorical column; the Phase 1 test-row note now uses it, with the same text.
 
@@ -1003,7 +1015,8 @@ Future scope (beyond the planned phases):
 | 2026-10-26 | Spec task 9: Resource_Manager (`app/services/resource_manager.py`, Algorithm 14): deadlines per step for measuring overruns, reserve from the previous step, stop rules in order | 733c86e |
 | 2026-10-26 | Spec task 9.1: 41 Resource_Manager tests with a fake clock, including 20 simulated Sessions; 285 tests in total, all passing in 88.4 s | 47b55b7 |
 | 2026-10-26 | Spec task 10: records and tracking for Sessions (session IDs, atomic JSON writes, step files, Phase 1 records read as version 1, Session column, session history, MLflow parent and child runs; section 8.2) | 3612e12 |
-| 2026-10-26 | Spec task 10.1: 8 tracking tests in `tests/test_tracking.py`; 293 tests in total, all passing in 95.3 s | see the commit of this date |
+| 2026-10-26 | Spec task 10.1: 8 tracking tests in `tests/test_tracking.py`; 293 tests in total, all passing in 95.3 s | 847621f |
+| 2026-10-26 | Spec task 11: Planner, the autonomous Session loop and `scripts/run_autopilot.py` (Algorithm 15 in section 5.4); two trial Sessions in a temporary folder ran end to end (not kept) | see the commit of this date |
 
 ---
 

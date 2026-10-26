@@ -911,6 +911,10 @@ class AutoMLRunner:
             failure = {"experiment_id": experiment_id, "status": "failed", "error": str(exc), "config": config.__dict__}
             (work_dir / "error.json").write_text(json.dumps(to_jsonable(failure), indent=2, default=str), "utf-8")
             logger.error("%s failed: %s", experiment_id, exc)
+            try:  # lets a Session name the failed Experiment in its record
+                exc.experiment_id = experiment_id
+            except AttributeError:
+                pass
             raise
 
     def _execute(
@@ -1059,6 +1063,14 @@ class AutoMLRunner:
         return result
 
     # ------------------------------------------------------------- helpers
+    def prepare(
+        self, dataframe: pd.DataFrame, config: ExperimentConfig
+    ) -> tuple[pd.DataFrame, pd.Series, TaskType, str, list[str]]:
+        """Check the data and configuration as a run does, and return the features, the labelled target
+        values (rows without a target dropped, in their original order), the task type, the primary
+        metric and notes. Sessions use it to make their splits on exactly the rows a run will use."""
+        return self._prepare(dataframe, config)
+
     def _prepare(
         self, df: pd.DataFrame, config: ExperimentConfig
     ) -> tuple[pd.DataFrame, pd.Series, TaskType, str, list[str]]:

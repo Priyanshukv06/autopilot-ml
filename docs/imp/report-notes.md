@@ -369,6 +369,27 @@ This costs 2k runs per decision, so the budget split has to allow for it. Cheape
 
 **P7. Group-aware validation** (option): keep rows of the same group, for example the same `Ticket`, inside one fold, for data where new rows will come from new groups. On Titanic it is not needed to make validation and test agree (section 9.7); it is a choice about what kind of new data to expect.
 
+### 5.4 Implemented in Phase 2
+
+Added as each spec task is built. Full code shapes are in the spec's `design.md`.
+
+**Algorithm 7: search-space limits and starting points** (`FLAMLEngine.custom_hp` and `check_starting_points`, task 3)
+
+1. For each limited setting, take FLAML's own spec of that learner's search space for the training data size.
+2. Work out the range FLAML really searches: `lower .. upper - 1` for a plain integer range, `lower .. upper` otherwise (section 5.2).
+3. Narrow it with the user's inclusive bounds (never widen it); stop with an error if fewer than two values are left.
+4. Write the new range back in FLAML's form (upper + 1 for a plain integer range), keeping the domain type, and move `init_value` and `low_cost_init_value` inside it.
+5. For each starting configuration, drop FLAML's bookkeeping keys, then check every value against the limited space: right type and inside the searched range, or one of the choices. A configuration with any value outside is left out, with a warning naming the settings.
+
+**Algorithm 8: synthetic dataset with planted problems** (`research/synthetic.py`, task 4), used to test the Critic and the Judge against known answers.
+
+1. Make the rows of the dataset and of a fresh sample (20,000 rows by default) in one call to `make_classification` (8 informative features, class weights when imbalance is planted, no label flips) or `make_regression` (8 informative features plus noise with a third of the signal's standard deviation, so the best possible R2 is 0.9).
+2. Split them into the dataset and the fresh sample, stratified for classification.
+3. Plant each requested problem in both parts in a fixed order, each from its own random stream derived from the seed: change labels (label noise), add noisy copies of 2 columns with a chosen correlation, add random numeric columns, add an integer ID column with a chosen share of distinct values, add a column with a chosen share of one main value, add a category column with strength x rows levels drawn at random, and empty a chosen share of the cells of 2 columns. Counts are exact in each part.
+4. Return the dataset, the fresh sample and the list of planted problems with their columns.
+
+Because both parts come from one generator, a model's score on the fresh sample estimates its true score. Checked on 26 October 2026: a binary dataset with all eight problems (1,000 rows plus 20,000 fresh rows) is made in 0.1 s.
+
 ---
 
 ## 6. Proposed flowchart, DFD and block diagrams
@@ -900,7 +921,8 @@ Future scope (beyond the planned phases):
 | 2026-10-26 | Spec task 2: `app/services/splits.py` (outer split and session folds with fingerprints); the runner now uses the shared split rule; all 55 tests still pass | 70ec049 |
 | 2026-10-26 | Spec task 2.1: 15 split tests in `tests/test_splits.py`, including a check that the new rule gives exactly the test rows, in the same order, saved by EXP-001 (Titanic, seed 42); 70 tests in total, all passing | 49c5aab |
 | 2026-10-26 | Spec task 3: engine and runner extensions (starting points, search-space limits, class weights, separate search metric, `max_iter`, `fit_config`, `run_experiment` options for Sessions, `decision_view`, new record fields; section 8.2); found that FLAML's integer upper bounds are exclusive (section 5.2); a throwaway run on Titanic (10 s, seed 42, `max_iter=8`, temporary folder) showed every option reaching FLAML; all 70 tests still pass | 77ed822 |
-| 2026-10-26 | Spec task 3.1: 28 tests in `tests/test_engine_extensions.py` and one more FLAML check (integer upper bound never searched); 99 tests in total, all passing in 64.8 s (section 8.6) | see the commit of this date |
+| 2026-10-26 | Spec task 3.1: 28 tests in `tests/test_engine_extensions.py` and one more FLAML check (integer upper bound never searched); 99 tests in total, all passing in 64.8 s (section 8.6) | e54e69c |
+| 2026-10-26 | Spec task 4: `research/` package and the synthetic data generator `research/synthetic.py` with 8 problem kinds and a fresh sample (section 5.4, Algorithm 8); section 5.4 started with Algorithm 7 from task 3 | see the commit of this date |
 
 ---
 

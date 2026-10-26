@@ -74,6 +74,14 @@ The resource manager decides how to split the total budget between experiments, 
 5. AutoPilot-ML without strategy selection (random or fixed order): tests H3.
 6. The full AutoPilot-ML: tests H1 and H4.
 
+## Studies of the components
+
+Before the parts are trusted inside the loop, each one is measured on its own. Details are in the spec (`.kiro/specs/autopilot-ml/`, Requirements 6, 10 and 25):
+
+- **Critic study:** precision and recall of each diagnosis on synthetic datasets with planted problems, plus clean datasets for false alarms. For overfitting and unreliable validation, the ground truth comes from a large fresh sample (20,000 rows) drawn from the same generator. Thresholds are tuned on one set of seeds and reported on another.
+- **Judge study:** the false-keep rate and the power of the Judge, on pairs of setups whose true difference is measured on the fresh sample, for several values of alpha and of the number of fold repeats. Defaults are chosen on one set of seeds and reported on another.
+- **Judge agreement study (Phase 3):** how often the cheap Judge (refits on 15 folds) gives the same verdict as a strict comparison that re-runs full FLAML searches on several inner splits, with Cohen's kappa and the cost of each method.
+
 ## Things that could make the results misleading
 
 - **Noise from time-limited search:** FLAML and AutoGluon stop on time, not on trial count. We use several seeds and paired comparisons.

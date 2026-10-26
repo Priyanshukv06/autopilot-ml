@@ -11,7 +11,7 @@ Rules for keeping it up to date:
 - Mark anything that is not built yet as planned.
 - Longer text that is already written lives in `PROJECT.md` (same folder). This file points to it instead of copying it.
 
-Last updated: 2026-10-22
+Last updated: 2026-10-26
 
 ---
 
@@ -120,6 +120,7 @@ Still to add: success criteria with numbers, once the first Phase 2 results exis
 - Use mature open-source libraries instead of rebuilding them (FLAML, scikit-learn, MLflow, Streamlit). FLAML is used unchanged.
 - Rules set at the start of the project: do not over-engineer; no LLM just for the label "agentic"; no paid APIs; no cloud; business logic separate from the UI; reusable modules with type hints; clear error handling; tests for the important parts; an evaluation method for every research component; never invent results, and label anything not built as planned.
 - One logical change per commit, with conventional commit messages.
+- Spec-driven development (from Phase 2): the plan is a Kiro spec in `.kiro/specs/autopilot-ml/` (in the workspace folder, outside this repository): `requirements.md` (32 requirements, 160 numbered acceptance criteria written as WHEN/IF/THEN/SHALL statements), `design.md` (components, code shapes, rules, data formats, decisions D1 to D8) and `tasks.md` (35 tasks plus 21 test and run sub-tasks, each one commit, each linked to the criteria it satisfies, with a dependency graph and groups of tasks that can run in parallel). It was written on 26 October 2026, after the Phase 1 review, to fix the order of work and the interfaces before building. A script checked that every task's requirement links exist and that every criterion is covered.
 
 ### 4.2 Phases
 
@@ -130,7 +131,7 @@ Still to add: success criteria with numbers, once the first Phase 2 results exis
 | 3 | Learned strategy selection (bandits, memory), AutoGluon engine, benchmark, ablations | Planned |
 | 4 | Optional local LLM explanations, SHAP, API, packaging | Later |
 
-Steps and "done when" checks for each phase: `development-roadmap.md`.
+Steps and "done when" checks for each phase: `development-roadmap.md` (summary) and the spec's `tasks.md` (detail). Phase 2 is built in four milestones: M0 groundwork (tasks 1 to 4.1), M1 a thin loop that runs end to end with three diagnoses and three strategies (tasks 5 to 11.2), M2 the full version with the component studies (tasks 12 to 17), M3 the dashboard and the Phase 2 measurement (tasks 18 and 19).
 
 ### 4.3 Work done in Phase 1
 
@@ -285,6 +286,17 @@ Details checked in the FLAML 2.7.0 source and in the EXP-001 and EXP-002 trial l
 - Sampling (training on a growing sample) is used only with a holdout and more than 40,000 training rows, so it never applied to our datasets: every trial used the whole training part. Classes with fewer than 20 training rows would be copied (`auto_augment`); this also never applied.
 
 ### 5.3 Planned (draft designs; they will change as they are built)
+
+Update, 26 October 2026: the current design is the spec's `design.md` (`.kiro/specs/autopilot-ml/`). The drafts P1 to P7 below are kept for the history of the design. What changed:
+
+- New component, the Assessor: it refits a setup's best configuration (no search) on fixed Session_Folds of the training part, 3 repeats of 5-fold cross-validation, and records per-fold scores. The Critic and the Judge both read these scores.
+- P6 is replaced by the Judge: paired differences on the 15 folds, the corrected resampled t-test of Nadeau and Bengio (2003) in the repeated form of Bouckaert and Frank (2004), and three verdicts: keep, keep_simpler (simpler and not worse) and discard. The expensive version in P6 (full searches on several inner splits) becomes the strict reference in the judge agreement study (Requirement 25). Decision D2, still to be confirmed.
+- P1: the thresholds move to a TOML file with a version label (`critic_thresholds.toml`). Two more kinds are added: budget_limited and wasted_budget. The thin loop starts with overfitting, high_cardinality and class_imbalance.
+- P2: strategies are split into a thin set (drop_columns, class_weight_balanced, regularised_search_space) and a full set. Data changes (frequency encoding, rare-category grouping, missing indicators) are learned inside each fold.
+- P3: the learned selectors treat each pair of strategy and diagnosis kind as an arm, with statistics from similar past datasets in the memory.
+- P5: the first experiment gets 35% of the time by default (30% to 40% allowed), budgets are counted in measured wall-clock time, and the default patience is 3 discards in a row.
+- P7: group-aware folds are now optional (Requirement 28).
+- New rule: inside a Session, the test part is used once, at the end, for the first and the final model only (the Final_Evaluation), and decision components only see records with every test number removed.
 
 **P1. Critic.** Decisions use training and validation data only, never the test set. Starting rules, to be tuned on synthetic datasets with planted problems and frozen before the final evaluation:
 
@@ -855,6 +867,7 @@ Future scope (beyond the planned phases):
 | 2026-10-12 | Documents split into `docs/imp` (maintained) and `docs/unimp` (archived); links updated; roadmap updated after Phase 1 | e090039, 28a52cc |
 | 2026-10-12 | Report notes started; ticket-overlap check, paired bootstrap and paired tests; shared-ticket explanation corrected; roadmap step for fair comparison of changes | e3dd52d |
 | 2026-10-22 | FLAML 2.7.0 internals read in the source and checked against the EXP-001 and EXP-002 logs (section 5.2, 9.10); `scripts/plot_search_history.py` and three EXP-001 charts; matplotlib pinned; plain-language guide `how-it-works.md` with 10 diagrams, all parsed with Mermaid 11.15.0 | 5722435, afa3b7c |
+| 2026-10-26 | Kiro spec written for Phases 2 and 3 (`.kiro/specs/autopilot-ml/`: 32 requirements with 160 acceptance criteria, design with decisions D1 to D8, 35 tasks plus 21 sub-tasks); links and coverage checked by a script; design diagrams parsed with Mermaid 11.15.0; roadmap rewritten as a summary of the spec; section 5.3 updated; steering rule updated to follow the spec | see the commit of this date |
 
 ---
 
@@ -895,6 +908,8 @@ Charts already made (in `docs/imp/images`, from `scripts/plot_search_history.py`
 - Render the diagrams as images
 - Back up `experiments/` and `mlruns/` regularly (they are not in git)
 - Check whether the department wants AI-assisted tools declared (the Kiro editor includes an AI assistant)
+- Design decisions waiting for the team (spec `design.md`): D2 the Judge design (before task 8); D3 OpenML downloads and `imbalanced-learn` (before tasks 20 and 29); D4 a separate environment for AutoGluon (task 23); D5 who takes which track
+- The spec in `.kiro/specs/autopilot-ml/` is outside the git repository, like the steering rule. Keep a copy with the report material, or move `.kiro` into the repository if the repository folder becomes the Kiro workspace
 - Find out which warnings pytest listed once on 22 October: one of three identical test runs ended with "47 passed, 350 warnings", the other two with no warnings. The output of that run was not kept, so the warning types are unknown. All tests passed every time
 
 ---

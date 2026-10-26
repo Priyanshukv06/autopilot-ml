@@ -205,11 +205,11 @@ We plan to compare six systems: a manual baseline, FLAML, AutoGluon, AutoPilot-M
 ## Roadmap
 
 1. Baseline: profiling, task detection, FLAML, evaluation, MLflow, dashboard, history (done)
-2. Rule-based critic, strategy catalogue, planner loop, experiment memory, budget enforcement (next)
+2. Rule-based loop: assessor, critic, strategy catalogue and rule engine, judge, resource manager, planner, records and experiment memory, dashboard autonomous mode (next)
 3. Learned strategy selection (bandits, memory-based), benchmark datasets, AutoGluon baseline, ablation study
-4. Optional extras: local LLM explanations, an API, packaging
+4. Optional extras: SMOTE, more data strategies, SHAP, local LLM explanations, an API, packaging
 
-Steps and exit criteria are in [docs/imp/development-roadmap.md](docs/imp/development-roadmap.md).
+The summary is in [docs/imp/development-roadmap.md](docs/imp/development-roadmap.md). The detailed plan is a Kiro spec (requirements, design and ordered tasks) in the workspace folder `.kiro/specs/autopilot-ml/`, one level above this repository.
 
 ## Future work
 

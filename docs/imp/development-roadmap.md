@@ -1,6 +1,12 @@
 # Development roadmap
 
-Each phase ends with something we can check. Only Phase 1 is done. Everything after it is planned.
+This page is the short version of the plan. The detailed, task-by-task plan is the Kiro spec in the workspace folder `.kiro/specs/autopilot-ml/` (one level above this repository):
+
+- `requirements.md`: what each part must do, as numbered acceptance criteria (Requirements 1 to 32).
+- `design.md`: how it is built: components, code shapes, rules, thresholds, data formats, and the decisions D1 to D8.
+- `tasks.md`: the ordered tasks, each one commit, with tests, requirement links and a dependency graph.
+
+If this page and the spec disagree, the spec is right, and this page should be fixed. There are no dates: the order of the tasks is what matters.
 
 ## Phase 1: Baseline (done)
 
@@ -17,43 +23,41 @@ Done when: a CSV can go from upload to a tracked, explained model that can be re
 
 ## Phase 2: Rule-based autonomous loop (next)
 
-1. **Critic** (`critic.py`): structured diagnoses for overfitting, underfitting, imbalance, missingness, high cardinality, unseen categories at prediction time, low variance, redundancy, unreliable validation (validation scores that vary a lot from split to split) and excessive time, with thresholds kept in config.
-   Done when: tests on synthetic datasets trigger each diagnosis on purpose, and the diagnoses are saved in `summary.json`.
-2. **Strategy catalogue**: class weights, resampling (SMOTE, which needs `imbalanced-learn` added), dropping or selecting columns, encoding high-cardinality columns, a search space biased towards regularisation, a restricted model list.
-   Done when: each strategy is a tested change to `ExperimentConfig` or to the data.
-3. **Strategy engine v1** (`strategy_engine.py`): a rule table from diagnosis to candidate strategies, ranked by a fixed priority.
-   Done when: the same diagnosis always gives the same ranking, and the rule table is documented.
-4. **Fair comparison of changes**: the loop keeps a change only if it improves the validation score consistently over several splits of the training data, compared split by split (the same paired idea as `scripts/compare_seeds.py`, but on validation data). The held-out test set is never used for these decisions; it only reports the final result. Optionally, related rows (for example passengers sharing a ticket) are kept inside one fold, for data where new rows will come from new groups. Added after Phase 1: on Titanic the choice of split alone moved the test F1 more than the change being tested, and on one split FLAML's validation score preferred the setup that did worse on the test set.
-   Done when: the planner's keep-or-discard decision uses this check, with tests.
-5. **Planner and loop** (`experiment_planner.py`): baseline run, then critic, then strategy, then the next run, until the budget is used up or nothing improves.
-   Done when: the loop runs on all four sample datasets without any input, and stays within the budget.
-6. **Experiment memory v1** (`experiment_memory.py`): stores meta-features, diagnoses, strategy, model, config, change in score and cost.
-   Done when: records survive a restart, and the k most similar past datasets can be retrieved.
-7. **Resource manager v1** (`resource_manager.py`): total time, maximum experiments, CPU cores (`n_jobs`), and the split of the budget between experiments.
-   Done when: the budget is never exceeded by more than the retraining time, and any overrun is logged.
+Goal: given a dataset, a target and a budget, the system runs the loop by itself: diagnose, propose a change, test it fairly on 15 folds of the training data, keep or drop it, and stop within the budget. The test part is used only once, at the end.
+
+| Milestone | Tasks in `tasks.md` | Result |
+|---|---|---|
+| M0 Groundwork | 1 to 4.1 | FLAML features checked; session splits; engine extensions (warm start, search-space limits, class weights, refit of one configuration); synthetic data generator |
+| M1 Thin loop | 5 to 11.2 | Assessor, Critic (3 diagnoses), 3 strategies with the rule engine, Judge, Resource_Manager, Session records, Planner and loop; a first real Session on Titanic from the command line |
+| M2 Full Phase 2 | 12 to 17 | Data changes learned inside folds, the full Critic and catalogue, Experiment_Memory v1, the critic study (precision and recall) and the judge study (false keeps and power) |
+| M3 Show and measure | 18 to 19 | Dashboard autonomous mode; the loop against FLAML alone at the same budget; documents updated |
+
+Done when: the loop runs unattended on the development datasets within the budget; every decision is recorded with its evidence, effect and cost; nothing in the decision path reads the test part (checked by a test); the critic study, the judge study and the Phase 2 measurement are in the report notes; all tests pass.
 
 ## Phase 3: Learning and evaluation
 
-1. Strategy selection as a multi-armed bandit, with reward = change in score per second of compute. Compared against the fixed rules on regret and time to target.
-2. Memory-based warm start: try the strategies that helped on similar datasets first. Checked with an ablation, with and without memory, on datasets the memory has not seen.
-3. `AutoGluonEngine`, implementing the same engine interface, so the same benchmark can run FLAML and AutoGluon.
-4. Benchmark setup: dataset suite, budgets, seeds, result tables and statistical tests, all from one script, with the raw results saved as CSV.
-5. Ablation study and write-up (see `research-direction.md`).
+Tasks 20 to 28: development and evaluation datasets (fixed in advance and kept apart), learned strategy choice (Thompson sampling and UCB1 over past outcomes from similar datasets), ablation switches, comparison systems (manual baseline, FLAML alone, AutoGluon), a resumable benchmark (budgets of 2, 5 and 10 minutes, at least 5 seeds), the statistics (Friedman and Nemenyi, Wilcoxon with Holm's correction, effect sizes, time-to-target), the judge agreement study, and the final documents.
 
-## Phase 4: Later
+## Optional (after Phase 3)
 
-- An optional local LLM (through Ollama) to explain diagnoses and strategy choices in plain language. It will not replace the measurable decision logic.
-- SHAP explanations, automatic target detection, leakage checks.
-- FastAPI service, Docker image, PostgreSQL-backed tracking.
+Tasks 29 to 35: SMOTE through FLAML's resampler, target encoding and token features, group-aware folds, SHAP, target suggestion and a leakage check, local language-model summaries (never used for decisions), an API and a Docker image.
+
+## Decisions still needed
+
+From `design.md`:
+
+- D2: the Judge design (refit fixed configurations on 15 folds, with the corrected resampled t-test). Confirm before task 8.
+- D3: downloading small public OpenML datasets once, and `imbalanced-learn` for the optional SMOTE task. Needed before tasks 20 and 29.
+- D4: whether AutoGluon gets its own conda environment. Checked at the start of task 23.
+- D5: who takes Track 1 (decision path) and Track 2 (evidence). Optional.
 
 ## Commits
 
 One logical change per commit, with conventional commit messages, for example:
 
 ```text
-feat: add autonomous critic
-feat: add strategy selection
-feat: add experiment memory
-test: cover overfitting diagnosis
-docs: describe strategy rule table
+feat: add session splits
+feat: add the judge
+test: cover the information barrier
+docs: describe the critic rules
 ```

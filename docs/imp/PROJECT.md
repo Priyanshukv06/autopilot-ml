@@ -171,6 +171,8 @@ There are seven sections: Dataset, Target, Experiment Configuration, Run AutoML,
 
 ## 10. Proposed modules (planned)
 
+The detailed and current design of these modules is the Kiro spec in `.kiro/specs/autopilot-ml/` (requirements, design and ordered tasks). It adds two components to the list below: the Assessor, which refits a setup's best configuration on 15 fixed folds of the training data, and the Judge, which keeps a change only when the paired fold differences support it (corrected resampled t-test). The summary below is kept as written for the Phase 1 review.
+
 Every planned module comes with a way to evaluate it:
 
 - `experiment_planner.py`: `plan(profile, memory, budget_state) -> ExperimentConfig`. Evaluated by the number of experiments and the time needed to reach a target score, compared with a fixed plan.

@@ -280,7 +280,7 @@ Task 1 of the spec (26 October 2026): automated checks in `tests/test_flaml_capa
 - Using FLAML's `DataTransformer` and the XGBoost learner class directly did not reproduce the predictions of the same configuration trained through `AutoML` (largest difference in predicted probability 0.245), so it is not used as a fallback.
 - `sample_weight` (balanced class weights): accepted; the mean predicted survival probability on the test part rose from 0.371 to 0.442 (LightGBM, 37 trees). FLAML also weights its validation score: the same first configuration scored a validation loss of 0.2286 without weights and 0.2045 with them. The Judge therefore compares unweighted fold scores.
 - `custom_hp`: with the LightGBM `num_leaves` domain capped at 32 (FLAML's own starting value of 4 kept), all 40 trials stayed within the cap.
-- Read in the FLAML 2.7.0 source while building task 3: the search never tries the `upper` value of an integer range (`normalize` and `denormalize` in `tune/space.py` use `upper - 1` unless the range is quantized). FLAML's own spaces are written this way, for example `min_child_samples` uses `upper=2**7 + 1` for "at most 128". So our limit "at most 32" becomes `upper=33`. FLAML's own validity check of a starting value (`is_valid`) still accepts `upper` itself, so our engine checks against the range that is really searched.
+- Read in the FLAML 2.7.0 source while building task 3: the search never tries the `upper` value of an integer range (`normalize` and `denormalize` in `tune/space.py` use `upper - 1` unless the range is quantized). FLAML's own spaces are written this way, for example `min_child_samples` uses `upper=2**7 + 1` for "at most 128". So our limit "at most 32" becomes `upper=33`. Task 3.1 confirms it with a test: the top of the scaled range maps to 32 for `lograndint(4, 33)`, to 8 for `randint(1, 9)` and to 10 for the quantized `qrandint(2, 10, 2)`. FLAML's own validity check of a starting value (`is_valid`) still accepts `upper` itself, so our engine checks against the range that is really searched.
 - A starting configuration outside the search space (`num_leaves` = 1,000,000) was dropped and the search continued from FLAML's default, but FLAML's warning could not be captured, so our engine checks starting points itself and records the warning. FLAML makes this check only when `max_iter` is above 1, which is why a fixed refit (`max_iter=1`) trains the configuration as given.
 - `resampler`: a stand-in resampler was called on the training rows of each fold (569 or 570 rows) and once on all 712 training rows, 11 times for 2 trials, never on validation rows. Combining it with `sample_weight` raises `ValueError`.
 
@@ -633,13 +633,18 @@ mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db --port 5000 --workers 1
 python scripts/compare_seeds.py --dataset data/sample/titanic.csv --target Survived --exclude-a PassengerId,Name --exclude-b PassengerId,Name,Ticket,Cabin --seeds 1 2 3 4 5 --budget 30
 ```
 
-### 8.6 Tests (47, about 29 to 41 s)
+### 8.6 Tests (99, about 65 s on 26 October 2026)
+
+Phase 1 ended with the first three files below (47 tests, about 29 to 41 s). Phase 2 has added the last three so far. Full suite on 26 October 2026 after task 3.1: 99 passed in 64.8 s on the laptop in chapter 7.
 
 | File | Tests | What they cover |
 |---|---|---|
 | `tests/test_task_detector.py` | 16 | Detection for 7 kinds of target, confidence, missing values, unusable targets, rejected and allowed overrides, target candidates, default target |
 | `tests/test_profiler.py` | 11 | Shape and types, missing values and duplicates, column flags, class distribution, the 4 imbalance levels, regression summary, JSON output and meta-features, bad input |
 | `tests/test_automl_runner.py` | 20 | Real short FLAML runs (binary with MLflow and model reload, multiclass with ROC-AUC, regression), 7 invalid configurations, impossible override, too few rows, warning handling, unseen categories, a non-FLAML engine, the record left by a failed run, evaluator metrics against scikit-learn, baselines, permutation importance, metric checks |
+| `tests/test_flaml_capabilities.py` | 9 | The FLAML features the autonomous layer relies on (section 5.2): starting points, fixed refits and their repeatability, sample weights, `custom_hp`, invalid starting points, the resampler, and that the upper value of an integer range is never searched |
+| `tests/test_splits.py` | 15 | Outer split equal to Phase 1 (including EXP-001's saved test rows), session folds, stratification fallbacks, fingerprints |
+| `tests/test_engine_extensions.py` | 28 | Without new options FLAML gets exactly the Phase 1 call; starting points, limits, weights and `max_iter` reach FLAML; `fit_config` predicts the original labels; limit conversion and starting-value checks; runner options; with `evaluate_test=False` no test row is fitted, predicted or profiled; `decision_view` has no test information; `setup_key` stability (pinned value); 9 invalid options rejected before an experiment ID is given out |
 
 ### 8.7 Code listings worth including in the report
 
@@ -894,7 +899,8 @@ Future scope (beyond the planned phases):
 | 2026-10-26 | Spec task 1: FLAML capability checks (8 tests in `tests/test_flaml_capabilities.py`, all passing; 55 tests in total); findings in section 5.2; design updated (refit through `max_iter=1`, our own check of starting points) | da4dadc |
 | 2026-10-26 | Spec task 2: `app/services/splits.py` (outer split and session folds with fingerprints); the runner now uses the shared split rule; all 55 tests still pass | 70ec049 |
 | 2026-10-26 | Spec task 2.1: 15 split tests in `tests/test_splits.py`, including a check that the new rule gives exactly the test rows, in the same order, saved by EXP-001 (Titanic, seed 42); 70 tests in total, all passing | 49c5aab |
-| 2026-10-26 | Spec task 3: engine and runner extensions (starting points, search-space limits, class weights, separate search metric, `max_iter`, `fit_config`, `run_experiment` options for Sessions, `decision_view`, new record fields; section 8.2); found that FLAML's integer upper bounds are exclusive (section 5.2); a throwaway run on Titanic (10 s, seed 42, `max_iter=8`, temporary folder) showed every option reaching FLAML; all 70 tests still pass | see the commit of this date |
+| 2026-10-26 | Spec task 3: engine and runner extensions (starting points, search-space limits, class weights, separate search metric, `max_iter`, `fit_config`, `run_experiment` options for Sessions, `decision_view`, new record fields; section 8.2); found that FLAML's integer upper bounds are exclusive (section 5.2); a throwaway run on Titanic (10 s, seed 42, `max_iter=8`, temporary folder) showed every option reaching FLAML; all 70 tests still pass | 77ed822 |
+| 2026-10-26 | Spec task 3.1: 28 tests in `tests/test_engine_extensions.py` and one more FLAML check (integer upper bound never searched); 99 tests in total, all passing in 64.8 s (section 8.6) | see the commit of this date |
 
 ---
 

@@ -138,3 +138,20 @@ def test_resampler_cannot_be_combined_with_sample_weights(titanic):
     with pytest.raises(ValueError):
         AutoML().fit(X_train, y_train, estimator_list=["lgbm"], resampler=RecordingResampler(),
                      sample_weight=weights, max_iter=2, **COMMON)
+
+
+def test_integer_upper_bound_is_never_searched():
+    from flaml.tune.space import denormalize
+
+    # The top of the scaled 0-to-1 range maps to upper - 1 for plain integer ranges, so a limit of
+    # "at most 32" must be written upper=33 (FLAMLEngine.custom_hp does this). Quantized ranges
+    # include their upper value.
+    space = {
+        "leaves": tune.lograndint(lower=4, upper=33),
+        "depth": tune.randint(lower=1, upper=9),
+        "even": tune.qrandint(lower=2, upper=10, q=2),
+    }
+    top = denormalize({"leaves": 1.0, "depth": 1.0, "even": 1.0}, space, {}, {}, np.random.RandomState(0))
+    assert top == {"leaves": 32, "depth": 8, "even": 10}
+    # FLAML's own validity check of a starting value still accepts the upper value itself.
+    assert space["leaves"].is_valid(33)

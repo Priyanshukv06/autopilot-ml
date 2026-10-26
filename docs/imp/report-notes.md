@@ -271,6 +271,17 @@ sort the columns by importance
 - Validation rule (FLAML 2.7.0 source): 5-fold cross-validation if rows x columns / 0.9 < 10,000,000 x budget / 3600 and rows < 100,000; otherwise a holdout split. Titanic used cross-validation (recorded at 10 s and 60 s); California housing used holdout at 10 s.
 - After the search, the best configuration is retrained on all training rows (`retrain_full=True`). The search may stop early once it has converged (`early_stop=True`).
 
+Task 1 of the spec (26 October 2026): automated checks in `tests/test_flaml_capabilities.py` (8 tests) of the FLAML features the autonomous layer relies on. All measured on the Titanic seed-42 training part (712 rows) unless stated, with `n_jobs=-1` on the laptop in chapter 7:
+
+- `starting_points`: a search started from a given LightGBM configuration evaluated exactly that configuration as its first trial.
+- `max_iter=1` with a starting configuration trains exactly that configuration on all given rows, with no search. This is how the Assessor refits a setup. Two refits gave identical predictions (largest difference 0 for XGBoost and LightGBM, 3.3e-16 for random forest), so the tolerance is set to 1e-12.
+- Cost of one refit: XGBoost with 304 trees on 570 Titanic rows, median 0.24 s (largest 0.36 s, 5 runs); XGBoost with 300 trees and 64 leaves on 13,210 California housing rows, median 1.49 s (3 runs). So 15 refits cost about 4 s on Titanic and about 22 s on California housing for these configurations.
+- Using FLAML's `DataTransformer` and the XGBoost learner class directly did not reproduce the predictions of the same configuration trained through `AutoML` (largest difference in predicted probability 0.245), so it is not used as a fallback.
+- `sample_weight` (balanced class weights): accepted; the mean predicted survival probability on the test part rose from 0.371 to 0.442 (LightGBM, 37 trees). FLAML also weights its validation score: the same first configuration scored a validation loss of 0.2286 without weights and 0.2045 with them. The Judge therefore compares unweighted fold scores.
+- `custom_hp`: with the LightGBM `num_leaves` domain capped at 32 (FLAML's own starting value of 4 kept), all 40 trials stayed within the cap.
+- A starting configuration outside the search space (`num_leaves` = 1,000,000) was dropped and the search continued from FLAML's default, but FLAML's warning could not be captured, so our engine checks starting points itself and records the warning.
+- `resampler`: a stand-in resampler was called on the training rows of each fold (569 or 570 rows) and once on all 712 training rows, 11 times for 2 trials, never on validation rows. Combining it with `sample_weight` raises `ValueError`.
+
 Details checked in the FLAML 2.7.0 source and in the EXP-001 and EXP-002 trial logs (22 October 2026). The plain-language version, with diagrams, is `how-it-works.md` section 6.
 
 - One pass of the search loop runs exactly one trial: pick a learner, let its CFO search propose one configuration, train and score it (5 models with cross-validation), update that learner's records. EXP-001 made 290 passes in 60 s, and 59.7 s of that went into training and scoring.
@@ -867,7 +878,8 @@ Future scope (beyond the planned phases):
 | 2026-10-12 | Documents split into `docs/imp` (maintained) and `docs/unimp` (archived); links updated; roadmap updated after Phase 1 | e090039, 28a52cc |
 | 2026-10-12 | Report notes started; ticket-overlap check, paired bootstrap and paired tests; shared-ticket explanation corrected; roadmap step for fair comparison of changes | e3dd52d |
 | 2026-10-22 | FLAML 2.7.0 internals read in the source and checked against the EXP-001 and EXP-002 logs (section 5.2, 9.10); `scripts/plot_search_history.py` and three EXP-001 charts; matplotlib pinned; plain-language guide `how-it-works.md` with 10 diagrams, all parsed with Mermaid 11.15.0 | 5722435, afa3b7c |
-| 2026-10-26 | Kiro spec written for Phases 2 and 3 (`.kiro/specs/autopilot-ml/`: 32 requirements with 160 acceptance criteria, design with decisions D1 to D8, 35 tasks plus 21 sub-tasks); links and coverage checked by a script; design diagrams parsed with Mermaid 11.15.0; roadmap rewritten as a summary of the spec; section 5.3 updated; steering rule updated to follow the spec | see the commit of this date |
+| 2026-10-26 | Kiro spec written for Phases 2 and 3 (`.kiro/specs/autopilot-ml/`: 32 requirements with 160 acceptance criteria, design with decisions D1 to D8, 35 tasks plus 21 sub-tasks); links and coverage checked by a script; design diagrams parsed with Mermaid 11.15.0; roadmap rewritten as a summary of the spec; section 5.3 updated; steering rule updated to follow the spec | 7d099ba, 9618e6b |
+| 2026-10-26 | Spec task 1: FLAML capability checks (8 tests in `tests/test_flaml_capabilities.py`, all passing; 55 tests in total); findings in section 5.2; design updated (refit through `max_iter=1`, our own check of starting points) | see the commit of this date |
 
 ---
 

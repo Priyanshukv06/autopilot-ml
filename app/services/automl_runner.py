@@ -44,6 +44,7 @@ from app.services.profiler import DatasetProfile, DatasetProfiler, analyze_class
 from app.services.search_summary import summarize_search
 from app.services.splits import OuterSplit, SplitError, make_outer_split
 from app.services.task_detector import TaskDetector, TaskType
+from app.services.transforms import DataPipeline, DataStepError, PipelineModel, as_specs
 
 logger = get_logger(__name__)
 
@@ -934,9 +935,13 @@ class AutoMLRunner:
         sample_weight = None
         if config.class_weight == "balanced":
             sample_weight = compute_sample_weight("balanced", y_train)
+        # Data_Steps are learned from the Training_Part only, before the search (Requirement 3.3).
+        steps = as_specs(config.data_steps)
+        pipeline = DataPipeline(steps).fit(X_train) if steps else None
+        X_search = pipeline.transform(X_train) if pipeline is not None else X_train
         notify("searching", 0.05, f"AutoML search running ({config.time_budget}s budget)")
         engine_result = self.engine.fit(
-            X_train,
+            X_search,
             y_train,
             task_type=task_type,
             metric=data.search_metric,
@@ -954,6 +959,8 @@ class AutoMLRunner:
 
         evaluator = Evaluator(task_type, metric)
         model, classes = engine_result.model, engine_result.classes
+        if pipeline is not None:  # evaluate, explain and save on the original columns
+            model = PipelineModel(pipeline, model)
         test_eval: EvaluationResult | None = None
         baseline: dict[str, Any] = {}
         importance_rows: list[dict[str, Any]] = []
@@ -980,7 +987,7 @@ class AutoMLRunner:
         if options.profile_rows == "train":
             clean_df = clean_df.iloc[data.split.train_positions]
         profile = self.profiler.profile(clean_df, config.target_column, config.dataset_name, task_type)
-        model_path = self._save_model(model, experiment_id, X.columns.tolist(), config, task_type, classes)
+        model_path = self._save_model(model, experiment_id, X.columns.tolist(), config, task_type, classes, pipeline)
         resolved = replace(
             config,
             task_type=task_type,
@@ -1096,8 +1103,10 @@ class AutoMLRunner:
             )
         if not 0.05 <= config.test_size <= 0.5:
             raise ExperimentError("Test size must be between 0.05 and 0.5.")
-        if config.data_steps:
-            raise ExperimentError("Data steps are not supported yet.")
+        try:
+            as_specs(config.data_steps)
+        except (DataStepError, KeyError, TypeError) as exc:
+            raise ExperimentError(f"Invalid Data_Step: {exc}") from exc
         if config.class_weight not in CLASS_WEIGHT_OPTIONS:
             raise ExperimentError(f"Unknown class weight option '{config.class_weight}'. Use None or 'balanced'.")
         if config.max_iter is not None and config.max_iter < 1:
@@ -1111,6 +1120,13 @@ class AutoMLRunner:
             raise ExperimentError("No feature columns left after excluding columns.")
         if len(X) < MIN_ROWS:
             raise ExperimentError(f"At least {MIN_ROWS} labelled rows are required (found {len(X)}).")
+        if config.data_steps:
+            # A dry run on no rows checks the columns and types of every step without reading any data.
+            try:
+                if DataPipeline(config.data_steps).fit_transform(X.head(0)).shape[1] == 0:
+                    raise ExperimentError("The Data_Steps leave no feature columns.")
+            except DataStepError as exc:
+                raise ExperimentError(f"Invalid Data_Step: {exc}") from exc
 
         try:
             if config.task_type is None:
@@ -1179,7 +1195,10 @@ class AutoMLRunner:
         config: ExperimentConfig,
         task_type: TaskType,
         classes: list[Any] | None,
+        pipeline: DataPipeline | None = None,
     ) -> Path:
+        """Save the model bundle. With Data_Steps, ``model`` is a PipelineModel that predicts from raw
+        rows, and the bundle also holds the step specifications and the fitted pipeline."""
         model_dir = self.settings.models_dir / experiment_id
         model_dir.mkdir(parents=True, exist_ok=True)
         path = model_dir / "model.pkl"
@@ -1193,6 +1212,9 @@ class AutoMLRunner:
             "classes": classes,
             "saved_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         }
+        if pipeline is not None:
+            bundle["data_steps"] = [step.to_dict() for step in pipeline.steps]
+            bundle["pipeline"] = pipeline
         with path.open("wb") as fh:
             pickle.dump(bundle, fh, protocol=pickle.HIGHEST_PROTOCOL)
         return path
@@ -1266,6 +1288,7 @@ class AutoMLRunner:
             "search_metric": result.search_metric,
             "class_weight": result.setup.get("class_weight") or "none",
             "search_space_limits": json.dumps(result.setup.get("search_space_limits") or {}, sort_keys=True),
+            "data_steps": json.dumps(result.setup.get("data_steps") or []),
             "setup_key": result.setup_key,
             "test_evaluated": result.test_evaluated,
             "profile_rows": result.profile_rows,

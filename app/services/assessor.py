@@ -5,7 +5,8 @@ use these refit scores instead (Requirement 4). Every Assessment of a Session us
 folds of the Training_Part, so two Setups are always compared on the same rows. The Assessor is
 only ever given the Training_Part.
 
-Data_Steps are fitted on each fold's training rows once task 12 adds them.
+A Setup's Data_Steps are fitted again on each fold's training rows, so no fold's validation rows
+shape the data its model is trained on.
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ from app.services.automl_runner import (
 from app.services.evaluator import Evaluator
 from app.services.splits import SessionFolds
 from app.services.task_detector import TaskType
+from app.services.transforms import DataPipeline, PipelineModel, as_specs
 
 logger = get_logger(__name__)
 
@@ -201,10 +203,16 @@ class Assessor:
         weights = compute_sample_weight("balanced", y_fit) if config.class_weight == "balanced" else None
 
         start = time.perf_counter()
+        # The Setup's Data_Steps are fitted again on this fold's training rows only (Requirement 3.3).
+        steps = as_specs(config.data_steps)
+        pipeline = DataPipeline(steps).fit(X_fit) if steps else None
         model = self.engine.fit_config(
-            X_fit, y_fit, task_type=self.task_type, estimator=result.best_estimator, config=result.best_config,
-            seed=self.seed, n_jobs=self.n_jobs, sample_weight=weights,
+            pipeline.transform(X_fit) if pipeline is not None else X_fit, y_fit, task_type=self.task_type,
+            estimator=result.best_estimator, config=result.best_config, seed=self.seed, n_jobs=self.n_jobs,
+            sample_weight=weights,
         )
+        if pipeline is not None:  # scored, like the search's model, on the original columns
+            model = PipelineModel(pipeline, model)
         fit_seconds = time.perf_counter() - start
 
         train_eval = evaluator.evaluate(model, X_fit, y_fit)

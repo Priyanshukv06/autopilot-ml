@@ -445,6 +445,17 @@ Why the correction: the 15 folds share most of their training rows, so their sco
 
 Since every deadline lies inside T, the steps end at most one step's overrun after T, and that overrun is recorded.
 
+**Algorithm 16: Data_Steps** (`app/services/transforms.py`, task 12). A Data_Step is learned from the rows it is fitted on and then applied unchanged to other rows; no step reads the target.
+
+| Step | Learned from the training rows | Applied to other rows |
+|---|---|---|
+| drop_columns | nothing | the columns are removed |
+| frequency_encode | the share of training rows with each value | the value becomes that share; an unseen value becomes 0; empty cells stay empty |
+| group_rare_categories | the values seen in at least 1% of the training rows (`min_share`) | other values become `__other__`; empty cells stay empty |
+| missing_indicator | nothing | a new 0/1 column `<column>__missing` for each listed numeric column |
+
+Where they are fitted: in an Experiment, on the Training_Part before the search, so FLAML searches the changed columns; in an Assessment, again on each fold's training rows. The model is saved together with its fitted steps (`PipelineModel`), so a reloaded model predicts from raw rows, and permutation importance is measured on the original columns. A throwaway check on 26 October 2026 (Titanic, frequency encoding of `Ticket`, rare `Cabin` values grouped, a missing-age indicator, 8 s search, temporary folder) ran the search, the evaluation, saving and reloading, MLflow logging and a 15-fold Assessment without errors.
+
 **Algorithm 15: autonomous Session, thin loop** (`app/services/autopilot.py` and `app/services/experiment_planner.py`, task 11)
 
 1. Check the settings (selector, folds, thresholds file); any error stops here and nothing is written.
@@ -1055,7 +1066,8 @@ Future scope (beyond the planned phases):
 | 2026-10-26 | Spec task 11: Planner, the autonomous Session loop and `scripts/run_autopilot.py` (Algorithm 15 in section 5.4); two trial Sessions in a temporary folder ran end to end (not kept) | 62dc010 |
 | 2026-10-26 | Spec task 11.1: 12 Session tests in `tests/test_autopilot.py` (Information_Barrier, stops, failures, replay); `Assessment.from_dict` and `DatasetProfile.from_dict` for replaying from the records; 305 tests in total, all passing in 103.8 s | 489c048 |
 | 2026-10-26 | Spec task 11.2: first real Session on Titanic, SES-001 (300 s budget, at most 8 Experiments, seed 42; EXP-003 to EXP-006): stopped with no Proposals left after 206.0 s; refit validation F1 0.706 to 0.763; test F1 of the first and final model 0.684 and 0.724; records checked by hand (section 9.11); two weaknesses noted (section 4.7) | 49cb088 |
-| 2026-10-26 | Dashboard sidebar: the first version of the autonomous layer moved from "planned" to "implemented" (section 8.3); the app renders without errors; 305 tests passing in 114.1 s | see the commit of this date |
+| 2026-10-26 | Dashboard sidebar: the first version of the autonomous layer moved from "planned" to "implemented" (section 8.3); the app renders without errors; 305 tests passing in 114.1 s | 173454a |
+| 2026-10-26 | Spec task 12: Data_Steps (`app/services/transforms.py`, Algorithm 16) used by the runner (fitted on the Training_Part, saved with the model) and by the Assessor (fitted on each fold) | see the commit of this date |
 
 ---
 

@@ -401,7 +401,8 @@ def test_runner_setup_key_uses_the_resolved_task_and_metrics(settings):
 @pytest.mark.parametrize(
     "changes, kwargs, message",
     [
-        ({"data_steps": [{"kind": "drop_columns"}]}, {}, "Data steps"),
+        ({"data_steps": [{"kind": "drop_columns"}]}, {}, "Invalid Data_Step"),  # no columns given
+        ({"data_steps": [{"kind": "frequency_encode", "columns": ["nope"]}]}, {}, "Invalid Data_Step"),
         ({"class_weight": "heavy"}, {}, "class weight"),
         ({"search_metric": "rmse"}, {}, "Search metric"),
         ({"max_iter": 0}, {}, "max_iter"),

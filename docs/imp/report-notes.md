@@ -462,7 +462,7 @@ Why the correction: the 15 folds share most of their training rows, so their sco
 
 Since every deadline lies inside T, the steps end at most one step's overrun after T, and that overrun is recorded.
 
-**Algorithm 11, completed: all twelve Diagnoses** (task 13). Rules, in this order (m is the diagnostic metric; thresholds `v0-start`, starting values from the design, to be tuned in task 16):
+**Algorithm 11, completed: all twelve Diagnoses** (task 13). Rules, in this order (m is the diagnostic metric; the table gives the starting values `v0-start`; the critic study, section 9.12, changed the overfitting gap to 0.11, the missing share to 0.30 and the near-constant share to 0.98, frozen as `v1-critic-study`):
 
 | Diagnosis | Evidence | Moderate | High |
 |---|---|---|---|
@@ -776,9 +776,9 @@ mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db --port 5000 --workers 1
 python scripts/compare_seeds.py --dataset data/sample/titanic.csv --target Survived --exclude-a PassengerId,Name --exclude-b PassengerId,Name,Ticket,Cabin --seeds 1 2 3 4 5 --budget 30
 ```
 
-### 8.6 Tests (448, about 116 s on 26 October 2026)
+### 8.6 Tests (457, about 140 s on 26 October 2026)
 
-Phase 1 ended with the first three files below (47 tests, about 29 to 41 s). Phase 2 has added the others so far. Full suite on 26 October 2026 after task 15.1: 448 passed in 115.8 s on the laptop in chapter 7, close to the design's limit of about 2 minutes. The counts below were taken from pytest's list of collected tests.
+Phase 1 ended with the first three files below (47 tests, about 29 to 41 s). Phase 2 has added the others so far. Full suite on 26 October 2026 after task 16: 457 passed in 139.7 s on the laptop in chapter 7; without the 4 study smoke tests marked slow (`python -m pytest -q -m "not slow"`, marker registered in `pytest.ini`), 453 passed in 123.6 s. The counts below were taken from pytest's list of collected tests.
 
 | File | Tests | What they cover |
 |---|---|---|
@@ -799,6 +799,8 @@ Phase 1 ended with the first three files below (47 tests, about 29 to 41 s). Pha
 | `tests/test_autopilot.py` | 12 | Whole Sessions with a recording engine, a scripted Assessor and a fake clock (about 1 s each): no Test_Part row reaches the engine, the Assessor or the Critic's profile, and no Experiment record of a Session has a test number; every step's record and files; each stop reason (time, Experiments, patience, user request, no Proposals); a stop request still runs the Final_Evaluation; failed candidates (a failed search and a failed Assessment) are discarded and the Session goes on; a failed first Experiment stops the Session with an error record; bad settings write nothing; the Diagnoses and Verdicts replay exactly from the saved records |
 | `tests/test_transforms.py` | 20 | Each Data_Step's exact output on a small frame, including unseen values and empty cells; steps in order; a step learns nothing when applied and each output row depends only on its own input row; the Assessor fits the steps on each fold's training rows only; specs round-trip through JSON and give the same setup key in either form; invalid specs and steps that do not fit the data are refused; a reloaded bundle predicts exactly as before saving from raw rows; importance on the original columns; without Data_Steps nothing changes |
 | `tests/test_experiment_memory.py` | 14 | Records survive a restart, in order, one JSON object per line, and adding only appends; damaged lines (not JSON, missing fields, a line cut off by a crash) are skipped with a warning; fields from a later schema are ignored; read-only memories and NaN values are refused; the snapshot hash; the dataset fingerprint; the nearest datasets in the right order with distances worked by hand (records averaged per dataset, features without spread and features one side lacks left out); other task types and an excluded dataset left out; strategy statistics on a small hand-made memory (weights, keep rate, gain when kept, cost); a Session adds one record per Verdict and none for a failed candidate; a pre-filled memory does not change any decision |
+| `tests/test_critic_study.py` | 5 | The study's cases (every problem and strength, separate seeds, a different dataset each); with a fast stand-in engine, rows carry the truth and the evidence, the study's rule agrees with the real Critic for two sets of thresholds, tuning gives valid thresholds, and the written thresholds file loads (3 of them marked slow) |
+| `tests/test_judge_study.py` | 4 | The study's pairs and seeds; one pair with a fast stand-in engine gives one row per setting (marked slow); the false-keep rate, the power and the choice of defaults on hand-made verdicts, including when no setting is safe enough |
 | `tests/test_synthetic.py` | 32 | Same seed gives the same data; problem order does not matter; each of the 8 problems measured at its requested strength in both the dataset and the fresh sample (imbalance ratio, share of changed labels, correlation of copies, distinct share of IDs, share of the main value, unseen share of categories, empty share); our profiler flags the planted ID, constant and high-cardinality columns; clean data has none of them; a model scores the same on the fresh sample as in cross-validation; 11 invalid requests rejected |
 
 ### 8.7 Code listings worth including in the report
@@ -1008,7 +1010,36 @@ What this shows, and what it does not:
 - FLAML's own validation scores (0.804, 0.793, 0.775, 0.777 in the history) went down while the refit scores on the Session_Folds went up (0.706 to 0.763). FLAML's scores come from its own folds and from the best of hundreds of trials, so they are optimistic and not comparable across Setups; this is why the Judge uses the refits (decision D2).
 - Two weaknesses showed up; both are in section 4.7.
 
-### 9.12 Still to produce
+### 9.12 Critic study: how often the Critic is right (task 16, 26 October 2026)
+
+Setup: 270 synthetic binary datasets of 1,000 rows, each with a fresh sample of 20,000 rows from the same generator; one planted problem per dataset at three strengths (class imbalance 3, 5, 10; label noise 0.1, 0.2, 0.3; useless columns 5, 20, 50; identifier column 0.95, 0.99, 1.0 of values distinct; constant column 0.98, 0.995, 1.0 main-value share; high-cardinality column 0.2, 0.5, 2 categories per row; missing values 0.3, 0.5, 0.8 in two columns; duplicated columns with correlation 0.95, 0.98, 0.995) plus 3 clean datasets, for each of 10 seeds: 5 tuning seeds (0 to 4) and 5 reporting seeds (100 to 104). Per dataset: one FLAML search (F1, at most 25 trials), an Assessment on 3 x 5 folds and the Critic. Truth: the planted problem for data-level kinds; for overfitting, training F1 minus fresh F1 of at least 0.10; for underfitting, that gap below 0.03 and a fresh skill over the trivial baseline below 0.50; for unreliable validation, a fold mean at least 0.05 from the fresh F1. Code at commit 0ddc314 plus the uncommitted study code of this task, laptop of chapter 7, all cores; 43.3 min in total (9.6 s per dataset on average). FLAML chose LightGBM for 216 datasets, SGD 25, XGBoost 20, random forest 7, extra trees 2. Raw files: `results/studies/critic_study_cases.csv` (one row per dataset), `critic_study_grid.csv`, `critic_study_summary.csv`, and the saved Critic inputs in `experiments/studies/critic_study_inputs.jsonl`.
+
+Results on the reporting seeds (135 datasets the tuning never saw), starting thresholds `v0-start` against the tuned ones:
+
+| Diagnosis | True cases | Precision, start | Recall, start | Precision, tuned | Recall, tuned |
+|---|---|---|---|---|---|
+| class_imbalance | 15 | 1.000 | 1.000 | 1.000 | 1.000 |
+| constant_column | 15 | 1.000 | 0.667 | 1.000 | 1.000 |
+| high_cardinality | 15 | 1.000 | 1.000 | 1.000 | 1.000 |
+| identifier_column | 15 | 1.000 | 0.667 | 1.000 | 0.667 |
+| missing_values | 15 | 1.000 | 0.667 | 1.000 | 1.000 |
+| overfitting | 32 | 0.711 (13 false alarms) | 1.000 | 0.879 (4 false alarms) | 0.906 (3 missed) |
+| redundant_features | 15 | 1.000 | 0.933 | 1.000 | 0.933 |
+| underfitting | 5 | 1.000 | 0.600 | 1.000 | 0.600 |
+| unreliable_validation | 4 | 0.273 (8 false alarms) | 0.750 | 0.273 | 0.750 |
+
+Tuning changed three thresholds: overfitting gap 0.10 to 0.11, missing share 0.40 to 0.30, and near-constant share 0.99 to 0.98. They are frozen as version `v1-critic-study` in `app/services/critic_thresholds.toml`. Replaying the real Critic with the tuned thresholds on all 270 saved inputs gave exactly the study's answers (0 disagreements).
+
+What this shows, and what it does not:
+
+- The data-level Diagnoses are reliable on these datasets: no false alarm for any of them. Two of the three tuned changes (missing share 0.30, near-constant share 0.98) only move the threshold down to the weakest planted strength, so they follow from the study's own choice of what counts as a problem rather than from new evidence; the evidence is that nothing else in the data comes near those levels.
+- The identifier rule (from the Phase 1 profiler, not tuned) finds IDs that are all distinct or 99% distinct, but not 95% distinct: the name rule asks for more than 95% distinct values, and 95% is exactly the boundary.
+- Overfitting is the hardest kind with real noise; the tuned gap of 0.11 cut the false alarms from 13 to 4 at the cost of 3 missed cases.
+- Unreliable validation is weak: the fold spread did not predict when the cross-validated score was off by 0.05 (3 of 11 alarms were right), and the tuning seeds had no true case at all, so its threshold could not be tuned. Its Proposal (the smoother search metric) is cheap and the Judge still decides, so it stays, with this result reported.
+- Underfitting and unreliable validation had only 5 and 4 true cases in the reporting seeds, so their rates are rough.
+- These are synthetic binary datasets of one size; the Phase 3 benchmark on real datasets is the test that matters for the report's claims.
+
+### 9.13 Still to produce
 
 - The planned benchmark in `research-direction.md`: six systems, OpenML datasets, several budgets and seeds, paired statistical tests.
 - Re-run sections 9.2 to 9.6 with the final code and keep the raw files.
@@ -1116,7 +1147,8 @@ Future scope (beyond the planned phases):
 | 2026-10-26 | Spec task 14: the full Strategy_Catalogue (nine Strategies) and rule table (section 5.4); a throwaway 90 s Session on Titanic used the new data Strategies end to end; existing tests updated for the longer Proposal lists | b7869fe |
 | 2026-10-26 | Spec task 14.1: 30 more Strategy tests and 8 more Strategy_Engine tests; 434 tests in total, all passing in 112.0 s | 4fe539c |
 | 2026-10-26 | Spec task 15: Experiment_Memory version 1 (`app/services/experiment_memory.py`, Algorithm 17); the Session adds one record per Verdict; Proposals record the severities of the Diagnoses they answer | 4500f7f |
-| 2026-10-26 | Spec task 15.1: 14 memory tests in `tests/test_experiment_memory.py`; 448 tests in total, all passing in 115.8 s | see the commit of this date |
+| 2026-10-26 | Spec task 15.1: 14 memory tests in `tests/test_experiment_memory.py`; 448 tests in total, all passing in 115.8 s | 0ddc314 |
+| 2026-10-26 | Spec task 16: critic study (`research/critic_study.py`, `scripts/run_study.py`; 270 synthetic datasets, 43.3 min); results and limits in section 9.12; thresholds frozen as `v1-critic-study`; judge study code and smoke tests written for task 17; slow test marker added; 457 tests passing in 139.7 s | see the commit of this date |
 
 ---
 

@@ -193,7 +193,7 @@ def test_a_session_records_every_step(tmp_path):
     for step in record["steps"]:
         files = {p.name for p in (settings.experiments_dir / step["experiment_id"]).iterdir()}
         assert "assessment.json" in files and ("decision.json" in files) == (step["index"] > 0)
-    assert record["code_version"]["flaml"] and record["settings"]["thresholds_version"] == "v0-start"
+    assert record["code_version"]["flaml"] and record["settings"]["thresholds_version"] == "v1-critic-study"
 
 
 # --------------------------------------------------------------------------- stops

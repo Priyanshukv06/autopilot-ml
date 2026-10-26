@@ -55,17 +55,15 @@ def render_sidebar(settings: Settings) -> str:
             "- ✅ Test-set evaluation + trivial baselines\n- ✅ Permutation feature importance\n"
             "- ✅ MLflow tracking (local)\n- ✅ Experiment history"
         )
-        st.markdown("**Autonomous layer (command line: `scripts/run_autopilot.py`)**")
+        st.markdown("**Autonomous layer (Autonomous run mode, or `scripts/run_autopilot.py`)**")
         st.markdown(
             "- ✅ Experiment planner and session loop\n- ✅ Critic (12 diagnoses, thresholds from the critic study)\n"
             "- ✅ Strategy engine (9 strategies)\n- ✅ Judge (corrected t-test)\n- ✅ Resource manager\n"
-            "- ✅ Experiment memory (written and shown, not used for decisions yet)"
+            "- ✅ Experiment memory (written and shown, not used for decisions yet)\n"
+            "- ✅ Autonomous mode in this dashboard"
         )
         st.markdown("**Planned, not implemented**")
-        st.markdown(
-            "- 🕒 Autonomous mode in this dashboard\n- 🕒 Learned strategy choice from the memory\n"
-            "- 🕒 Benchmark against FLAML alone and AutoGluon"
-        )
+        st.markdown("- 🕒 Learned strategy choice from the memory\n- 🕒 Benchmark against FLAML alone and AutoGluon")
         st.divider()
         st.caption("Runs fully locally: no paid APIs, no cloud services.")
         st.caption(f"MLflow store: `{settings.mlflow_tracking_uri}`")

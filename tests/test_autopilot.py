@@ -119,7 +119,7 @@ class ScriptedAssessor:
 
 
 def run_session(tmp_path, *, total=1000, experiments=6, patience=3, shifts=None, gap=0.15, engine_fails=(),
-                assessor_fails=(), stop=None, data=DATA, base=None, search_cap=None):
+                assessor_fails=(), stop=None, data=DATA, base=None, search_cap=None, on_update=None):
     clock = FakeClock()
     settings = build_settings(tmp_path)
     settings.ensure_directories()
@@ -138,7 +138,7 @@ def run_session(tmp_path, *, total=1000, experiments=6, patience=3, shifts=None,
         budget=SessionBudget(total_seconds=total, max_experiments=experiments, patience=patience),
         n_repeats=3,  # the scripted Assessor scores 15 folds (BASE_SCORES)
     )
-    result = session.run(data, plan, stop_requested=stop)
+    result = session.run(data, plan, stop_requested=stop, on_update=on_update)
     record = json.loads((settings.experiments_dir / result.session_id / "session.json").read_text(encoding="utf-8"))
     return result, record, engine, (assessors[0] if assessors else None), settings
 
@@ -195,6 +195,24 @@ def test_a_session_records_every_step(tmp_path):
         files = {p.name for p in (settings.experiments_dir / step["experiment_id"]).iterdir()}
         assert "assessment.json" in files and ("decision.json" in files) == (step["index"] > 0)
     assert record["code_version"]["flaml"] and record["settings"]["thresholds_version"] == "v1-critic-study"
+
+
+def test_on_update_gets_every_saved_record(tmp_path):
+    updates = []
+    result, record, *_ = run_session(tmp_path, shifts={1: 0.0, 2: 0.0, 3: -0.05}, on_update=updates.append)
+    assert updates[0]["status"] == "running" and updates[0]["steps"] == []  # saved before the first step
+    assert [len(u["steps"]) for u in updates] == sorted(len(u["steps"]) for u in updates)
+    assert updates[-1] == record  # the last update is what session.json holds
+    updates[0]["notes"].append("changed by a viewer")  # each update is its own copy
+    assert "changed by a viewer" not in updates[-1]["notes"]
+
+
+def test_a_failing_update_callback_does_not_stop_the_session(tmp_path):
+    def broken(record):
+        raise RuntimeError("viewer exploded")
+
+    result, record, *_ = run_session(tmp_path, on_update=broken)
+    assert result.status == "completed" and record["final_evaluation"] is not None
 
 
 # --------------------------------------------------------------------------- stops

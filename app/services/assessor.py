@@ -101,6 +101,12 @@ class Assessment:
     def to_dict(self) -> dict[str, Any]:
         return to_jsonable(asdict(self))
 
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Assessment:
+        """Rebuild an Assessment from ``to_dict()`` output (an Experiment's ``assessment.json``)."""
+        folds = [FoldScore(**fold) for fold in data.get("folds", [])]
+        return cls(**{**{k: v for k, v in data.items() if k != "folds"}, "folds": folds})
+
 
 class Assessor:
     """Refits Setups on fixed folds and keeps the Assessments of one Session."""

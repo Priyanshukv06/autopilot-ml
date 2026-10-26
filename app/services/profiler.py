@@ -105,6 +105,15 @@ class DatasetProfile:
         """JSON-serialisable representation (used for MLflow artifacts)."""
         return asdict(self)
 
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "DatasetProfile":
+        """Rebuild a profile from ``to_dict()`` output (for example a Session's ``train_profile.json``)."""
+        values = dict(data)
+        values["column_details"] = [ColumnProfile(**column) for column in data.get("column_details", [])]
+        if data.get("class_balance") is not None:
+            values["class_balance"] = ClassBalance(**data["class_balance"])
+        return cls(**values)
+
     def column_table(self) -> pd.DataFrame:
         """One row per column, convenient for display."""
         return pd.DataFrame(

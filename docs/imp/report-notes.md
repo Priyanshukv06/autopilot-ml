@@ -401,6 +401,16 @@ Because both parts come from one generator, a model's score on the fresh sample 
 
 Throwaway check on 26 October 2026 (Titanic, setup A, seed-42 split, session folds seed 43, one 10 s FLAML search, `n_jobs=-1`; output printed only, not saved): FLAML chose XGBoost with a validation F1 of 0.774; the 15 refits took 4.6 s and gave validation F1 0.751 (standard deviation 0.051 over the folds) and training F1 0.854. The trivial baseline (always "did not survive") scores F1 0. In the folds, 72% of validation rows had a ticket not seen in the fold's training rows (section 9.7 found 71%) and 15.7% a cabin not seen. Asking again for the same configuration returned the cached Assessment.
 
+**Algorithm 11: Critic, thin version** (`app/services/critic.py`, thresholds in `app/services/critic_thresholds.toml`, version `v0-start`, task 6). Inputs: the Training_Part profile, the Setup, its Assessment and the search summary. Rules run in a fixed order; columns are taken in name order.
+
+1. Diagnostic metric m: the primary metric if it is bounded and higher is better (F1, accuracy, ROC-AUC, R2), otherwise F1 for classification or R2 for regression.
+2. Overfitting: gap = mean over the folds of (training m minus validation m). Moderate from 0.10, high from 0.20.
+3. Class imbalance (classification): ratio = largest class / smallest class in the Training_Part; recall = mean validation recall of the smallest class. Moderate if the ratio is at least 3 or the recall is below 0.5; high if the ratio is at least 9 or the recall is below 0.3. The recall test counts only from a ratio of 1.5, because with balanced classes a low recall means a weak model, not an imbalance (a design choice, to be tuned in task 16).
+4. High cardinality (each used text column): moderate if it has more than 50 different values or at least 30% of validation rows have a value unseen in the fold's training rows; high from 60% unseen.
+5. Each Diagnosis carries its evidence numbers, a plain-language message and the thresholds version. No rule firing gives an empty list.
+
+Throwaway check on 26 October 2026 (Titanic, setup A, seed-42 split, session folds seed 43, one 20 s FLAML search, `n_jobs=-1`; output printed only, not saved): FLAML chose XGBoost; the Critic reported overfitting moderate (training F1 0.919, validation F1 0.725, gap 0.194 over 15 folds), high cardinality high for `Ticket` (571 values, 72% unseen) and moderate for `Cabin` (127 values, 16% unseen), and no class imbalance (ratio 1.6). This matches what the design expected from the Phase 1 numbers, except that the gap was larger than EXP-001's 0.13 (EXP-001 measured the gap between FLAML's validation score and the training score of one model, not over folds).
+
 **Algorithm 10: search summary** (`app/services/search_summary.py`, task 5): from the trial history, the search time (end of the last trial), the time of the best trial (the first one if tied), the share of the search time after it, the gain of the best score in the last quarter of the time (signed so that positive is better), the number of trials, and the best score and total trial time of each learner family. On the saved EXP-001 and EXP-002 histories it gives exactly the numbers of section 9.10 (best at 42.9 s and 23.2 s; 17.1 s and 36.8 s after the best; XGBoost 34.6 s in EXP-001).
 
 ---
@@ -943,7 +953,8 @@ Future scope (beyond the planned phases):
 | 2026-10-26 | Spec task 4.1: 32 generator tests in `tests/test_synthetic.py`; 131 tests in total, all passing in 65.8 s. A planned check that another seed is a different problem was dropped: logistic regression trained on the seed-10 binary dataset (1,000 rows) scored accuracy 0.758 on its own fresh sample (20,000 rows) and still 0.715 on seed 11's (5,000 rows) | c786048 |
 | 2026-10-26 | Spec task 5: `app/services/assessor.py` (Algorithm 9) and `app/services/search_summary.py` (Algorithm 10); the runner saves the search summary; cache key widened to setup key plus configuration (design updated); 5 search-summary tests, two of them on the saved EXP-001 and EXP-002 histories; throwaway Assessor check on Titanic (section 5.4) | ee11363 |
 | 2026-10-26 | Spec task 5.1: 9 Assessor tests in `tests/test_assessor.py`, including two separate Assessments with real FLAML refits (LightGBM, 12 trees, 240 rows, 15 folds each) that agree within 1e-12; 145 tests in total, all passing in 83.9 s | 10a172f |
-| 2026-10-26 | Guard: the runner refuses datasets with repeated row labels (section 4.7), with one new test in `tests/test_automl_runner.py` | see the commit of this date |
+| 2026-10-26 | Guard: the runner refuses datasets with repeated row labels (section 4.7), with one new test in `tests/test_automl_runner.py` | 6fa465d |
+| 2026-10-26 | Spec task 6: thin Critic (`app/services/critic.py`, Algorithm 11) with thresholds file `critic_thresholds.toml` (`v0-start`); one threshold added to the design (`min_ratio_for_recall`); throwaway check on Titanic gave the expected Diagnoses (section 5.4) | see the commit of this date |
 
 ---
 

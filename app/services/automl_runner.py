@@ -7,6 +7,8 @@ the planned baseline comparison) can be added by implementing ``AutoMLEngine``.
 
 from __future__ import annotations
 
+import copy
+import hashlib
 import json
 import math
 import os
@@ -15,16 +17,17 @@ import re
 import time
 import warnings as py_warnings
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Protocol
+from typing import Any, Callable, Literal, Protocol
 
 import numpy as np
 import pandas as pd
 from pandas.api.types import is_bool_dtype, is_numeric_dtype
 from sklearn.exceptions import ConvergenceWarning
+from sklearn.utils.class_weight import compute_sample_weight
 
 from app.core.config import Settings, get_settings
 from app.core.logging_config import get_logger
@@ -38,7 +41,7 @@ from app.services.evaluator import (
 )
 from app.services.experiment_tracker import ExperimentTracker
 from app.services.profiler import DatasetProfile, DatasetProfiler, analyze_class_balance
-from app.services.splits import SplitError, make_outer_split
+from app.services.splits import OuterSplit, SplitError, make_outer_split
 from app.services.task_detector import TaskDetector, TaskType
 
 logger = get_logger(__name__)
@@ -47,6 +50,8 @@ ProgressCallback = Callable[[str, float, str], None]
 """Signature: (stage, fraction_complete, message)."""
 
 MIN_ROWS = 20
+SCHEMA_VERSION = 2  # version of summary.json; Phase 1 records have no version field (version 1)
+CLASS_WEIGHT_OPTIONS = (None, "balanced")
 
 # Two kinds of warnings are pure noise here and can flood the terminal:
 # - FLAML warns on every predict() call when a categorical column has values it did not see
@@ -119,7 +124,11 @@ def unseen_category_warnings(X_train: pd.DataFrame, X_test: pd.DataFrame) -> lis
 # --------------------------------------------------------------------------- config
 @dataclass
 class ExperimentConfig:
-    """Everything needed to reproduce one experiment (future planner output)."""
+    """Everything needed to reproduce one experiment.
+
+    The fields after ``n_jobs`` are used by the autonomous layer. Their defaults give the
+    Phase 1 behaviour.
+    """
 
     target_column: str
     task_type: TaskType | None = None  # None -> detect automatically
@@ -131,6 +140,43 @@ class ExperimentConfig:
     estimator_list: list[str] | None = None  # None -> engine default search space
     dataset_name: str = "dataset"
     n_jobs: int = -1
+    data_steps: list[Any] = field(default_factory=list)  # Data_Step specifications (task 12)
+    class_weight: str | None = None  # None or "balanced"
+    search_metric: str | None = None  # metric FLAML optimises; None means the primary metric
+    # Plain JSON, for example {"lgbm": {"num_leaves": {"upper": 32}}}; bounds are inclusive.
+    search_space_limits: dict[str, dict[str, dict[str, float]]] = field(default_factory=dict)
+    starting_points: dict[str, dict[str, Any]] | None = None  # learner family -> configuration
+    max_iter: int | None = None  # fixed number of trials (tests only)
+
+    def setup(self) -> dict[str, Any]:
+        """The settings that define the Setup, as JSON-safe values.
+
+        Left out: the time budget, ``max_iter`` and the starting points (they change how long or
+        from where FLAML searches, not what it searches), and ``dataset_name`` and ``n_jobs``.
+        Column and learner lists are sorted, so their order does not matter.
+        """
+        task = self.task_type.value if isinstance(self.task_type, TaskType) else self.task_type
+        steps = [step.to_dict() if hasattr(step, "to_dict") else step for step in self.data_steps]
+        return to_jsonable(
+            {
+                "target_column": self.target_column,
+                "task_type": task,
+                "primary_metric": self.primary_metric,
+                "random_seed": self.random_seed,
+                "test_size": self.test_size,
+                "excluded_columns": sorted(self.excluded_columns),
+                "estimator_list": sorted(self.estimator_list) if self.estimator_list else None,
+                "data_steps": steps,
+                "class_weight": self.class_weight,
+                "search_metric": self.search_metric,
+                "search_space_limits": self.search_space_limits or {},
+            }
+        )
+
+    def setup_key(self) -> str:
+        """Short stable hash of ``setup()``: equal for two configs that define the same Setup."""
+        text = json.dumps(self.setup(), sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
 
 
 # --------------------------------------------------------------------------- engine
@@ -149,10 +195,17 @@ class EngineResult:
     leaderboard: list[dict[str, Any]]
     native_importance: list[dict[str, Any]] | None
     classes: list[Any] | None
+    # Best configuration of every learner family that finished a trial (for warm starts).
+    best_config_per_estimator: dict[str, dict[str, Any]] = field(default_factory=dict)
+    warnings: list[str] = field(default_factory=list)
 
 
 class AutoMLEngine(Protocol):
-    """Minimal contract an AutoML backend must satisfy."""
+    """Minimal contract an AutoML backend must satisfy.
+
+    ``metric`` is the metric the search optimises (the Search_Metric). The runner scores the
+    final model with the primary metric itself.
+    """
 
     name: str
 
@@ -168,7 +221,26 @@ class AutoMLEngine(Protocol):
         n_jobs: int,
         estimator_list: list[str] | None,
         work_dir: Path,
+        starting_points: dict[str, dict[str, Any]] | None = None,
+        search_space_limits: dict[str, dict[str, dict[str, float]]] | None = None,
+        sample_weight: np.ndarray | None = None,
+        max_iter: int | None = None,
     ) -> EngineResult: ...
+
+    def fit_config(
+        self,
+        X_train: pd.DataFrame,
+        y_train: pd.Series,
+        *,
+        task_type: TaskType,
+        estimator: str,
+        config: dict[str, Any],
+        seed: int,
+        n_jobs: int,
+        sample_weight: np.ndarray | None = None,
+    ) -> Any:
+        """Train exactly one configuration. Returns a model with predict (and predict_proba, classes_)."""
+        ...
 
 
 ESTIMATOR_DISPLAY_NAMES = {
@@ -191,6 +263,90 @@ ESTIMATOR_DISPLAY_NAMES = {
 
 def estimator_display_name(key: str) -> str:
     return ESTIMATOR_DISPLAY_NAMES.get(key, key)
+
+
+# FLAML keys that are not hyperparameters (removed by FLAML's AutoMLState.sanitize as well).
+_NON_HYPERPARAMETER_KEYS = ("FLAML_sample_size", "learner", "_choice_")
+
+
+def _upper_is_exclusive(domain: Any) -> bool:
+    """True when FLAML never searches the domain's ``upper`` value itself.
+
+    FLAML 2.7.0 maps a non-quantized integer setting onto ``lower .. upper - 1`` during the
+    search (``normalize`` and ``denormalize`` in ``flaml/tune/space.py``). FLAML's own search
+    spaces follow this: LightGBM's ``min_child_samples`` uses ``upper=2**7 + 1`` for "at most 128".
+    """
+    from flaml.tune import sample
+
+    return isinstance(domain, sample.Integer) and not isinstance(domain.get_sampler(), sample.Quantized)
+
+
+def _searched_range(domain: Any) -> tuple[float, float]:
+    """Smallest and largest value FLAML can try for a numeric domain (both inclusive)."""
+    upper = domain.upper - 1 if _upper_is_exclusive(domain) else domain.upper
+    return domain.lower, upper
+
+
+def value_in_search_space(value: Any, spec: dict[str, Any] | None) -> bool:
+    """Whether a starting value is one FLAML could try for this setting.
+
+    Follows FLAML's own check (``AutoMLState.valid_starting_point_one_dim``): the value must have
+    the domain's type and lie inside it. For integer settings it uses the range FLAML really
+    searches, which ends one below ``upper`` (see ``_upper_is_exclusive``).
+    """
+    from flaml.tune import sample
+
+    if not spec or "domain" not in spec:
+        return False
+    domain = spec["domain"]
+    if isinstance(domain, sample.Categorical):
+        return value in domain.categories
+    if isinstance(domain, sample.Integer):
+        if isinstance(value, bool) or not isinstance(value, int):
+            return False
+        lower, upper = _searched_range(domain)
+        return lower <= value <= upper
+    if isinstance(domain, sample.Float):
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return False
+        return domain.lower <= value <= domain.upper
+    if isinstance(domain, sample.Domain):
+        return bool(domain.is_valid(value))
+    return value == domain  # a fixed value, not searched
+
+
+def limited_search_space_spec(spec: dict[str, Any] | None, bounds: dict[str, float], label: str) -> dict[str, Any]:
+    """Copy FLAML's spec of one numeric setting with tighter bounds (inclusive, as written by the user).
+
+    The domain type (for example ``tune.lograndint``) and the other keys are kept. The starting
+    values ``init_value`` and ``low_cost_init_value`` are moved inside the new bounds. A limit can
+    only narrow the range, never widen it.
+    """
+    from flaml.tune import sample
+
+    domain = (spec or {}).get("domain")
+    if not isinstance(domain, (sample.Integer, sample.Float)):
+        raise ExperimentError(f"'{label}' is not a numeric setting of that learner, so it cannot be limited.")
+    unknown = sorted(set(bounds) - {"lower", "upper"})
+    if unknown:
+        raise ExperimentError(f"Unknown search-space limit {unknown} for '{label}'. Use 'lower' and 'upper'.")
+    is_integer = isinstance(domain, sample.Integer)
+    lower, upper = _searched_range(domain)
+    if bounds.get("lower") is not None:
+        lower = max(lower, math.ceil(bounds["lower"]) if is_integer else float(bounds["lower"]))
+    if bounds.get("upper") is not None:
+        upper = min(upper, math.floor(bounds["upper"]) if is_integer else float(bounds["upper"]))
+    if not lower < upper:
+        raise ExperimentError(f"The search-space limits for '{label}' leave fewer than two values to search.")
+
+    limited = copy.deepcopy(domain)
+    limited.lower = lower
+    limited.upper = upper + 1 if _upper_is_exclusive(domain) else upper
+    new_spec = dict(spec, domain=limited)
+    for key in ("init_value", "low_cost_init_value"):
+        if new_spec.get(key) is not None:
+            new_spec[key] = min(max(new_spec[key], lower), upper)
+    return new_spec
 
 
 class FLAMLEngine:
@@ -230,7 +386,12 @@ class FLAMLEngine:
         n_jobs: int,
         estimator_list: list[str] | None,
         work_dir: Path,
+        starting_points: dict[str, dict[str, Any]] | None = None,
+        search_space_limits: dict[str, dict[str, dict[str, float]]] | None = None,
+        sample_weight: np.ndarray | None = None,
+        max_iter: int | None = None,
     ) -> EngineResult:
+        """Run a FLAML search. With none of the optional arguments this is the Phase 1 search."""
         # FLAML imports MLflow; silence MLflow's import-time "agent hint" banner.
         os.environ.setdefault("MLFLOW_DISABLE_AGENT_HINT", "1")
         import flaml
@@ -240,6 +401,21 @@ class FLAMLEngine:
             flaml_metric = self._METRICS[(task_type, metric)]
         except KeyError as exc:
             raise ExperimentError(f"Metric '{metric}' is not supported by FLAML for {task_type.value}.") from exc
+
+        # Optional settings are passed only when given, so that the Phase 1 call stays unchanged.
+        options: dict[str, Any] = {}
+        engine_warnings: list[str] = []
+        custom_hp = self.custom_hp(search_space_limits, task_type, X_train.shape) if search_space_limits else {}
+        if custom_hp:
+            options["custom_hp"] = custom_hp
+        if starting_points:
+            points, engine_warnings = self.check_starting_points(starting_points, task_type, X_train.shape, custom_hp)
+            if points:
+                options["starting_points"] = points
+        if sample_weight is not None:
+            options["sample_weight"] = self._checked_weights(sample_weight, len(y_train))
+        if max_iter is not None:
+            options["max_iter"] = int(max_iter)
 
         log_path = Path(work_dir) / "flaml_search.log"
         automl = AutoML()
@@ -261,6 +437,7 @@ class FLAMLEngine:
                 early_stop=True,
                 verbose=0,
                 mlflow_logging=False,  # tracking is handled by ExperimentTracker
+                **options,
             )
         except Exception as exc:
             raise ExperimentError(f"FLAML search failed: {exc}") from exc
@@ -297,7 +474,133 @@ class FLAMLEngine:
             leaderboard=self._leaderboard(automl, history, to_score, greater_is_better),
             native_importance=self._native_importance(automl),
             classes=classes,
+            best_config_per_estimator={
+                estimator: to_jsonable(config)
+                for estimator, config in (automl.best_config_per_estimator or {}).items()
+                if config
+            },
+            warnings=engine_warnings,
         )
+
+    def fit_config(
+        self,
+        X_train: pd.DataFrame,
+        y_train: pd.Series,
+        *,
+        task_type: TaskType,
+        estimator: str,
+        config: dict[str, Any],
+        seed: int,
+        n_jobs: int,
+        sample_weight: np.ndarray | None = None,
+    ) -> Any:
+        """Train one learner family with one fixed configuration on all the given rows.
+
+        Uses ``max_iter=1`` with the configuration as the starting point: FLAML then skips the
+        search and trains exactly that configuration, with the same data preparation as a search
+        (checked in ``tests/test_flaml_capabilities.py``). Returns FLAML's ``AutoML`` object, which
+        has ``predict``, ``predict_proba`` and ``classes_`` and predicts the original labels.
+        """
+        os.environ.setdefault("MLFLOW_DISABLE_AGENT_HINT", "1")
+        from flaml import AutoML
+
+        options: dict[str, Any] = {}
+        if sample_weight is not None:
+            options["sample_weight"] = self._checked_weights(sample_weight, len(y_train))
+        automl = AutoML()
+        try:
+            automl.fit(
+                X_train=X_train,
+                y_train=y_train,
+                task=self._TASKS[task_type],
+                estimator_list=[estimator],
+                starting_points={estimator: dict(config)},
+                max_iter=1,
+                retrain_full=True,
+                seed=seed,
+                n_jobs=n_jobs,
+                verbose=0,
+                mlflow_logging=False,
+                **options,
+            )
+        except Exception as exc:
+            raise ExperimentError(f"Training {estimator_display_name(estimator)} with a fixed configuration "
+                                  f"failed: {exc}") from exc
+        if automl.model is None:
+            raise ExperimentError(f"FLAML did not train {estimator_display_name(estimator)}.")
+        return automl
+
+    def search_space(self, estimator: str, task_type: TaskType, data_size: tuple[int, int]) -> dict[str, Any]:
+        """FLAML's default search space of one learner family for data of this size."""
+        os.environ.setdefault("MLFLOW_DISABLE_AGENT_HINT", "1")
+        from flaml.automl.task.factory import task_factory
+
+        task = task_factory(self._TASKS[task_type])
+        try:
+            learner = task.estimator_class_from_str(estimator)
+        except Exception as exc:
+            raise ExperimentError(f"Unknown learner family '{estimator}'.") from exc
+        return learner.search_space(data_size=data_size, task=task)
+
+    def custom_hp(
+        self,
+        limits: dict[str, dict[str, dict[str, float]]],
+        task_type: TaskType,
+        data_size: tuple[int, int],
+    ) -> dict[str, dict[str, Any]]:
+        """Turn plain JSON limits into FLAML's ``custom_hp`` (one copied spec per limited setting).
+
+        The default space depends on the number of rows (for example LightGBM's ``num_leaves``
+        goes up to the number of rows), so ``data_size`` should be the shape FLAML searches on.
+        """
+        custom: dict[str, dict[str, Any]] = {}
+        for estimator, settings in limits.items():
+            space = self.search_space(estimator, task_type, data_size)
+            for name, bounds in settings.items():
+                custom.setdefault(estimator, {})[name] = limited_search_space_spec(
+                    space.get(name), bounds, f"{estimator}.{name}"
+                )
+        return custom
+
+    def check_starting_points(
+        self,
+        starting_points: dict[str, dict[str, Any]],
+        task_type: TaskType,
+        data_size: tuple[int, int],
+        custom_hp: dict[str, dict[str, Any]] | None = None,
+    ) -> tuple[dict[str, dict[str, Any]], list[str]]:
+        """Keep the starting configurations that fit the (possibly limited) search space.
+
+        FLAML drops an invalid starting point itself, but only logs it, and that log could not be
+        captured (task 1). So invalid configurations are left out here, with a warning. FLAML builds
+        its space from the rows it searches on; with a holdout split those are slightly fewer than
+        ``data_size``, so a value at the very top of a row-dependent range may still be dropped by
+        FLAML without a warning.
+        """
+        valid: dict[str, dict[str, Any]] = {}
+        messages: list[str] = []
+        for estimator, raw in starting_points.items():
+            config = {k: v for k, v in to_jsonable(raw or {}).items() if k not in _NON_HYPERPARAMETER_KEYS}
+            if not config:
+                continue
+            space = self.search_space(estimator, task_type, data_size)
+            space.update((custom_hp or {}).get(estimator, {}))
+            outside = sorted(name for name, value in config.items() if not value_in_search_space(value, space.get(name)))
+            if outside:
+                messages.append(
+                    f"The starting configuration for {estimator_display_name(estimator)} was not used because "
+                    f"{', '.join(outside)} {'is' if len(outside) == 1 else 'are'} outside the search space."
+                )
+            else:
+                valid[estimator] = config
+        return valid, messages
+
+    @staticmethod
+    def _checked_weights(sample_weight: Any, n_rows: int) -> np.ndarray:
+        weights = np.asarray(sample_weight, dtype=float)
+        if weights.shape != (n_rows,) or not np.all(np.isfinite(weights)) or np.any(weights < 0):
+            raise ExperimentError("Sample weights must be one finite, non-negative number per training row.")
+        return weights
 
     @staticmethod
     def _read_history(log_path: Path, to_score: Callable[[Any], float | None]) -> list[dict[str, Any]]:
@@ -423,6 +726,19 @@ class ExperimentResult:
     artifact_dir: str
     mlflow_run_id: str | None = None
     status: str = "completed"
+    schema_version: int = SCHEMA_VERSION
+    # Metric of best_validation_score, the leaderboard and the search history. It differs from
+    # primary_metric only when the Setup sets a separate Search_Metric.
+    search_metric: str | None = None
+    test_evaluated: bool = True  # False inside a Session: no test score, predictions or importance
+    best_config_per_estimator: dict[str, dict[str, Any]] = field(default_factory=dict)
+    search_summary: dict[str, Any] | None = None
+    session_id: str | None = None
+    parent_experiment_id: str | None = None
+    proposal: dict[str, Any] | None = None
+    setup_key: str | None = None
+    setup: dict[str, Any] = field(default_factory=dict)
+    profile_rows: str = "all"  # rows behind the profile and meta-features: "all" labelled rows or "train"
     # Rich objects for the UI; not part of the JSON summary.
     search_history: list[dict[str, Any]] = field(default_factory=list, repr=False)
     test_evaluation: EvaluationResult | None = field(default=None, repr=False)
@@ -434,6 +750,25 @@ class ExperimentResult:
         """JSON-safe summary (stored in experiments/EXP-###/summary.json)."""
         data = {k: v for k, v in self.__dict__.items() if k not in self._NON_SUMMARY_FIELDS}
         return to_jsonable(data)
+
+
+# Fields that hold Test_Part results or may mention them (warnings include test-row notes).
+_TEST_PART_FIELDS = ("test_score", "test_metrics", "baseline_metrics", "feature_importance", "warnings")
+
+
+def decision_view(result: ExperimentResult) -> dict[str, Any]:
+    """The part of a result that decision components may read (Requirement 1.6).
+
+    It is ``result.to_dict()`` without any Test_Part metric, prediction or count derived from
+    Test_Part labels. Meta-features are kept only when the profile was computed on the
+    Training_Part alone (``profile_rows == "train"``).
+    """
+    view = result.to_dict()
+    for key in _TEST_PART_FIELDS:
+        view.pop(key, None)
+    if result.profile_rows != "train":
+        view.pop("dataset_meta_features", None)
+    return view
 
 
 # --------------------------------------------------------------------------- runner
@@ -450,6 +785,20 @@ class _PreparedData:
     task_type: TaskType
     metric: str
     warnings: list[str]
+    split: OuterSplit
+    search_metric: str
+
+
+@dataclass(frozen=True)
+class _RunOptions:
+    """How one run uses the Test_Part and how it is linked to a Session."""
+
+    evaluate_test: bool = True
+    compute_importance: bool = True
+    profile_rows: str = "all"
+    session_id: str | None = None
+    parent_experiment_id: str | None = None
+    proposal: dict[str, Any] | None = None
 
 
 class AutoMLRunner:
@@ -501,16 +850,42 @@ class AutoMLRunner:
 
     # ----------------------------------------------------------- main flow
     def run_experiment(
-        self, dataframe: pd.DataFrame, config: ExperimentConfig, progress_callback: ProgressCallback | None = None
+        self,
+        dataframe: pd.DataFrame,
+        config: ExperimentConfig,
+        progress_callback: ProgressCallback | None = None,
+        *,
+        split: OuterSplit | None = None,
+        evaluate_test: bool = True,
+        compute_importance: bool = True,
+        profile_rows: Literal["all", "train"] = "all",
+        session_id: str | None = None,
+        parent_experiment_id: str | None = None,
+        proposal: dict[str, Any] | None = None,
     ) -> ExperimentResult:
+        """Run one experiment. The keyword arguments are used by Sessions; their defaults give Phase 1.
+
+        - ``split``: use exactly these training and test rows (positions of the labelled rows).
+          Without it the split is made with the Phase 1 rule.
+        - ``evaluate_test=False``: the Test_Part is not used at all: no test metrics, baseline,
+          predictions, permutation importance or notes about test rows (``test_evaluated`` is False).
+        - ``compute_importance=False``: skip permutation importance.
+        - ``profile_rows="train"``: profile and meta-features from the Training_Part only.
+        """
+        if profile_rows not in ("all", "train"):
+            raise ExperimentError(f"profile_rows must be 'all' or 'train', not '{profile_rows}'.")
+        options = _RunOptions(evaluate_test, compute_importance, profile_rows, session_id, parent_experiment_id,
+                              proposal)
         notify = progress_callback or (lambda stage, fraction, message: None)
         total_start = time.perf_counter()
 
         notify("preparing", 0.02, "Validating data and configuration")
         X, y, task_type, metric, warnings = self._prepare(dataframe, config)
+        search_metric = self._search_metric(config, task_type, metric)
 
-        X_train, X_test, y_train, y_test = self._split(X, y, task_type, config, warnings)
-        warnings.extend(unseen_category_warnings(X_train, X_test))
+        split, X_train, X_test, y_train, y_test = self._split(X, y, task_type, config, warnings, split)
+        if evaluate_test:
+            warnings.extend(unseen_category_warnings(X_train, X_test))
         experiment_id = self.tracker.allocate_experiment_id()
         work_dir = self.tracker.experiment_dir(experiment_id)
         logger.info(
@@ -518,9 +893,9 @@ class AutoMLRunner:
             experiment_id, config.dataset_name, config.target_column, task_type.value, metric,
             config.time_budget, len(X_train), len(X_test),
         )
-        data = _PreparedData(X, y, X_train, X_test, y_train, y_test, task_type, metric, warnings)
+        data = _PreparedData(X, y, X_train, X_test, y_train, y_test, task_type, metric, warnings, split, search_metric)
         try:
-            return self._execute(experiment_id, work_dir, dataframe, config, data, notify, total_start)
+            return self._execute(experiment_id, work_dir, dataframe, config, data, notify, total_start, options)
         except Exception as exc:
             # Keep a trace of failed runs (useful for debugging and, later, experiment memory).
             failure = {"experiment_id": experiment_id, "status": "failed", "error": str(exc), "config": config.__dict__}
@@ -537,44 +912,67 @@ class AutoMLRunner:
         data: _PreparedData,
         notify: ProgressCallback,
         total_start: float,
+        options: _RunOptions,
     ) -> ExperimentResult:
         X, y, task_type, metric, warnings = data.X, data.y, data.task_type, data.metric, data.warnings
         X_train, X_test, y_train, y_test = data.X_train, data.X_test, data.y_train, data.y_test
 
+        sample_weight = None
+        if config.class_weight == "balanced":
+            sample_weight = compute_sample_weight("balanced", y_train)
         notify("searching", 0.05, f"AutoML search running ({config.time_budget}s budget)")
         engine_result = self.engine.fit(
             X_train,
             y_train,
             task_type=task_type,
-            metric=metric,
+            metric=data.search_metric,
             time_budget=config.time_budget,
             seed=config.random_seed,
             n_jobs=config.n_jobs,
             estimator_list=config.estimator_list,
             work_dir=work_dir,
+            starting_points=config.starting_points,
+            search_space_limits=config.search_space_limits or None,
+            sample_weight=sample_weight,
+            max_iter=config.max_iter,
         )
+        warnings.extend(engine_result.warnings)
 
-        notify("evaluating", 0.85, "Evaluating the best model on the held-out test set")
         evaluator = Evaluator(task_type, metric)
         model, classes = engine_result.model, engine_result.classes
-        test_eval = evaluator.evaluate(model, X_test, y_test, classes)
+        test_eval: EvaluationResult | None = None
+        baseline: dict[str, Any] = {}
+        importance_rows: list[dict[str, Any]] = []
+        if options.evaluate_test:
+            notify("evaluating", 0.85, "Evaluating the best model on the held-out test set")
+            test_eval = evaluator.evaluate(model, X_test, y_test, classes)
+            baseline = evaluator.baseline_metrics(y_train, y_test)
+            warnings.extend(test_eval.notes)
+        else:
+            notify("evaluating", 0.85, "Scoring the best model on the training part (test part not used)")
         train_eval = evaluator.evaluate(model, X_train, y_train, classes)
-        baseline = evaluator.baseline_metrics(y_train, y_test)
-        warnings.extend(test_eval.notes)
 
-        notify("explaining", 0.9, "Computing permutation feature importance")
-        try:
-            importance = evaluator.feature_importance(model, X_test, y_test, random_state=config.random_seed)
-            importance_rows = to_jsonable(importance.to_dict(orient="records"))
-        except Exception as exc:
-            logger.warning("Permutation importance failed: %s", exc)
-            warnings.append(f"Feature importance could not be computed: {exc}")
-            importance_rows = []
+        if options.evaluate_test and options.compute_importance:
+            notify("explaining", 0.9, "Computing permutation feature importance")
+            try:
+                importance = evaluator.feature_importance(model, X_test, y_test, random_state=config.random_seed)
+                importance_rows = to_jsonable(importance.to_dict(orient="records"))
+            except Exception as exc:
+                logger.warning("Permutation importance failed: %s", exc)
+                warnings.append(f"Feature importance could not be computed: {exc}")
 
         notify("saving", 0.95, "Saving the model and logging to MLflow")
         clean_df = dataframe.loc[y.index]
+        if options.profile_rows == "train":
+            clean_df = clean_df.iloc[data.split.train_positions]
         profile = self.profiler.profile(clean_df, config.target_column, config.dataset_name, task_type)
         model_path = self._save_model(model, experiment_id, X.columns.tolist(), config, task_type, classes)
+        resolved = replace(
+            config,
+            task_type=task_type,
+            primary_metric=metric,
+            search_metric=None if data.search_metric == metric else data.search_metric,
+        )
 
         result = ExperimentResult(
             experiment_id=experiment_id,
@@ -597,9 +995,9 @@ class AutoMLRunner:
             best_config=engine_result.best_config,
             best_validation_score=engine_result.best_validation_score,
             validation_method=engine_result.validation_method,
-            test_score=test_eval.primary_score,
+            test_score=test_eval.primary_score if test_eval is not None else None,
             train_score=train_eval.primary_score,
-            test_metrics=to_jsonable(test_eval.metrics),
+            test_metrics=to_jsonable(test_eval.metrics) if test_eval is not None else {},
             train_metrics=to_jsonable(train_eval.metrics),
             baseline_metrics=to_jsonable(baseline),
             training_time=round(engine_result.training_time, 2),
@@ -612,6 +1010,15 @@ class AutoMLRunner:
             warnings=list(dict.fromkeys(warnings)),
             model_path=str(model_path),
             artifact_dir=str(work_dir),
+            search_metric=data.search_metric,
+            test_evaluated=test_eval is not None,
+            best_config_per_estimator=engine_result.best_config_per_estimator,
+            session_id=options.session_id,
+            parent_experiment_id=options.parent_experiment_id,
+            proposal=to_jsonable(options.proposal) if options.proposal is not None else None,
+            setup_key=resolved.setup_key(),
+            setup=resolved.setup(),
+            profile_rows=options.profile_rows,
             search_history=engine_result.search_history,
             test_evaluation=test_eval,
             profile=profile,
@@ -653,6 +1060,12 @@ class AutoMLRunner:
             )
         if not 0.05 <= config.test_size <= 0.5:
             raise ExperimentError("Test size must be between 0.05 and 0.5.")
+        if config.data_steps:
+            raise ExperimentError("Data steps are not supported yet.")
+        if config.class_weight not in CLASS_WEIGHT_OPTIONS:
+            raise ExperimentError(f"Unknown class weight option '{config.class_weight}'. Use None or 'balanced'.")
+        if config.max_iter is not None and config.max_iter < 1:
+            raise ExperimentError("max_iter must be at least 1.")
 
         warnings: list[str] = []
         y_full = df[target]
@@ -677,20 +1090,50 @@ class AutoMLRunner:
 
         if task_type.is_classification:
             warnings.extend(metric_warnings(task_type, metric, analyze_class_balance(y)))
+        elif config.class_weight is not None:
+            raise ExperimentError("Class weights apply to classification tasks only.")
         return X, y, task_type, metric, warnings
 
     @staticmethod
-    def _split(
-        X: pd.DataFrame, y: pd.Series, task_type: TaskType, config: ExperimentConfig, warnings: list[str]
-    ) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
-        """Split with the shared rule in ``splits.py`` (the same rows as Phase 1)."""
+    def _search_metric(config: ExperimentConfig, task_type: TaskType, primary_metric: str) -> str:
+        """The metric FLAML optimises: the Setup's Search_Metric, or else the primary metric."""
+        if config.search_metric is None:
+            return primary_metric
         try:
-            split, split_warnings = make_outer_split(y, task_type, config.test_size, config.random_seed)
-        except SplitError as exc:
-            raise ExperimentError(str(exc)) from exc
-        warnings.extend(split_warnings)
-        train, test = split.train_positions, split.test_positions
-        return X.iloc[train], X.iloc[test], y.iloc[train], y.iloc[test]
+            return validate_primary_metric(task_type, config.search_metric)
+        except ValueError as exc:
+            raise ExperimentError(f"Search metric: {exc}") from exc
+
+    @staticmethod
+    def _split(
+        X: pd.DataFrame,
+        y: pd.Series,
+        task_type: TaskType,
+        config: ExperimentConfig,
+        warnings: list[str],
+        split: OuterSplit | None = None,
+    ) -> tuple[OuterSplit, pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
+        """Use the given split, or make one with the shared rule in ``splits.py`` (the same rows as Phase 1)."""
+        if split is None:
+            try:
+                split, split_warnings = make_outer_split(y, task_type, config.test_size, config.random_seed)
+            except SplitError as exc:
+                raise ExperimentError(str(exc)) from exc
+            warnings.extend(split_warnings)
+        train, test = np.asarray(split.train_positions), np.asarray(split.test_positions)
+        positions = np.concatenate([train, test])
+        if (
+            len(train) == 0
+            or len(test) == 0
+            or positions.min() < 0
+            or positions.max() >= len(y)
+            or len(np.unique(positions)) != len(positions)
+        ):
+            raise ExperimentError(
+                f"The given split does not fit this dataset ({len(y)} labelled rows): positions must be "
+                "inside the data, both parts non-empty, and no row in both parts."
+            )
+        return split, X.iloc[train], X.iloc[test], y.iloc[train], y.iloc[test]
 
     def _save_model(
         self,
@@ -784,6 +1227,14 @@ class AutoMLRunner:
             "n_test": result.n_test,
             "n_features": len(result.feature_columns),
             "excluded_columns": ",".join(result.excluded_columns) or "none",
+            "search_metric": result.search_metric,
+            "class_weight": result.setup.get("class_weight") or "none",
+            "search_space_limits": json.dumps(result.setup.get("search_space_limits") or {}, sort_keys=True),
+            "setup_key": result.setup_key,
+            "test_evaluated": result.test_evaluated,
+            "profile_rows": result.profile_rows,
+            "session_id": result.session_id or "none",
+            "parent_experiment_id": result.parent_experiment_id or "none",
         }
         params.update({f"hp.{k}": v for k, v in result.best_config.items()})
         params.update({f"meta.{k}": round(v, 6) for k, v in result.dataset_meta_features.items()})
@@ -806,7 +1257,7 @@ class AutoMLRunner:
             "task": result.task_type.value,
             "best_model": result.best_model_name,
             "project": "autopilot-ml",
-            "phase": "baseline",
+            "phase": "session" if result.session_id else "baseline",
         }
         artifact_list: list[tuple[Path, str | None]] = [(model_path, "model")]
         artifact_list += [(path, "results") for path in artifacts]

@@ -181,14 +181,19 @@ class LogisticEngine:
 
     name = "sklearn-logistic"
 
-    def fit(self, X_train, y_train, *, task_type, metric, time_budget, seed, n_jobs, estimator_list, work_dir):
-        model = LogisticRegression(max_iter=5000).fit(X_train, y_train)
+    def fit(self, X_train, y_train, *, task_type, metric, time_budget, seed, n_jobs, estimator_list, work_dir,
+            starting_points=None, search_space_limits=None, sample_weight=None, max_iter=None):
+        model = self.fit_config(X_train, y_train, task_type=task_type, estimator="logreg", config={"C": 1.0},
+                                seed=seed, n_jobs=n_jobs, sample_weight=sample_weight)
         return EngineResult(
             model=model, engine_name=self.name, engine_version="test", best_estimator="logreg",
             best_model_name="Logistic Regression", best_config={"C": 1.0}, best_validation_score=None,
             validation_method="none", training_time=0.0, search_history=[], leaderboard=[],
-            native_importance=None, classes=list(model.classes_),
+            native_importance=None, classes=list(model.classes_), best_config_per_estimator={"logreg": {"C": 1.0}},
         )
+
+    def fit_config(self, X_train, y_train, *, task_type, estimator, config, seed, n_jobs, sample_weight=None):
+        return LogisticRegression(max_iter=5000, **config).fit(X_train, y_train, sample_weight=sample_weight)
 
 
 class FailingEngine:

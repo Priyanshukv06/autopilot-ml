@@ -192,6 +192,7 @@ In order (dates and commits in Appendix B):
 | Streamlit 1.65 deprecates `use_container_width` | `width="stretch"` |
 | Saved models are pickle files, which can run code when loaded | Documented: only load files this app created |
 | MLflow stores absolute file paths | Documented: moving the project folder breaks file links in old MLflow runs; the JSON records still work |
+| FLAML never searches the upper value of an integer range, but its validity check accepts it (found in the source, task 3, 26 October 2026) | Limits are written inclusive ("at most 32") and the engine adds 1 for FLAML; starting values are checked against the range FLAML really searches |
 
 ### 4.8 Phase 1 review
 
@@ -279,7 +280,8 @@ Task 1 of the spec (26 October 2026): automated checks in `tests/test_flaml_capa
 - Using FLAML's `DataTransformer` and the XGBoost learner class directly did not reproduce the predictions of the same configuration trained through `AutoML` (largest difference in predicted probability 0.245), so it is not used as a fallback.
 - `sample_weight` (balanced class weights): accepted; the mean predicted survival probability on the test part rose from 0.371 to 0.442 (LightGBM, 37 trees). FLAML also weights its validation score: the same first configuration scored a validation loss of 0.2286 without weights and 0.2045 with them. The Judge therefore compares unweighted fold scores.
 - `custom_hp`: with the LightGBM `num_leaves` domain capped at 32 (FLAML's own starting value of 4 kept), all 40 trials stayed within the cap.
-- A starting configuration outside the search space (`num_leaves` = 1,000,000) was dropped and the search continued from FLAML's default, but FLAML's warning could not be captured, so our engine checks starting points itself and records the warning.
+- Read in the FLAML 2.7.0 source while building task 3: the search never tries the `upper` value of an integer range (`normalize` and `denormalize` in `tune/space.py` use `upper - 1` unless the range is quantized). FLAML's own spaces are written this way, for example `min_child_samples` uses `upper=2**7 + 1` for "at most 128". So our limit "at most 32" becomes `upper=33`. FLAML's own validity check of a starting value (`is_valid`) still accepts `upper` itself, so our engine checks against the range that is really searched.
+- A starting configuration outside the search space (`num_leaves` = 1,000,000) was dropped and the search continued from FLAML's default, but FLAML's warning could not be captured, so our engine checks starting points itself and records the warning. FLAML makes this check only when `max_iter` is above 1, which is why a fixed refit (`max_iter=1`) trains the configuration as given.
 - `resampler`: a stand-in resampler was called on the training rows of each fold (569 or 570 rows) and once on all 712 training rows, 11 times for 2 trials, never on validation rows. Combining it with `sample_weight` raises `ValueError`.
 
 Details checked in the FLAML 2.7.0 source and in the EXP-001 and EXP-002 trial logs (22 October 2026). The plain-language version, with diagrams, is `how-it-works.md` section 6.
@@ -589,6 +591,16 @@ result = AutoMLRunner().run(
 - `ExperimentResult` (saved as `summary.json`): ID and time; dataset, target, task, metric; budget, seed, test share; engine and version; train and test sizes; feature and excluded columns; best model and configuration; validation, test and train scores; full test, train and baseline metrics; training time, total time, number of trials; leaderboard; feature importance; dataset meta-features; warnings; model path, result folder and MLflow run ID.
 - Progress stages reported to the UI: preparing (2%), searching (5% to 85%, estimated from time), evaluating (85%), explaining (90%), saving (95%), done (100%).
 
+Phase 2 extensions (spec task 3, 26 October 2026). Every new option defaults to the Phase 1 behaviour, and the 70 existing tests pass unchanged except for the test engine, which takes the new arguments.
+
+- `ExperimentConfig` gains `data_steps` (rejected until task 12), `class_weight` (None or "balanced"), `search_metric`, `search_space_limits` (plain JSON such as `{"lgbm": {"num_leaves": {"upper": 32}}}`, bounds inclusive), `starting_points` (learner family to configuration) and `max_iter`. `setup()` lists the settings that define a Setup and `setup_key()` is a 16-character SHA-256 hash of it; the time budget, `max_iter`, starting points, dataset name and `n_jobs` are left out.
+- `AutoMLEngine.fit(...)` gains `starting_points`, `search_space_limits`, `sample_weight` and `max_iter`; `metric` is now the metric the search optimises. `FLAMLEngine` passes each one to FLAML only when it is given. `EngineResult` gains `best_config_per_estimator` and `warnings`.
+- `FLAMLEngine.fit_config(X, y, *, task_type, estimator, config, seed, n_jobs, sample_weight=None)` trains one fixed configuration through FLAML (`max_iter=1`) and returns a model that predicts the original labels.
+- `FLAMLEngine.custom_hp` turns the limits into FLAML's `custom_hp`: it copies FLAML's own spec of the setting, narrows the bounds and moves the starting values inside them. `check_starting_points` leaves out a starting configuration with a value outside the (limited) space and records a warning.
+- `AutoMLRunner.run_experiment(..., split=None, evaluate_test=True, compute_importance=True, profile_rows="all", session_id=None, parent_experiment_id=None, proposal=None)`. With `evaluate_test=False` the test part is not used at all (no test metrics, baseline, predictions, importance or test-row notes). With `class_weight="balanced"` the runner passes scikit-learn's balanced sample weights to FLAML.
+- `ExperimentResult` gains `schema_version` (2), `search_metric`, `test_evaluated`, `best_config_per_estimator`, `search_summary`, `session_id`, `parent_experiment_id`, `proposal`, `setup_key`, `setup` and `profile_rows`.
+- `decision_view(result)` returns the record without the test score, test and baseline metrics, permutation importance and warnings, and without the meta-features unless the profile was made from the training part only. Decision components only ever see this view.
+
 ### 8.3 Dashboard sections
 
 1. Dataset: upload or sample; cards for rows, columns, missing values, duplicates, numerical and categorical features; tabs for columns, preview, data quality and target candidates.
@@ -881,7 +893,8 @@ Future scope (beyond the planned phases):
 | 2026-10-26 | Kiro spec written for Phases 2 and 3 (`.kiro/specs/autopilot-ml/`: 32 requirements with 160 acceptance criteria, design with decisions D1 to D8, 35 tasks plus 21 sub-tasks); links and coverage checked by a script; design diagrams parsed with Mermaid 11.15.0; roadmap rewritten as a summary of the spec; section 5.3 updated; steering rule updated to follow the spec | 7d099ba, 9618e6b |
 | 2026-10-26 | Spec task 1: FLAML capability checks (8 tests in `tests/test_flaml_capabilities.py`, all passing; 55 tests in total); findings in section 5.2; design updated (refit through `max_iter=1`, our own check of starting points) | da4dadc |
 | 2026-10-26 | Spec task 2: `app/services/splits.py` (outer split and session folds with fingerprints); the runner now uses the shared split rule; all 55 tests still pass | 70ec049 |
-| 2026-10-26 | Spec task 2.1: 15 split tests in `tests/test_splits.py`, including a check that the new rule gives exactly the test rows, in the same order, saved by EXP-001 (Titanic, seed 42); 70 tests in total, all passing | see the commit of this date |
+| 2026-10-26 | Spec task 2.1: 15 split tests in `tests/test_splits.py`, including a check that the new rule gives exactly the test rows, in the same order, saved by EXP-001 (Titanic, seed 42); 70 tests in total, all passing | 49c5aab |
+| 2026-10-26 | Spec task 3: engine and runner extensions (starting points, search-space limits, class weights, separate search metric, `max_iter`, `fit_config`, `run_experiment` options for Sessions, `decision_view`, new record fields; section 8.2); found that FLAML's integer upper bounds are exclusive (section 5.2); a throwaway run on Titanic (10 s, seed 42, `max_iter=8`, temporary folder) showed every option reaching FLAML; all 70 tests still pass | see the commit of this date |
 
 ---
 

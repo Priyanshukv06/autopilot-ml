@@ -5,8 +5,9 @@ Proposal per change (one per affected column), drops changes already tried in th
 that do not apply to the Accepted_Setup, and repeats, then ranks them with the ``rules`` selector:
 severity, then cost class, then the position in the table, then the change's key.
 
-Thin version (task 7): rows for high_cardinality, overfitting and class_imbalance. Task 14 adds the
-other rows. Positions follow the full table in design.md, so they do not change when rows are added.
+The rule table is the full table of design.md (the thin version of task 7 had the rows for
+high_cardinality, overfitting and class_imbalance; task 14 added the others). Positions count its
+rows, so they did not change when rows were added.
 """
 
 from __future__ import annotations
@@ -38,27 +39,62 @@ TABLE_ORDER: tuple[DiagnosisKind, ...] = (
 SEVERITY_ORDER = {Severity.HIGH: 0, Severity.MODERATE: 1, Severity.LOW: 2}
 COST_ORDER = {"cheap": 0, "normal": 1, "expensive": 2}
 
-Candidate = Callable[[Diagnosis, list[Diagnosis]], list[StrategySpec]]
+Candidate = Callable[[Diagnosis, list[Diagnosis], ExperimentConfig], list[StrategySpec]]
 
 
-def _drop_each_column(diagnosis: Diagnosis, _: list[Diagnosis]) -> list[StrategySpec]:
+def _each_column(strategy_id: str) -> Candidate:
+    """One Proposal per column of the Diagnosis."""
+    return lambda diagnosis, _diagnoses, _config: [
+        StrategySpec(strategy_id, {"columns": [column]}) for column in diagnosis.columns
+    ]
+
+
+def _drop_if_high(diagnosis: Diagnosis, _diagnoses: list[Diagnosis], _config: ExperimentConfig) -> list[StrategySpec]:
+    if diagnosis.severity is not Severity.HIGH:
+        return []
     return [StrategySpec("drop_columns", {"columns": [column]}) for column in diagnosis.columns]
 
 
-def _drop_high_cardinality_columns(_: Diagnosis, diagnoses: list[Diagnosis]) -> list[StrategySpec]:
+def _drop_later_column(diagnosis: Diagnosis, _diagnoses: list[Diagnosis], _config: ExperimentConfig) -> list[StrategySpec]:
+    """For a redundant pair (in data order), drop the second column."""
+    return [StrategySpec("drop_columns", {"columns": [diagnosis.columns[-1]]})]
+
+
+def _drop_high_cardinality_columns(_diagnosis: Diagnosis, diagnoses: list[Diagnosis],
+                                   _config: ExperimentConfig) -> list[StrategySpec]:
     columns = sorted({c for d in diagnoses if d.kind is DiagnosisKind.HIGH_CARDINALITY for c in d.columns})
     return [StrategySpec("drop_columns", {"columns": [column]}) for column in columns]
 
 
+def _keep_strong_families(diagnosis: Diagnosis, _diagnoses: list[Diagnosis],
+                          config: ExperimentConfig) -> list[StrategySpec]:
+    """Keep the families of the Setup (or, if it uses FLAML's own list, the families the search tried, in the
+    order it first tried them) without the weak ones."""
+    weak = set(str(diagnosis.evidence.get("families", "")).split(","))
+    tried = [f for f in str(diagnosis.evidence.get("tried_families", "")).split(",") if f]
+    keep = [f for f in (config.estimator_list or tried) if f not in weak]
+    return [StrategySpec("restrict_model_families", {"keep": keep})] if keep else []
+
+
 def _single(strategy_id: str) -> Candidate:
-    return lambda _diagnosis, _diagnoses: [StrategySpec(strategy_id, {})]
+    return lambda _diagnosis, _diagnoses, _config: [StrategySpec(strategy_id, {})]
 
 
-# Candidate Strategies for each diagnosis kind, in order. A kind without a row gets no Proposal.
+# Candidate Strategies for each diagnosis kind, in order. A kind without a row gets no Proposal
+# (wasted_budget is answered by the Resource_Manager, which shortens the next search).
 RULES: dict[DiagnosisKind, tuple[Candidate, ...]] = {
-    DiagnosisKind.HIGH_CARDINALITY: (_drop_each_column,),
+    DiagnosisKind.IDENTIFIER_COLUMN: (_each_column("drop_columns"),),
+    DiagnosisKind.CONSTANT_COLUMN: (_each_column("drop_columns"),),
+    DiagnosisKind.HIGH_CARDINALITY: (_each_column("drop_columns"), _each_column("frequency_encode"),
+                                     _each_column("group_rare_categories")),
+    DiagnosisKind.MISSING_VALUES: (_drop_if_high, _each_column("missing_indicator")),
+    DiagnosisKind.REDUNDANT_FEATURES: (_drop_later_column,),
     DiagnosisKind.OVERFITTING: (_single("regularised_search_space"), _drop_high_cardinality_columns),
-    DiagnosisKind.CLASS_IMBALANCE: (_single("class_weight_balanced"),),
+    DiagnosisKind.UNDERFITTING: (_single("more_search_time"),),
+    DiagnosisKind.BUDGET_LIMITED: (_single("more_search_time"),),
+    DiagnosisKind.CLASS_IMBALANCE: (_single("class_weight_balanced"), _single("smoother_search_metric")),
+    DiagnosisKind.UNRELIABLE_VALIDATION: (_single("smoother_search_metric"),),
+    DiagnosisKind.WEAK_MODEL_FAMILIES: (_keep_strong_families,),
 }
 
 
@@ -121,7 +157,7 @@ def propose(
             continue
         row = TABLE_ORDER.index(diagnosis.kind)
         for index, candidate in enumerate(RULES[diagnosis.kind]):
-            for spec in candidate(diagnosis, diagnoses):
+            for spec in candidate(diagnosis, diagnoses, config):
                 key = spec.key()
                 if key in tried:
                     continue

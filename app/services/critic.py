@@ -419,8 +419,11 @@ class Critic:
                 weak[family] = (gap, time_share)
         if not weak:
             return None
+        # tried_families: every family the search tried, in the order it first tried them (the order of the
+        # summary), so that restricting the list can keep FLAML's order.
         evidence: dict[str, float | str] = {"families": ",".join(weak), "best_family": best_family,
-                                            "metric": search_metric}
+                                            "metric": search_metric,
+                                            "tried_families": ",".join(search.seconds_per_family)}
         for family, (gap, time_share) in weak.items():
             evidence[f"gap.{family}"] = gap
             evidence[f"time_share.{family}"] = time_share

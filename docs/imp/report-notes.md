@@ -423,6 +423,23 @@ Throwaway check on 26 October 2026 (Titanic, setup A, seed-42 split, session fol
 
 On the Titanic Diagnoses of Algorithm 11 this gives: drop `Ticket` (high; answers overfitting and high cardinality), drop `Cabin` (moderate), then smaller trees (moderate).
 
+**Algorithm 12, completed: all nine Strategies and the full rule table** (task 14)
+
+| Diagnosis | Strategies tried, in order |
+|---|---|
+| identifier_column, constant_column | drop the column |
+| high_cardinality | drop the column; frequency encoding; group rare values |
+| missing_values | drop the column (only if high); missing-value indicator (numeric columns) |
+| redundant_features | drop the later column of the pair |
+| overfitting | smaller trees; drop each high-cardinality column |
+| underfitting, budget_limited | more search time |
+| class_imbalance | balanced class weights; smoother search metric (log loss) |
+| unreliable_validation | smoother search metric |
+| weak_model_families | search only the other learner families |
+| wasted_budget | none: the Resource_Manager shortens the next search |
+
+New Strategies: frequency encoding (same complexity), grouping rare values (simpler), missing-value indicator (more complex), fewer learner families (simpler), more search time (same Setup, twice the time, expensive) and smoother search metric (same complexity, normal cost). Each changes a copy of the Setup and applies only when it makes sense for it (for example, a column can get only one of the two encodings, and dropping a column also removes its Data_Steps). A 90 s throwaway Session on Titanic (seed 42, temporary folder, 26 October 2026) ran the new data Strategies end to end through FLAML: it dropped `Ticket` (kept), frequency-encoded `Cabin` (discarded), grouped the rare values of `Cabin` (kept as simpler) and tried the smoother search metric (discarded), and stopped for time at 90.5 s.
+
 **Algorithm 13: Judge** (`app/services/judge.py`, task 8; settings alpha 0.10, minimum gain 0, non-inferiority margin 0.005, decision D2)
 
 1. Check that both Assessments are complete, use the same folds (same fingerprint and number of folds) and the same primary metric; otherwise stop with an error, and the Session discards the candidate.
@@ -1090,7 +1107,8 @@ Future scope (beyond the planned phases):
 | 2026-10-26 | Spec task 12: Data_Steps (`app/services/transforms.py`, Algorithm 16) used by the runner (fitted on the Training_Part, saved with the model) and by the Assessor (fitted on each fold) | 8f4dc5f |
 | 2026-10-26 | Spec task 12.1: 20 Data_Step tests in `tests/test_transforms.py`; 326 tests in total, all passing in 108.9 s | c82a09d |
 | 2026-10-26 | Spec task 13: the full Critic (all twelve Diagnoses, section 5.4) and the profiler's near-constant columns and correlated pairs; checked on the saved SES-001 records | 00ef933 |
-| 2026-10-26 | Spec task 13.1: 68 more Critic tests (112 in `tests/test_critic.py`) and 2 profiler tests; test counts in section 8.6 corrected from pytest's list (the runner file has 21 tests and the engine file 29); 396 tests in total, all passing in 114.2 s | see the commit of this date |
+| 2026-10-26 | Spec task 13.1: 68 more Critic tests (112 in `tests/test_critic.py`) and 2 profiler tests; test counts in section 8.6 corrected from pytest's list (the runner file has 21 tests and the engine file 29); 396 tests in total, all passing in 114.2 s | 39c5569 |
+| 2026-10-26 | Spec task 14: the full Strategy_Catalogue (nine Strategies) and rule table (section 5.4); a throwaway 90 s Session on Titanic used the new data Strategies end to end; existing tests updated for the longer Proposal lists | see the commit of this date |
 
 ---
 

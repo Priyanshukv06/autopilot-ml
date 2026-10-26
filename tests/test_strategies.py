@@ -36,13 +36,18 @@ def config(**changes):
 
 
 # --------------------------------------------------------------------------- catalogue
-def test_the_thin_catalogue():
-    assert list(CATALOGUE) == ["drop_columns", "class_weight_balanced", "regularised_search_space"]
+def test_the_catalogue():
     described = {s.strategy_id: (s.kind, s.complexity, s.cost_class) for s in CATALOGUE.values()}
-    assert described == {
+    assert described == {  # the table of design.md section 7
         "drop_columns": ("data", "simpler", "cheap"),
         "class_weight_balanced": ("model", "same", "cheap"),
         "regularised_search_space": ("search", "simpler", "cheap"),
+        "frequency_encode": ("data", "same", "cheap"),
+        "group_rare_categories": ("data", "simpler", "cheap"),
+        "missing_indicator": ("data", "more_complex", "cheap"),
+        "restrict_model_families": ("model", "simpler", "cheap"),
+        "more_search_time": ("budget", "same", "expensive"),
+        "smoother_search_metric": ("search", "same", "normal"),
     }
     assert all(s.title for s in CATALOGUE.values())
     with pytest.raises(ValueError, match="Unknown strategy"):

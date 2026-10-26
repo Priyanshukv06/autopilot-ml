@@ -192,6 +192,8 @@ In order (dates and commits in Appendix B):
 | Streamlit 1.65 deprecates `use_container_width` | `width="stretch"` |
 | Saved models are pickle files, which can run code when loaded | Documented: only load files this app created |
 | MLflow stores absolute file paths | Documented: moving the project folder breaks file links in old MLflow runs; the JSON records still work |
+| Ranking tie in SES-001 (section 9.11): with overfitting high, "drop `Cabin`" and "drop `Ticket`" both answered a high Diagnosis, had the same cost and table position, and the tie was broken by the key in alphabetical order, so `Cabin` (only moderately high-cardinality) was tried before `Ticket` (high). It cost one extra step and did not change the final Setup | Open: a proposed refinement is to break such ties by the severities of all the Diagnoses a Proposal answers (`Ticket`: high and high; `Cabin`: high and moderate). It changes the ranking rule of Requirement 8.2, so it waits for approval |
+| Warm starts lost after "smaller trees" in SES-001 (EXP-006): the Accepted_Setup's best configurations of LightGBM, XGBoost and depth-limited XGBoost were outside the limited search space, so the engine left them out (with warnings, as designed) and those searches started from FLAML's defaults | Open: a possible refinement is to move a starting configuration into the limited space instead of leaving it out. To be decided with the full Strategy set (task 14) |
 | A dataset with repeated row labels would silently pair features with the wrong target values: the runner matches rows by label (`df.loc[y.index]`) and splits by position (found while reviewing task 3, 26 October 2026; CSV uploads always have a plain row index, so no run was affected) | The runner refuses such a dataset with a clear message before an experiment starts; any unique index works (test: a shuffled index gives the same test metrics as the plain one) |
 | Equal paired differences could still give a tiny non-zero variance through rounding of their mean, and so a meaningless, huge t statistic (found by the Judge tests, task 8.1, 26 October 2026) | `corrected_resampled_t` checks whether the values themselves are all equal; the Judge treats a standard deviation of at most 1e-12 (the refit tolerance) as equal and then decides on the mean alone |
 | FLAML never searches the upper value of an integer range, but its validity check accepts it (found in the source, task 3, 26 October 2026) | Limits are written inclusive ("at most 32") and the engine adds 1 for FLAML; starting values are checked against the range FLAML really searches |
@@ -920,7 +922,40 @@ In EXP-002, XGBoost depth-limited got its first trial at 20.0 s (trial 159) and 
 
 What this shows: on small data FLAML finds most of its gain in the first seconds and then keeps searching until the budget runs out, because early stop cannot trigger (section 5.2). This is evidence for the planned resource manager. It is a single run per setup, so the exact shares are indicative.
 
-### 9.11 Still to produce
+### 9.11 First autonomous Session on Titanic (SES-001, thin loop, 26 October 2026)
+
+Settings: `python scripts/run_autopilot.py --dataset data/sample/titanic.csv --target Survived --seconds 300 --max-experiments 8 --cores -1 --seed 42` (primary metric F1, detected; thresholds `v0-start`; Judge alpha 0.10, margin 0.005, minimum gain 0; rule selector). Code at commit 489c048 with no uncommitted changes, FLAML 2.7.0, laptop of chapter 7. Raw files: `experiments/SES-001/` (`session.json`, `train_profile.json`) and `experiments/EXP-003` to `EXP-006` (each with `summary.json`, `assessment.json`, `decision.json` or `diagnoses.json`), models in `models/EXP-003` to `EXP-006`, MLflow parent run `SES-001` with the four Experiments as child runs.
+
+Splits: the same outer split as Phase 1 (seed 42, stratified, 712 training and 179 test rows); 3 x 5 stratified Session_Folds of the training part with seed 43. The first Setup left out `PassengerId` and `Name` (identifier-like on the training part), which is Phase 1's setup A.
+
+| Step | Experiment | Change | Search budget / wall time | Learner FLAML chose | Refit validation F1 (mean, sd over 15 folds) | Judge: mean difference, wins/losses/ties, corrected t, p(better) | Verdict |
+|---|---|---|---|---|---|---|---|
+| 0 | EXP-003 | first Setup | 105 s / 106.1 s | XGBoost depth-limited (368 trials) | 0.7056 (0.0443) | | first |
+| 1 | EXP-004 | drop `Cabin` | 25 s / 25.7 s | XGBoost (64 trials) | 0.7143 (0.0479) | +0.0087, 9/5/1, 0.584, 0.284 | keep_simpler |
+| 2 | EXP-005 | drop `Ticket` | 23 s / 23.5 s | LightGBM (69 trials) | 0.7649 (0.0446) | +0.0506, 14/1/0, 2.616, 0.010 | keep |
+| 3 | EXP-006 | smaller trees | 23 s / 23.5 s | LightGBM (95 trials) | 0.7628 (0.0398) | -0.0022, 7/7/1, -0.157, 0.561 | keep_simpler |
+
+Diagnoses: for the first Setup, overfitting high (training F1 0.996 against validation F1 0.706 on the folds, gap 0.291), high cardinality high for `Ticket` (571 values; 72% of validation rows had a ticket not seen in the fold's training rows) and moderate for `Cabin` (127 values; 16% unseen); no class imbalance (ratio 1.6). After dropping `Cabin` the overfitting gap was 0.207, after dropping `Ticket` 0.127 (moderate), and for the final Setup 0.134 (moderate). With both text columns dropped and the smaller trees already tried, no Proposal was left, so the Session stopped (`no_proposals`) after 206.0 s of its 300 s budget.
+
+Costs: the Assessments took 4.1 to 6.4 s each (15 refits); the overruns past each step's deadline were 0.95 s (step 1), 0.14 s (step 3) and 0 for the others; the Final_Evaluation took 1.8 s.
+
+Final_Evaluation on the 179 test rows (used once, at the end):
+
+| Model | F1 | Accuracy | Balanced accuracy | ROC-AUC | Log loss |
+|---|---|---|---|---|---|
+| First (EXP-003) | 0.6838 | 0.7933 | 0.7535 | 0.7808 | 0.6411 |
+| Final (EXP-006) | 0.7244 | 0.8045 | 0.7788 | 0.8123 | 0.5261 |
+
+The trivial baseline (always "did not survive") scores F1 0 on the same rows. Permutation importance of the final model (mean drop in F1 on the test rows): `Sex` 0.276, `Pclass` 0.119, `Age` 0.070, `Fare` 0.061, `SibSp` 0.023, `Embarked` 0.016, `Parch` -0.009.
+
+What this shows, and what it does not:
+
+- The loop ran end to end without help and every decision can be checked from its numbers. It reached, by itself, the change that the Phase 1 analysis pointed to (dropping `Ticket`; sections 9.3 and 9.7), and only that step passed the corrected t-test (p = 0.010). The other two kept steps were kept as simpler Setups that were not shown to be worse.
+- On the test rows the final model scored F1 0.724 against 0.684 for the first model. For reference, on the same test rows Phase 1's EXP-001 (setup A, 60 s) scored 0.673 and EXP-002 (setup B, 60 s) 0.709. This is one Session on one split, so it is not evidence that the loop beats a plain search; that needs the Phase 3 benchmark.
+- FLAML's own validation scores (0.804, 0.793, 0.775, 0.777 in the history) went down while the refit scores on the Session_Folds went up (0.706 to 0.763). FLAML's scores come from its own folds and from the best of hundreds of trials, so they are optimistic and not comparable across Setups; this is why the Judge uses the refits (decision D2).
+- Two weaknesses showed up; both are in section 4.7.
+
+### 9.12 Still to produce
 
 - The planned benchmark in `research-direction.md`: six systems, OpenML datasets, several budgets and seeds, paired statistical tests.
 - Re-run sections 9.2 to 9.6 with the final code and keep the raw files.
@@ -1018,7 +1053,8 @@ Future scope (beyond the planned phases):
 | 2026-10-26 | Spec task 10: records and tracking for Sessions (session IDs, atomic JSON writes, step files, Phase 1 records read as version 1, Session column, session history, MLflow parent and child runs; section 8.2) | 3612e12 |
 | 2026-10-26 | Spec task 10.1: 8 tracking tests in `tests/test_tracking.py`; 293 tests in total, all passing in 95.3 s | 847621f |
 | 2026-10-26 | Spec task 11: Planner, the autonomous Session loop and `scripts/run_autopilot.py` (Algorithm 15 in section 5.4); two trial Sessions in a temporary folder ran end to end (not kept) | 62dc010 |
-| 2026-10-26 | Spec task 11.1: 12 Session tests in `tests/test_autopilot.py` (Information_Barrier, stops, failures, replay); `Assessment.from_dict` and `DatasetProfile.from_dict` for replaying from the records; 305 tests in total, all passing in 103.8 s | see the commit of this date |
+| 2026-10-26 | Spec task 11.1: 12 Session tests in `tests/test_autopilot.py` (Information_Barrier, stops, failures, replay); `Assessment.from_dict` and `DatasetProfile.from_dict` for replaying from the records; 305 tests in total, all passing in 103.8 s | 489c048 |
+| 2026-10-26 | Spec task 11.2: first real Session on Titanic, SES-001 (300 s budget, at most 8 Experiments, seed 42; EXP-003 to EXP-006): stopped with no Proposals left after 206.0 s; refit validation F1 0.706 to 0.763; test F1 of the first and final model 0.684 and 0.724; records checked by hand (section 9.11); two weaknesses noted (section 4.7) | see the commit of this date |
 
 ---
 

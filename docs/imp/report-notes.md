@@ -203,6 +203,8 @@ In order (dates and commits in Appendix B):
 | FLAML never searches the upper value of an integer range, but its validity check accepts it (found in the source, task 3, 26 October 2026) | Limits are written inclusive ("at most 32") and the engine adds 1 for FLAML; starting values are checked against the range FLAML really searches |
 | The judge study's fixed rule chose 5 fold repeats over 3 on one tuning pair whose verdict changed only from `keep_simpler` to `keep`, with the same change accepted either way; on the reporting seeds both gave the same rates, and 5 repeats make every Assessment 25 refits instead of 15 (section 9.13, 26 October 2026) | Decided on 26 October 2026: alpha 0.20 as the rule says, but 3 repeats instead of 5, because both accept the same changes on both seed sets and 3 take three fifths of the Assessment time. Reported as a departure from the rule fixed before the run (section 9.13) |
 | The judge study did not create the search folders of its two Setups, so FLAML could not write its log (found by a trial run before the real run, task 17, 26 October 2026; the smoke test uses a stand-in engine that writes no log) | The study creates each search folder before the search |
+| A statistics module named `research/statistics.py`, as the design said, broke AutoGluon: the AutoGluon worker runs as a script from `research/`, so that folder comes first on its import path and the file hid Python's own `statistics` module (checked in the `autogluon` environment before committing, task 25, 27 October 2026: the import failed, and worked again after the rename) | The module is `research/stat_tests.py` |
+| Wilcoxon gave a different p-value for differences that are equal on paper: 0.9 - 0.85 and 0.95 - 0.9 differ in the 17th digit, so they got different ranks (found by the statistics tests, task 25.1, 27 October 2026) | Differences are rounded to 12 decimals before ranking, so equal differences share a rank |
 
 ### 4.8 Phase 1 review
 
@@ -567,6 +569,18 @@ The random choices use the Session's generator, seeded with the Session seed, so
 | `random_choice`, `no_critic`, `no_resource_manager` | The ablations of Algorithm 19 (the last two with Thompson sampling and the memory) |
 
 Without memory the learned choice keeps the rule order, so the "no memory" ablation is the same Session as `autopilot_rules` and is not run twice. AutoGluon could not be installed next to our libraries: a pip dry run on 27 October 2026 showed it would replace pandas 3.0.6 by 2.3.3, so it got the separate environment allowed by decision D4. A throwaway run in a temporary folder (30 to 40 s budgets, tic-tac-toe, kin8nm and balance-scale) ran every system end to end; those scores are not results.
+
+**Algorithm 21: benchmark statistics** (`research/stat_tests.py`, task 25; Requirement 24), following Demšar [22]. Per budget, a system's score on a dataset is the mean over its 5 seeds, so each dataset is one observation; error metrics are negated first so that higher is always better.
+
+- Ranks: within each dataset, rank 1 is the best system; tied systems share the mean rank. R_j is system j's average rank over the N datasets.
+- Friedman test (Friedman, 1937) over k systems: chi2_F = 12N / (k(k+1)) x (sum of R_j^2 - k(k+1)^2 / 4), from `scipy.stats.friedmanchisquare` (which also corrects for ties), and Iman and Davenport's (1980) F_F = (N - 1) chi2_F / (N(k - 1) - chi2_F) with k - 1 and (k - 1)(N - 1) degrees of freedom, which Demšar recommends as less conservative.
+- Nemenyi critical difference (Nemenyi, 1963): CD = q_alpha x sqrt(k(k+1) / (6N)), with q_alpha the studentized range quantile for k groups and infinite degrees of freedom divided by sqrt(2). Two systems differ when their average ranks differ by at least CD; the bars of a critical-difference diagram join the runs of systems that do not.
+- Pairs: the Wilcoxon signed-rank test (Wilcoxon, 1945) on the per-dataset differences (two-sided; zero differences dropped; exact p-values for small N), Holm's (1979) step-down correction over the pairs compared together, the matched-pairs rank-biserial correlation r = (W+ - W-) / (W+ + W-) as the effect size (Kerby, 2014), and a 95% percentile bootstrap interval of the median difference (10,000 resamples, fixed seed; Efron and Tibshirani, 1993). Differences equal up to floating-point noise are rounded to 12 decimals so that they share a rank.
+- Time-to-target (Requirement 24.3): for each dataset and seed, the target is 99% of the best score any system reached at any budget (for a negative best, 1% of its size below it); a system's time-to-target is the smallest budget at which it reached the target, or none.
+
+What the tests can show with 6 evaluation datasets (worked out from the formulas, not measured): the smallest two-sided Wilcoxon p-value is 2 / 2^6 = 0.031, reached only when one system is better on all 6 datasets, so after Holm's correction no pair can reach p < 0.05 once two or more pairs are compared; the Nemenyi CD at alpha 0.05 is 2.49 ranks for the 5 main systems and 4.29 for all 8. The effect sizes and intervals therefore carry most of the information. With 12 datasets these would be 0.0005, 1.76 and 3.03.
+
+Built on 27 October 2026 (task 25). Tests (section 8.6) check every function against SciPy's documented Wilcoxon example, Demšar's Table 5 and worked example, and values worked out by hand.
 
 **Algorithm 17: Experiment_Memory, version 1** (`app/services/experiment_memory.py`, task 15). After every Verdict the Session appends one line to `experiments/memory/memory.jsonl`: the dataset's fingerprint (a hash of its column names and types, number of rows and target) and the Meta_Features of its training part, the task and metric, the Diagnoses the Proposal answered (kind and severity), the Strategy and its parameters, the Verdict, the Judge's mean and standard deviation of the differences, the number of folds, the step's cost in seconds, its Utility, the engine version and the date. The file is only appended to, and a damaged line is skipped with a warning.
 
@@ -1294,6 +1308,12 @@ Future scope (beyond the planned phases):
 - Yang, C., Akimoto, Y., Kim, D. W., and Udell, M. (2019). OBOE: Collaborative Filtering for AutoML Model Selection. KDD 2019. arXiv:1808.03233 (checked online on 12 October 2026).
 - Thompson, W. R. (1933). On the Likelihood that One Unknown Probability Exceeds Another in View of the Evidence of Two Samples. Biometrika, 25(3/4), 285-294.
 - Efron, B., and Tibshirani, R. J. (1993). An Introduction to the Bootstrap. Chapman & Hall.
+- Friedman, M. (1937). The Use of Ranks to Avoid the Assumption of Normality Implicit in the Analysis of Variance. Journal of the American Statistical Association, 32(200), 675-701.
+- Wilcoxon, F. (1945). Individual Comparisons by Ranking Methods. Biometrics Bulletin, 1(6), 80-83.
+- Nemenyi, P. B. (1963). Distribution-free Multiple Comparisons. PhD thesis, Princeton University.
+- Holm, S. (1979). A Simple Sequentially Rejective Multiple Test Procedure. Scandinavian Journal of Statistics, 6(2), 65-70.
+- Iman, R. L., and Davenport, J. M. (1980). Approximations of the Critical Region of the Friedman Statistic. Communications in Statistics: Theory and Methods, 9(6), 571-595.
+- Kerby, D. S. (2014). The Simple Difference Formula: An Approach to Teaching Nonparametric Correlation. Comprehensive Psychology, 3, article 1.
 - Ke, G., et al. (2017). LightGBM: A Highly Efficient Gradient Boosting Decision Tree. NeurIPS.
 - Chen, T., and Guestrin, C. (2016). XGBoost: A Scalable Tree Boosting System. KDD.
 - Pedregosa, F., et al. (2011). Scikit-learn: Machine Learning in Python. Journal of Machine Learning Research, 12, 2825-2830.
@@ -1375,7 +1395,8 @@ Future scope (beyond the planned phases):
 | 2026-10-27 | Spec task 23.1: 7 tests of the comparison systems in `tests/test_systems.py`, the AutoGluon bridge tested with stand-in worker scripts; 493 tests passing in 221.9 s | bc4d575 |
 | 2026-10-27 | Spec task 24: benchmark harness (`research/benchmark.py`, `scripts/run_benchmark.py run / status`), the reduced grid agreed with the user (390 cells: budgets 120 and 300 s, ablations at 300 s; 600 s dropped), append-only rows with restart, memory guards and a smoke setting (section 4.10); a throwaway trial of all 8 systems | 1e05dc3 |
 | 2026-10-27 | Spec task 24.1: 11 harness tests in `tests/test_benchmark.py` with stand-in systems; 504 tests passing in 218.6 s | f523358 |
-| 2026-10-27 | Documents brought in line with tasks 22 to 24 (README, `PROJECT.md` with a new section 8.8, `architecture.md`, `how-it-works.md`, `development-roadmap.md`, `research-direction.md`): the ablation switches, comparison systems and harness described as built, the benchmark as not run; the reduced budgets; CPU seconds marked as not measured; the AutoGluon environment's setup in the README | see the commit of this date |
+| 2026-10-27 | Documents brought in line with tasks 22 to 24 (README, `PROJECT.md` with a new section 8.8, `architecture.md`, `how-it-works.md`, `development-roadmap.md`, `research-direction.md`): the ablation switches, comparison systems and harness described as built, the benchmark as not run; the reduced budgets; CPU seconds marked as not measured; the AutoGluon environment's setup in the README | d04e6db |
+| 2026-10-27 | Spec task 25: benchmark statistics (Algorithm 21, `research/stat_tests.py`, renamed from `statistics.py` because that name broke AutoGluon's imports): Friedman with Iman and Davenport's F, Nemenyi critical difference and CD-diagram groups, Wilcoxon with Holm, rank-biserial correlation, bootstrap intervals of the median difference, time-to-target; the power limits with 6 datasets worked out | see the commit of this date |
 
 ---
 

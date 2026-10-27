@@ -940,9 +940,9 @@ python scripts/run_phase2.py run            # and: run_phase2.py analyse
 python scripts/prepare_datasets.py download # recreate data/raw/ from research/datasets.json
 ```
 
-### 8.6 Tests (521, about 217 s on 27 October 2026)
+### 8.6 Tests (533, about 229 s on 27 October 2026)
 
-Phase 1 ended with the first three files below (47 tests, about 29 to 41 s). Phase 2 has added the others so far. Full suite on 26 October 2026 after task 16: 457 passed in 139.7 s on the laptop in chapter 7; without the 4 study smoke tests marked slow (`python -m pytest -q -m "not slow"`, marker registered in `pytest.ini`), 453 passed in 123.6 s. After task 17: 458 passed in 150.4 s. After task 18.1: 465 passed in 175.8 s; without the 9 tests marked slow (4 study smoke tests and the 5 dashboard tests), 456 passed in 127.6 s. After task 19 (27 October 2026): 468 passed in 174.0 s. After task 21.1: 482 passed in 173.2 s. After task 22.1: 486 passed in 182.0 s. After task 23.1: 493 passed in 221.9 s. After task 24.1: 504 passed in 218.6 s. After task 25.1: 517 passed in 222.0 s. With the memory build (task 26): 521 passed in 217.1 s. The counts below were taken from pytest's list of collected tests.
+Phase 1 ended with the first three files below (47 tests, about 29 to 41 s). Phase 2 has added the others so far. Full suite on 26 October 2026 after task 16: 457 passed in 139.7 s on the laptop in chapter 7; without the 4 study smoke tests marked slow (`python -m pytest -q -m "not slow"`, marker registered in `pytest.ini`), 453 passed in 123.6 s. After task 17: 458 passed in 150.4 s. After task 18.1: 465 passed in 175.8 s; without the 9 tests marked slow (4 study smoke tests and the 5 dashboard tests), 456 passed in 127.6 s. After task 19 (27 October 2026): 468 passed in 174.0 s. After task 21.1: 482 passed in 173.2 s. After task 22.1: 486 passed in 182.0 s. After task 23.1: 493 passed in 221.9 s. After task 24.1: 504 passed in 218.6 s. After task 25.1: 517 passed in 222.0 s. With the memory build (task 26): 521 passed in 217.1 s. With the benchmark analysis and the judge agreement study: 533 passed in 229.2 s. The counts below were taken from pytest's list of collected tests.
 
 | File | Tests | What they cover |
 |---|---|---|
@@ -1276,9 +1276,26 @@ What this shows, and what it does not:
 - "Simpler and not worse" accepted many small changes in a row on breast cancer. Each passed the Judge alone; whether their sum helps on new rows is not tested by the Judge. This is a known property of the keep_simpler rule to check in Phase 3.
 - 3 seeds and test parts of 69 to 179 rows for three of the datasets give no statistical power: these are observations, not tested differences. The Phase 3 benchmark (more datasets, budgets of 2, 5 and 10 minutes, at least 5 seeds, the statistics of section 5) is the test for the report's claims.
 
-### 9.15 Still to produce
+### 9.15 The frozen benchmark memory (task 26, 27 October 2026)
 
-- The benchmark (section 4.10; harness built in task 24, not run yet): first the frozen memory from the development datasets (task 26), then the smoke run, then the 390 cells, then the statistics (task 25).
+Setup (section 4.10): 30 Sessions, one per development dataset (10) and seed (1, 2, 3), 300 s each, at most 8 Experiments, changes tried in a random order without reading the memory, all other Session settings at their defaults (3 x 5 folds, Judge alpha 0.20, thresholds `v1-critic-study`), all 16 cores, MLflow off, starting from an empty memory. Code at commit 94714d2 with no uncommitted changes; laptop of chapter 7; 27 October 2026 from 17:10 to 18:54 (1 h 44 min). No Session failed.
+
+Results:
+
+- The Sessions ran 127 Experiments (4.2 per Session on average) and took 113 to 314 s each (mean 206.9 s). Stop reasons: no change left to try 20, three discards in a row 4, time 4, the Experiment limit 2.
+- They wrote 97 memory records, all kept by `freeze` (no Session was unfinished): 44 discard, 42 keep_simpler, 11 keep. Per dataset: breast_cancer 21, vehicle 18, balance-scale 15, titanic 13, wilt 13, kin8nm 7, california_housing 3, student_performance_por 3, penguins 2, tic-tac-toe 2. Per Strategy: drop_columns 36, restrict_model_families 24, regularised_search_space 13, smoother_search_metric 7, class_weight_balanced 6, frequency_encode 5, more_search_time 4, group_rare_categories 2. A record's cost (the step's wall time) was 26.3 s on average (median 27.7 s).
+- Arms (Strategy and diagnosis kind, per task type, counted as the selectors count them): 20, of which 13 have the 3 or more records a learned selector needs before it moves an arm. The largest are drop_columns for redundant features on binary data (22 records, 14 kept), restrict_model_families for weak model families on multiclass data (13 records, all kept) and on binary data (8 records, 7 kept), and regularised_search_space for overfitting on regression data (8 records, 5 kept).
+- Frozen memory: `results/benchmark/frozen_memory.jsonl` (97 records, 100,403 bytes), SHA-256 `4baeb012a2037904c0a4a5303d016c3c59084326562a33670061994e70361316`; summary per arm `frozen_memory_summary.csv`; one row per Session `memory_sessions.csv`. The Sessions' records are in `experiments/benchmark-memory/` (14.3 MB, with the growing memory and `build.log`) and their models in `models/benchmark-memory/` (97.3 MB).
+
+What this shows, and what it does not:
+
+- Records are uneven across datasets: the datasets with many redundant or weak model families got many records, while penguins and tic-tac-toe stopped after one or two changes because nothing else applied. A learned selector will mostly reorder drop_columns, restrict_model_families and regularised_search_space; for most other arms it keeps the rule order.
+- The memory holds few datasets per task type (4 binary, 3 multiclass, 3 regression), so "the 5 nearest datasets" means all development datasets of the same task.
+
+### 9.16 Still to produce
+
+- The benchmark (section 4.10): the frozen memory is built (section 9.15); still to run: the smoke setting, the 390 cells, and the analysis.
+- The judge agreement study (section 4.11).
 - Re-run sections 9.2 to 9.6 with the final code and keep the raw files.
 - Charts: test score against budget; per-seed differences; bootstrap intervals.
 
@@ -1420,7 +1437,8 @@ Future scope (beyond the planned phases):
 | 2026-10-27 | Spec task 25.1: 13 statistics tests in `tests/test_stat_tests.py` against SciPy's and Demšar's reference values and hand-worked ones; 517 tests passing in 222.0 s | 673d2ef |
 | 2026-10-27 | Spec task 26, first part: the frozen memory's build (`research/memory_build.py`, `scripts/build_memory.py`; 30 Sessions on the development datasets with a random order, only finished Sessions frozen; section 4.10) and 4 tests; a throwaway trial (titanic, 40 s) ran, froze and summarised; 521 tests passing in 217.1 s | 94714d2 |
 | 2026-10-27 | Spec task 26: the benchmark analysis (`research/benchmark_analysis.py`, `scripts/run_benchmark.py analyse`; section 4.10): complete blocks only, three families of comparisons with their own pairs, per-dataset tables, time-to-target, critical-difference diagrams and score-against-budget charts; fixed before any benchmark cell ran; 6 tests | 6c7ad8e |
-| 2026-10-27 | Spec task 27: the judge agreement study (`research/judge_agreement.py`, `scripts/run_study.py agreement`; design in section 4.11, fixed before any strict comparison ran) and 6 tests | see the commit of this date |
+| 2026-10-27 | Spec task 27: the judge agreement study (`research/judge_agreement.py`, `scripts/run_study.py agreement`; design in section 4.11, fixed before any strict comparison ran) and 6 tests | 26f7718 |
+| 2026-10-27 | Spec task 26: built and froze the benchmark memory (30 Sessions, 17:10 to 18:54, none failed; 97 records, 13 of 20 arms with at least 3; SHA-256 4baeb012...; section 9.15) | see the commit of this date |
 
 ---
 

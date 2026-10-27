@@ -2,8 +2,12 @@
 
 The rule table maps each diagnosis kind to candidate Strategies, in order. ``propose`` builds one
 Proposal per change (one per affected column), drops changes already tried in the Session, changes
-that do not apply to the Accepted_Setup, and repeats, then ranks them with the ``rules`` selector:
+that do not apply to the Accepted_Setup, and repeats, then ranks them with the ``rules`` order:
 severity, then cost class, then the position in the table, then the change's key.
+
+Selectors (Requirement 19) re-rank them: ``rules`` keeps that order, ``random`` shuffles it, and the
+learned ``thompson`` and ``ucb1`` use what the Experiment_Memory saw on the nearest past datasets for
+each arm, a pair of Strategy and diagnosis kind.
 
 The rule table is the full table of design.md (the thin version of task 7 had the rows for
 high_cardinality, overfitting and class_imbalance; task 14 added the others). Positions count its
@@ -12,11 +16,15 @@ rows, so they did not change when rows were added.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from typing import Any, Callable, Protocol
 
+import numpy as np
+
 from app.services.automl_runner import ExperimentConfig
 from app.services.critic import Diagnosis, DiagnosisKind, Severity
+from app.services.experiment_memory import ExperimentMemory, StrategyStats
 from app.services.profiler import DatasetProfile
 from app.services.strategies import StrategySpec, get_strategy
 from app.services.task_detector import TaskType
@@ -127,10 +135,38 @@ class Proposal:
         }
 
 
+MIN_OBSERVATIONS = 3  # an arm with fewer observations keeps its rule-order position (Requirement 19.4)
+NEAREST_DATASETS = 5
+MIN_COST_SECONDS = 1.0  # floor of an arm's mean cost, so a very cheap arm cannot divide by almost zero
+
+
+@dataclass
+class SelectionContext:
+    """What the selectors read (Requirement 19). ``memory`` None means: no memory (every arm unknown)."""
+
+    memory: ExperimentMemory | None
+    meta_features: dict[str, Any]  # of the Training_Part
+    task_type: TaskType
+    fingerprint: str | None  # the current dataset; its own records are left out, so only other datasets count
+    rng: np.random.Generator  # seeded from the Session seed (Requirement 19.5)
+    k: int = NEAREST_DATASETS
+
+
 class StrategySelector(Protocol):
     name: str
 
-    def rank(self, proposals: list[Proposal], context: Any = None) -> list[Proposal]: ...
+    def rank(self, proposals: list[Proposal], context: SelectionContext | None = None) -> list[Proposal]: ...
+
+    def explain(self, proposal: Proposal) -> dict[str, Any] | None: ...
+
+
+def arm_of(proposal: Proposal) -> tuple[str, str]:
+    """A Proposal's arm: its Strategy and the kind of the most severe Diagnosis it answers (the first in the
+    Critic's order if several are equally severe)."""
+    if proposal.answered:
+        kind, _ = min(proposal.answered, key=lambda answer: SEVERITY_ORDER[Severity(answer[1])])
+        return proposal.spec.strategy_id, kind
+    return proposal.spec.strategy_id, proposal.answers[0].value if proposal.answers else "none"
 
 
 class RulesSelector:
@@ -138,8 +174,113 @@ class RulesSelector:
 
     name = "rules"
 
-    def rank(self, proposals: list[Proposal], context: Any = None) -> list[Proposal]:
-        return sorted(proposals, key=Proposal.ranking_key)
+    def __init__(self) -> None:
+        self._last: dict[str, dict[str, Any]] = {}
+
+    def rank(self, proposals: list[Proposal], context: SelectionContext | None = None) -> list[Proposal]:
+        ranked = sorted(proposals, key=Proposal.ranking_key)
+        self._last = {p.spec.key(): {"selector": self.name, "rule_rank": i, "rank": i} for i, p in enumerate(ranked)}
+        return ranked
+
+    def explain(self, proposal: Proposal) -> dict[str, Any] | None:
+        """How the last ``rank`` placed this Proposal (for the Session record)."""
+        return self._last.get(proposal.spec.key())
+
+
+class RandomSelector(RulesSelector):
+    """All applicable Proposals in a random order, drawn with the Session's generator."""
+
+    name = "random"
+
+    def rank(self, proposals: list[Proposal], context: SelectionContext | None = None) -> list[Proposal]:
+        ordered = sorted(proposals, key=Proposal.ranking_key)
+        rng = context.rng if context is not None else np.random.default_rng(0)
+        ranked = [ordered[i] for i in rng.permutation(len(ordered))]
+        self._last = {p.spec.key(): {"selector": self.name, "rule_rank": ordered.index(p), "rank": i}
+                      for i, p in enumerate(ranked)}
+        return ranked
+
+
+class _MemorySelector(RulesSelector):
+    """Ranks by a score from the memory's arm statistics on the nearest past datasets of the same task.
+
+    The Proposals are first put in rule order. The places of the Proposals whose arm has at least
+    MIN_OBSERVATIONS observations are then filled by those Proposals, best score first; the others keep
+    their places. Without a memory every arm has 0 observations, so the result is the rule order.
+    """
+
+    def rank(self, proposals: list[Proposal], context: SelectionContext | None = None) -> list[Proposal]:
+        ordered = sorted(proposals, key=Proposal.ranking_key)
+        stats = self._stats(context)
+        info: dict[str, dict[str, Any]] = {}
+        known: list[tuple[tuple[float, float, int], int]] = []  # (sort key, rule position)
+        for position, proposal in enumerate(ordered):
+            arm = arm_of(proposal)
+            arm_stats = stats.get(arm)
+            observations = arm_stats.observations if arm_stats else 0
+            score = None
+            if arm_stats is not None and observations >= MIN_OBSERVATIONS:
+                score = self._score(arm_stats, stats, context)
+                known.append(((-score, self._tie(arm_stats), position), position))
+            info[proposal.spec.key()] = {"selector": self.name, "arm": list(arm), "observations": observations,
+                                         "score": score, "rule_rank": position}
+        slots = sorted(position for _, position in known)
+        ranked = list(ordered)
+        for slot, (_, position) in zip(slots, sorted(known)):
+            ranked[slot] = ordered[position]
+        for rank, proposal in enumerate(ranked):
+            info[proposal.spec.key()]["rank"] = rank
+        self._last = info
+        return ranked
+
+    @staticmethod
+    def _stats(context: SelectionContext | None) -> dict[tuple[str, str], StrategyStats]:
+        if context is None or context.memory is None:
+            return {}
+        rows = context.memory.strategy_stats(context.meta_features, context.task_type.value, k=context.k,
+                                             exclude_fingerprint=context.fingerprint)
+        return {(s.strategy_id, s.diagnosis_kind): s for s in rows}
+
+    def _score(self, arm: StrategyStats, stats: dict[tuple[str, str], StrategyStats],
+               context: SelectionContext) -> float:
+        raise NotImplementedError
+
+    def _tie(self, arm: StrategyStats) -> float:
+        return 0.0  # equal scores keep the rule order
+
+
+class ThompsonSelector(_MemorySelector):
+    """Thompson sampling (Thompson, 1933): a keep probability drawn from Beta(1 + weighted keeps,
+    1 + weighted discards), times the mean gain when kept, divided by the mean cost: an expected
+    validation gain per second (Requirement 19.3)."""
+
+    name = "thompson"
+
+    def _score(self, arm: StrategyStats, stats: dict[tuple[str, str], StrategyStats],
+               context: SelectionContext) -> float:
+        keep_probability = float(context.rng.beta(1.0 + arm.weighted_keeps, 1.0 + arm.weighted_discards))
+        gain = arm.mean_gain_when_kept if arm.mean_gain_when_kept is not None else 0.0
+        return keep_probability * gain / max(arm.mean_cost_seconds, MIN_COST_SECONDS)
+
+
+class UCB1Selector(_MemorySelector):
+    """UCB1 (Auer, Cesa-Bianchi and Fischer, 2002): keep rate + sqrt(2 ln N / n), with n the arm's
+    observations and N those of all arms of the same diagnosis kind; equal scores go to the cheaper arm."""
+
+    name = "ucb1"
+
+    def _score(self, arm: StrategyStats, stats: dict[tuple[str, str], StrategyStats],
+               context: SelectionContext) -> float:
+        total = sum(s.observations for s in stats.values() if s.diagnosis_kind == arm.diagnosis_kind)
+        return arm.keep_rate + math.sqrt(2.0 * math.log(total) / arm.observations)
+
+    def _tie(self, arm: StrategyStats) -> float:
+        return arm.mean_cost_seconds
+
+
+SELECTORS: dict[str, Callable[[], StrategySelector]] = {
+    "rules": RulesSelector, "random": RandomSelector, "thompson": ThompsonSelector, "ucb1": UCB1Selector,
+}
 
 
 def propose(
@@ -174,7 +315,7 @@ def propose(
                     entry["diagnoses"].append(diagnosis)
                 entry["position"] = min(entry["position"], (row, index))
 
-    proposals = []
+    proposals: list[Proposal] = []
     for entry in found.values():
         spec, answered = entry["spec"], entry["diagnoses"]
         strategy = get_strategy(spec.strategy_id)
@@ -191,7 +332,7 @@ def propose(
                 answered=tuple((d.kind.value, d.severity.value) for d in answered),
             )
         )
-    return RulesSelector().rank(proposals)
+    return sorted(proposals, key=Proposal.ranking_key)
 
 
 def _answer_text(diagnosis: Diagnosis) -> str:

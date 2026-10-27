@@ -49,14 +49,13 @@ from app.services.profiler import DatasetProfile, DatasetProfiler
 from app.services.resource_manager import KEPT, ResourceManager, SessionBudget, StopReason
 from app.services.search_summary import SearchSummary
 from app.services.splits import OuterSplit, SessionFolds, SplitError, make_outer_split, make_session_folds
-from app.services.strategy_engine import Proposal, RulesSelector, StrategySelector, propose
+from app.services.strategy_engine import SELECTORS, Proposal, SelectionContext, StrategySelector, propose
 from app.services.task_detector import TaskType
 
 logger = get_logger(__name__)
 
 SESSION_SCHEMA_VERSION = 1
 CODE_ROOT = Path(__file__).resolve().parents[2]  # the repository of this code, for the code version
-SELECTORS: dict[str, Callable[[], StrategySelector]] = {"rules": RulesSelector}  # Phase 3 adds the others
 Progress = Callable[[str, int, str], None]
 RecordUpdate = Callable[[dict[str, Any]], None]  # receives a copy of session.json after every save
 AssessorFactory = Callable[..., Assessor]
@@ -71,7 +70,8 @@ class SessionSettings:
     n_repeats: int = 3  # kept after the judge study (task 17): 5 accepted the same changes at 5/3 of the cost
     judge: JudgeSettings = field(default_factory=JudgeSettings)
     thresholds_path: Path | None = None
-    selector: str = "rules"
+    selector: str = "rules"  # rules, random, thompson or ucb1
+    use_memory: bool = False  # let the selector read the Experiment_Memory (Requirement 19)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -82,6 +82,7 @@ class SessionSettings:
             "judge": asdict(self.judge),
             "thresholds_path": str(self.thresholds_path) if self.thresholds_path else None,
             "selector": self.selector,
+            "use_memory": self.use_memory,
         }
 
 
@@ -99,6 +100,7 @@ class SessionStep:
     status: Literal["completed", "failed"]
     setup_key: str | None = None
     error: str | None = None
+    selection: dict[str, Any] | None = None  # how the selector placed this step's Proposal (arm, score, ranks)
 
     def to_dict(self) -> dict[str, Any]:
         return to_jsonable(asdict(self))
@@ -238,11 +240,16 @@ class AutopilotSession:
         accepted = first
 
         # 5. The loop: propose, budget, plan, search, assess, judge, update.
+        selection = SelectionContext(
+            memory=self.memory if session.use_memory else None, meta_features=profile.meta_features(),
+            task_type=task_type, fingerprint=ctx.dataset_fingerprint, rng=np.random.default_rng(base.random_seed),
+        )
         tried: set[str] = set()
         while True:
             if stop_requested():
                 rm.request_stop()
-            proposals = selector.rank(propose(accepted.diagnoses, accepted.config, profile, task_type, tried))
+            proposals = selector.rank(propose(accepted.diagnoses, accepted.config, profile, task_type, tried),
+                                      selection)
             stop = rm.check_stop(len(proposals))
             if stop is not None:
                 break
@@ -253,7 +260,8 @@ class AutopilotSession:
                 stop = budget
                 break
             tried.add(proposal.spec.key())
-            accepted = self._candidate_step(ctx, state, len(state.steps), proposal, budget, accepted)
+            accepted = self._candidate_step(ctx, state, len(state.steps), proposal, budget, accepted,
+                                            selector.explain(proposal))
 
         # 6. The Final_Evaluation: the only use of the Test_Part.
         notify("final_evaluation", len(state.steps), "Scoring the first and the final model on the test part")
@@ -297,7 +305,7 @@ class AutopilotSession:
         return _Accepted(setup, result, assessment, diagnoses)
 
     def _candidate_step(self, ctx: _Context, state: _State, index: int, proposal: Proposal, budget: int,
-                        accepted: _Accepted) -> _Accepted:
+                        accepted: _Accepted, selection: dict[str, Any] | None = None) -> _Accepted:
         """Plan, search, assess and judge one candidate; return the Accepted_Setup after the step."""
         ctx.notify("experiment", index, f"Trying: {_change(proposal.to_dict())} ({budget} s search)")
         started = self.clock()
@@ -331,6 +339,7 @@ class AutopilotSession:
                 assessment=_brief(assessment, ctx.metric) if assessment is not None else None, decision=None,
                 accepted=False, cost=cost.to_dict(), status="failed",
                 setup_key=result.setup_key if result is not None else None, error=f"{type(exc).__name__}: {exc}",
+                selection=selection,
             ))
             ctx.notify("step", index, _step_text(state.steps[-1]))
             return accepted
@@ -345,7 +354,7 @@ class AutopilotSession:
             index=index, experiment_id=result.experiment_id, parent_experiment_id=accepted.result.experiment_id,
             proposal=proposal.to_dict(), diagnoses=[d.to_dict() for d in accepted.diagnoses],
             assessment=_brief(assessment, ctx.metric), decision=decision.to_dict(), accepted=kept,
-            cost=cost.to_dict(), status="completed", setup_key=result.setup_key,
+            cost=cost.to_dict(), status="completed", setup_key=result.setup_key, selection=selection,
         ))
         self._remember(ctx, proposal, result, decision, cost.wall_seconds, cost.utility)
         ctx.notify("step", index, _step_text(state.steps[-1]))
@@ -353,7 +362,10 @@ class AutopilotSession:
 
     def _remember(self, ctx: _Context, proposal: Proposal, result: ExperimentResult, decision: JudgeDecision,
                   cost_seconds: float, utility: float | None) -> None:
-        """One Experiment_Memory record per Verdict (Requirement 14.1). It is only written in Phase 2."""
+        """One Experiment_Memory record per Verdict (Requirement 14.1). A read-only memory (the frozen memory
+        of the benchmark, Requirement 22.3) is read by the selectors but never written."""
+        if self.memory.read_only:
+            return
         record = MemoryRecord(
             record_id=f"{ctx.session_id}/{result.experiment_id}",
             created_at=datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"),
@@ -569,6 +581,7 @@ class _State:
         params = {"dataset": base.dataset_name, "target": base.target_column, "primary_metric": base.primary_metric,
                   "total_seconds": budget.total_seconds, "max_experiments": budget.max_experiments,
                   "n_jobs": budget.n_jobs, "seed": base.random_seed, "selector": self.session.selector,
+                  "use_memory": self.session.use_memory,
                   "judge_alpha": self.session.judge.alpha, "split_fingerprint": self.record["splits"]["outer"]}
         try:
             self.record["mlflow_run_id"] = self.owner.tracker.start_session_run(

@@ -282,7 +282,7 @@ def test_bad_settings_are_refused_before_anything_is_written(tmp_path):
     session = AutopilotSession(settings=settings, engine=RecordingEngine(FakeClock()), enable_mlflow=False)
     base = ExperimentConfig(target_column="target")
     for plan, message in [
-        (SessionSettings(base, SessionBudget(60, 3), selector="thompson"), "Unknown selector"),
+        (SessionSettings(base, SessionBudget(60, 3), selector="greedy"), "Unknown selector"),
         (SessionSettings(base, SessionBudget(60, 3), thresholds_path=tmp_path / "missing.toml"), "not found"),
         (SessionSettings(ExperimentConfig(target_column="nope"), SessionBudget(60, 3)), "not found"),
     ]:

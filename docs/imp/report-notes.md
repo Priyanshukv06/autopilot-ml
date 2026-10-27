@@ -504,6 +504,18 @@ Since every deadline lies inside T, the steps end at most one step's overrun aft
 
 The profiler now also reports, on the rows it is given, each column's most common value share, near-constant columns and highly correlated numeric pairs. On the saved SES-001 records the full Critic adds "missing values high" for `Cabin` (77% empty) to the first Setup's Diagnoses, and finds "budget limited" (the search's best F1 still rose by 0.006 in its last quarter) and "weak model families" for the final Setup.
 
+**Algorithm 18: learned strategy choice** (`app/services/strategy_engine.py`, task 21; Requirement 19). Four selectors re-rank the Proposals of the rule table:
+
+- `rules`: the written order (severity, cost, table position, key), as in Phase 2.
+- `random`: the Proposals in a random order drawn with the Session's generator (seeded with the Session seed).
+- `thompson` and `ucb1` learn from the Experiment_Memory. An arm is a pair of Strategy and diagnosis kind; a Proposal's arm uses the kind of the most severe Diagnosis it answers. The arm statistics come from the records of the k = 5 nearest past datasets of the same task (Algorithm 17), never from the current dataset, each record weighted by 1 / (1 + distance): weighted keeps K and discards D, the mean Judge difference of the kept records G, the mean cost in seconds C, and the number of records n.
+  - `thompson` (Thompson, 1933): score = p x G / max(C, 1 s), with p drawn from Beta(1 + K, 1 + D): a sampled expected validation gain per second.
+  - `ucb1` (Auer, Cesa-Bianchi and Fischer, 2002): score = K / (K + D) + sqrt(2 ln N / n), with N the records of all arms of the same diagnosis kind; equal scores go to the cheaper arm.
+  - Too little experience: Proposals whose arm has fewer than 3 records keep their place in the rule order; only the places of the others are re-filled, best score first. With no memory (`use_memory` off) every place keeps the rule order.
+- The memory is used only when the Session's `use_memory` switch is on. Each step records how its Proposal was placed (arm, records, score, rule rank and rank). A read-only memory, as the benchmark will use, is read but never written.
+
+Built on 27 October 2026 (task 21). Tests: section 8.6.
+
 **Algorithm 17: Experiment_Memory, version 1** (`app/services/experiment_memory.py`, task 15). After every Verdict the Session appends one line to `experiments/memory/memory.jsonl`: the dataset's fingerprint (a hash of its column names and types, number of rows and target) and the Meta_Features of its training part, the task and metric, the Diagnoses the Proposal answered (kind and severity), the Strategy and its parameters, the Verdict, the Judge's mean and standard deviation of the differences, the number of folds, the step's cost in seconds, its Utility, the engine version and the date. The file is only appended to, and a damaged line is skipped with a warning.
 
 Finding similar datasets: average each stored dataset's Meta_Features over its records, standardise every feature over the stored datasets (dropping features that do not vary), compare only the features both datasets have, and rank by Euclidean distance (same task type only, optionally leaving one dataset out). For the k nearest datasets (5 by default), each (Strategy, diagnosis kind) gets its number of observations, its keep rate with each observation weighted by 1 / (1 + distance), its mean gain when kept and its mean cost. In Phase 2 the memory is written and shown but does not influence any decision; Phase 3's learned strategy choice will read it. SES-001 ran before the memory existed, so the memory starts with the next Session.
@@ -1290,7 +1302,8 @@ Future scope (beyond the planned phases):
 | 2026-10-26 | Decided the two open points of section 4.7: the ranking tie-break and moving warm starts into a limited search space are not applied (reasons in section 4.7; the second is listed as future work) | 4200033 |
 | 2026-10-27 | Spec task 19, Phase 2 measurement tool: `research/phase2.py`, `scripts/run_phase2.py` and 3 tests | 940225a |
 | 2026-10-27 | Spec task 19: Phase 2 measurement (24 runs, 300 s each, 1 h 42 min; section 9.14, Phase 2 conclusions in chapter 10); new section 9 of `how-it-works.md`; `architecture.md`, `PROJECT.md`, the README and the roadmap describe the built autonomous layer; report notes: objectives, method, flowchart 6.6, code size, commands, data locations | e3f7924 |
-| 2026-10-27 | Spec task 20: development and evaluation datasets (`research/datasets.py`, `scripts/prepare_datasets.py`, registry `research/datasets.json`; section 4.9): 6 OpenML datasets for each list, drawn with seed 2026 from six groups of the laptop-sized CC18 and CTR23 datasets, all downloaded and checked; 4 tests; 472 tests passing in 180.7 s | see the commit of this date |
+| 2026-10-27 | Spec task 20: development and evaluation datasets (`research/datasets.py`, `scripts/prepare_datasets.py`, registry `research/datasets.json`; section 4.9): 6 OpenML datasets for each list, drawn with seed 2026 from six groups of the laptop-sized CC18 and CTR23 datasets, all downloaded and checked; 4 tests; 472 tests passing in 180.7 s | 528e9cd |
+| 2026-10-27 | Spec task 21: learned strategy choice (Algorithm 18): `random`, `thompson` and `ucb1` selectors next to `rules`, the `use_memory` switch, the selection of each step in `session.json`, a read-only memory never written; command-line flags and a dashboard switch | see the commit of this date |
 
 ---
 

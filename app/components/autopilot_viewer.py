@@ -112,7 +112,13 @@ def render_session_settings(settings: Settings, selection: TargetSelection, data
         )
         selector = a3.selectbox(
             "Strategy choice", list(SELECTORS), key="auto_selector",
-            help="rules: the fixed rule order of the Strategy_Engine. Learned choices are planned for Phase 3.",
+            help="rules: the fixed rule order. random: a random order. thompson and ucb1: learned from what the "
+            "experiment memory saw on similar datasets (needs the memory switched on; with too little "
+            "experience a change keeps its rule-order place).",
+        )
+        use_memory = st.checkbox(
+            "Use the experiment memory", value=False, key="auto_use_memory",
+            help="Let the Strategy choice read the memory records of other datasets.",
         )
     for warning in metric_warnings(task, metric, selection.profile.class_balance):
         st.warning(warning)
@@ -128,7 +134,8 @@ def render_session_settings(settings: Settings, selection: TargetSelection, data
         test_size=float(test_size), excluded_columns=list(selection.excluded_columns), dataset_name=dataset.name,
     )
     return SessionSettings(base=base, budget=budget, n_repeats=int(n_repeats),
-                           judge=replace(JudgeSettings(), alpha=float(alpha)), selector=selector)
+                           judge=replace(JudgeSettings(), alpha=float(alpha)), selector=selector,
+                           use_memory=bool(use_memory))
 
 
 # --------------------------------------------------------------------- section 4

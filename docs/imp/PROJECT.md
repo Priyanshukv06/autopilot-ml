@@ -274,7 +274,9 @@ The resource manager will give each experiment its share of the time, set the nu
 ## 17. Datasets
 
 - Development and demo: Titanic (binary, mixed types, missing values, ID columns), Breast Cancer Wisconsin Diagnostic (binary, numeric), Palmer Penguins (multiclass, mixed types) and California Housing (regression, 20,640 rows).
-- Evaluation (planned): public OpenML tabular tasks, for example from the OpenML-CC18 suite and the AutoML Benchmark. They will be chosen to vary in size, imbalance, missingness and share of categorical columns, while staying small enough for a laptop CPU. Datasets used to build the memory and datasets used for evaluation will not overlap. The exact list will be fixed and committed before the evaluation runs.
+- Fixed on 27 October 2026, before any evaluation run, in `research/datasets.json` (task 20). From the laptop-sized datasets (500 to 10,000 rows, at most 100 columns) of two curated OpenML suites, OpenML-CC18 (classification) and OpenML-CTR23 (regression), one evaluation and one development dataset were drawn with a fixed seed from each of six groups (binary imbalanced, binary with missing values or categorical columns, multiclass clean, multiclass messy, regression clean, regression messy).
+- Development (10): the four samples, plus wilt, tic-tac-toe, vehicle, balance-scale, kin8nm and student_performance_por. They build the experiment memory.
+- Evaluation (6): pc4, cylinder-bands, segment, MiceProtein, energy_efficiency and solar_flare. They are used only by the Phase 3 benchmark, and never to build the memory or tune anything.
 
 ## 18. Evaluation metrics
 

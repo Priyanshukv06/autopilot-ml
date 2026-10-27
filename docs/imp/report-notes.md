@@ -210,6 +210,25 @@ In order (dates and commits in Appendix B):
 
 Still to add: Phase 2 work as it happens.
 
+### 4.9 Datasets for Phase 3 (task 20, fixed on 27 October 2026)
+
+Requirement 22: development datasets (to build the memory, free to look at) and evaluation datasets (only for the benchmark) must not overlap, must be chosen by written criteria, and must be fixed in a committed file before any evaluation run. How they were chosen (`research/datasets.py`; the rule was written after listing the suites' OpenML summary numbers, and before any dataset was downloaded or any model was run on one):
+
+1. Pool: all 107 datasets of two curated OpenML suites, OpenML-CC18 (72 classification datasets, study 99) and OpenML-CTR23 (35 regression datasets, study 353). Kept: 500 to 10,000 rows and at most 100 feature columns (laptop-sized for budgets of 2 and 5 minutes); left out: the two versions of the Wisconsin breast cancer data, since the `breast_cancer` sample is one of them. 64 datasets remained. The pool with its OpenML qualities is in `results/datasets/openml_pool.csv`.
+2. Six groups, two per task, so that each list covers imbalance, missing values and categorical columns: binary imbalanced (largest class at least 3 times the smallest; 11 candidates); binary with missing values or categorical columns (7); multiclass with neither and balanced (10); multiclass with missing values, categorical columns or imbalance (12); regression with neither (13); regression with missing values or categorical columns (6). Balanced, numeric-only binary datasets fall into no group.
+3. In each group the candidates were sorted by OpenML ID and shuffled with one generator seeded with 2026; the first became an evaluation dataset, the second a development dataset.
+
+| Group | Evaluation (OpenML ID) | Development (OpenML ID) |
+|---|---|---|
+| binary imbalanced | pc4 (1049): 1,458 rows, 37 numeric columns, ratio 7.2 | wilt (40983): 4,839 rows, 5 columns, ratio 17.5 |
+| binary messy | cylinder-bands (6332): 540 rows, 37 columns (14 text), 5% empty cells | tic-tac-toe (50): 958 rows, 9 text columns |
+| multiclass clean | segment (40984): 2,310 rows, 18 columns, 7 classes | vehicle (54): 846 rows, 18 columns, 4 classes |
+| multiclass messy | MiceProtein (40966): 1,080 rows, 77 columns, 8 classes, 1.7% empty cells | balance-scale (11): 625 rows, 4 columns, 3 classes, ratio 5.9 |
+| regression clean | energy_efficiency (44960): 768 rows, 8 columns | kin8nm (44980): 8,192 rows, 8 columns |
+| regression messy | solar_flare (44966): 1,066 rows, 10 columns (3 text) | student_performance_por (44967): 649 rows, 30 columns (17 text) |
+
+With the four samples there are 10 development and 6 evaluation datasets. Licences: "Public" on OpenML for the CC18 datasets, CC BY 4.0 for the CTR23 datasets (as recorded by OpenML, in `datasets.json`). Each dataset is downloaded once with scikit-learn's `fetch_openml` (cache in `data/raw/openml_cache`) and saved as `data/raw/<name>.csv`; OpenML's ignored columns are left out (for MiceProtein that removes `MouseID` and the three columns from which the class is made). Two regression targets have few integer values (student grades, solar flare counts), so the app's own detector would call them multiclass; the registry records OpenML's task, which the benchmark passes to every system, and the detected one. `python scripts/prepare_datasets.py download` recreates the files from the IDs and versions and checked all 12 against the registry (27 October 2026).
+
 ---
 
 ## 5. Proposed algorithms
@@ -816,6 +835,7 @@ python scripts/run_autopilot.py --dataset data/sample/titanic.csv --target Survi
 python scripts/run_study.py critic run      # and: critic analyse [--freeze LABEL]
 python scripts/run_study.py judge run       # and: judge analyse
 python scripts/run_phase2.py run            # and: run_phase2.py analyse
+python scripts/prepare_datasets.py download # recreate data/raw/ from research/datasets.json
 ```
 
 ### 8.6 Tests (468, about 174 s on 27 October 2026)
@@ -844,6 +864,7 @@ Phase 1 ended with the first three files below (47 tests, about 29 to 41 s). Pha
 | `tests/test_critic_study.py` | 5 | The study's cases (every problem and strength, separate seeds, a different dataset each); with a fast stand-in engine, rows carry the truth and the evidence, the study's rule agrees with the real Critic for two sets of thresholds, tuning gives valid thresholds, and the written thresholds file loads (3 of them marked slow) |
 | `tests/test_judge_study.py` | 4 | The study's pairs and seeds; one pair with a fast stand-in engine gives one row per setting (marked slow); the false-keep rate, the power and the choice of defaults on hand-made verdicts, including when no setting is safe enough |
 | `tests/test_dashboard.py` | 5 | Streamlit's `AppTest` on `app/main.py` in a temporary project folder with the Titanic sample, real FLAML searches stopped after 3 trials, and no MLflow (all marked slow, about 40 s together): the sidebar marks the built modules and the default mode is unchanged; the single-experiment mode runs an experiment and shows its results; an autonomous run shows its steps, the first and final model and the memory records (one per Verdict); a Session whose searches fail is shown as an error and a new one can be started; Stop ends a running Session with stop reason "user" and the Final_Evaluation; no exceptions on the page |
+| `tests/test_datasets.py` | 4 | The dataset groups and the size rules; the draw is fixed by the seed, does not depend on the order of the pool, gives one dataset of each group to each list and never the same one twice; the description of a dataset uses the given task; the committed registry has 10 development and 6 evaluation datasets, no overlap, no sample in the evaluation list, all three tasks, and every required field |
 | `tests/test_phase2.py` | 3 | The Phase 2 measurement's runs (each Session before its FLAML run), the pairing of runs with the sign set so that positive favours the Session (also for an error metric), and the summary and Strategy counts on hand-made rows |
 | `tests/test_synthetic.py` | 32 | Same seed gives the same data; problem order does not matter; each of the 8 problems measured at its requested strength in both the dataset and the fresh sample (imbalance ratio, share of changed labels, correlation of copies, distinct share of IDs, share of the main value, unseen share of categories, empty share); our profiler flags the planted ID, constant and high-cardinality columns; clean data has none of them; a model scores the same on the fresh sample as in cross-validation; 11 invalid requests rejected |
 
@@ -1268,7 +1289,8 @@ Future scope (beyond the planned phases):
 | 2026-10-26 | Judge defaults revised: the default number of fold repeats goes back to 3 (alpha stays 0.20), a recorded departure from the judge study's rule (sections 4.7 and 9.13); spec and documents updated; 465 tests passing | 7beb436 |
 | 2026-10-26 | Decided the two open points of section 4.7: the ranking tie-break and moving warm starts into a limited search space are not applied (reasons in section 4.7; the second is listed as future work) | 4200033 |
 | 2026-10-27 | Spec task 19, Phase 2 measurement tool: `research/phase2.py`, `scripts/run_phase2.py` and 3 tests | 940225a |
-| 2026-10-27 | Spec task 19: Phase 2 measurement (24 runs, 300 s each, 1 h 42 min; section 9.14, Phase 2 conclusions in chapter 10); new section 9 of `how-it-works.md`; `architecture.md`, `PROJECT.md`, the README and the roadmap describe the built autonomous layer; report notes: objectives, method, flowchart 6.6, code size, commands, data locations | see the commit of this date |
+| 2026-10-27 | Spec task 19: Phase 2 measurement (24 runs, 300 s each, 1 h 42 min; section 9.14, Phase 2 conclusions in chapter 10); new section 9 of `how-it-works.md`; `architecture.md`, `PROJECT.md`, the README and the roadmap describe the built autonomous layer; report notes: objectives, method, flowchart 6.6, code size, commands, data locations | e3f7924 |
+| 2026-10-27 | Spec task 20: development and evaluation datasets (`research/datasets.py`, `scripts/prepare_datasets.py`, registry `research/datasets.json`; section 4.9): 6 OpenML datasets for each list, drawn with seed 2026 from six groups of the laptop-sized CC18 and CTR23 datasets, all downloaded and checked; 4 tests; 472 tests passing in 180.7 s | see the commit of this date |
 
 ---
 

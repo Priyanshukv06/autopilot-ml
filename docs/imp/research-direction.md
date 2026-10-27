@@ -44,8 +44,8 @@ The resource manager decides how to split the total budget between experiments, 
 
 ## Datasets
 
-- Development: the four sample datasets in `data/sample` (Titanic, Breast Cancer Wisconsin, Palmer Penguins, California Housing).
-- Evaluation: public tabular datasets from OpenML, for example tasks from the OpenML-CC18 suite and the AutoML Benchmark. They will be picked to cover small and large, balanced and imbalanced, clean and messy, and numeric-heavy and categorical-heavy data. The exact task IDs will be fixed and committed before any evaluation run. Datasets used to build the memory will not be used for evaluation.
+- Development: the four sample datasets in `data/sample` (Titanic, Breast Cancer Wisconsin, Palmer Penguins, California Housing) and six OpenML datasets (wilt, tic-tac-toe, vehicle, balance-scale, kin8nm, student_performance_por).
+- Evaluation: six OpenML datasets (pc4, cylinder-bands, segment, MiceProtein, energy_efficiency, solar_flare). Both lists were fixed and committed in `research/datasets.json` on 27 October 2026, before any evaluation run: from the laptop-sized datasets of the OpenML-CC18 and OpenML-CTR23 suites, one evaluation and one development dataset were drawn with a fixed seed from each of six groups that cover the three tasks, imbalance, missing values and categorical columns. Datasets used to build the memory are not used for evaluation.
 - Every dataset has to run on a laptop CPU within the chosen budgets.
 
 ## Protocol

@@ -132,6 +132,7 @@ The component studies and the Phase 2 measurement (each restarts where it stoppe
 python scripts/run_study.py critic run      # then: critic analyse [--freeze LABEL]
 python scripts/run_study.py judge run       # then: judge analyse
 python scripts/run_phase2.py run            # then: run_phase2.py analyse
+python scripts/prepare_datasets.py download # the 12 OpenML datasets of research/datasets.json into data/raw/
 ```
 
 MLflow UI, to browse every run (then open http://127.0.0.1:5000):
@@ -279,6 +280,7 @@ autopilot-ml/
 ├── scripts/                run_autopilot.py: one Session from the command line
 │                           run_study.py: the critic and judge studies
 │                           run_phase2.py: Sessions against FLAML alone
+│                           prepare_datasets.py: the OpenML datasets of research/datasets.json
 │                           compare_seeds.py: compare two setups over several splits
 │                           plot_search_history.py: charts of one experiment's search
 ├── experiments/            JSON records of experiments and Sessions, and the memory (generated, not in git)

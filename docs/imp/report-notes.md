@@ -1374,7 +1374,8 @@ Future scope (beyond the planned phases):
 | 2026-10-27 | Spec task 23: comparison systems (Algorithm 20, `research/systems.py`): manual LightGBM, FLAML alone, AutoGluon through a worker in the new `autogluon` conda environment (decision D4: it needs pandas 2.3), and the AutoPilot variants, all on the same rows and scored by the same Evaluator; a throwaway run of every system | e81474d |
 | 2026-10-27 | Spec task 23.1: 7 tests of the comparison systems in `tests/test_systems.py`, the AutoGluon bridge tested with stand-in worker scripts; 493 tests passing in 221.9 s | bc4d575 |
 | 2026-10-27 | Spec task 24: benchmark harness (`research/benchmark.py`, `scripts/run_benchmark.py run / status`), the reduced grid agreed with the user (390 cells: budgets 120 and 300 s, ablations at 300 s; 600 s dropped), append-only rows with restart, memory guards and a smoke setting (section 4.10); a throwaway trial of all 8 systems | 1e05dc3 |
-| 2026-10-27 | Spec task 24.1: 11 harness tests in `tests/test_benchmark.py` with stand-in systems; 504 tests passing in 218.6 s | see the commit of this date |
+| 2026-10-27 | Spec task 24.1: 11 harness tests in `tests/test_benchmark.py` with stand-in systems; 504 tests passing in 218.6 s | f523358 |
+| 2026-10-27 | Documents brought in line with tasks 22 to 24 (README, `PROJECT.md` with a new section 8.8, `architecture.md`, `how-it-works.md`, `development-roadmap.md`, `research-direction.md`): the ablation switches, comparison systems and harness described as built, the benchmark as not run; the reduced budgets; CPU seconds marked as not measured; the AutoGluon environment's setup in the README | see the commit of this date |
 
 ---
 

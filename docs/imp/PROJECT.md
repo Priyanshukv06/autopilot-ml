@@ -2,7 +2,7 @@
 
 Main project document, B.Tech Computer Science major project.
 
-Current status (26 October 2026): the Phase 1 baseline (profiling, task detection, FLAML search, evaluation, MLflow tracking, dashboard) and the Phase 2 rule-based autonomous layer (Session loop, planner, assessor, critic, strategy engine, judge, resource manager, experiment memory, and the autonomous mode of the dashboard) are implemented and tested. Phase 3 is in progress: the development and evaluation datasets are fixed (task 20) and the learned strategy choice from the memory is built (task 21); the ablation switches and the benchmark against other systems are planned and not built yet. The only measurements so far are the component studies and the Phase 2 comparison with FLAML alone on the four sample datasets (`report-notes.md`, chapter 9); this document makes no other performance claims.
+Current status (27 October 2026): the Phase 1 baseline (profiling, task detection, FLAML search, evaluation, MLflow tracking, dashboard) and the Phase 2 rule-based autonomous layer (Session loop, planner, assessor, critic, strategy engine, judge, resource manager, experiment memory, and the autonomous mode of the dashboard) are implemented and tested. Phase 3 is in progress: the development and evaluation datasets are fixed (task 20), and the learned strategy choice from the memory (task 21), the ablation switches (task 22), the comparison systems (task 23: a manual LightGBM baseline, FLAML alone and AutoGluon) and a resumable benchmark harness (task 24) are built and tested (8.8). The benchmark itself, its statistics and the judge agreement study have not been run yet. The only measurements so far are the component studies and the Phase 2 comparison with FLAML alone on the four sample datasets (`report-notes.md`, chapter 9); this document makes no other performance claims.
 
 ## Abstract
 
@@ -63,8 +63,8 @@ The baseline handles the first goal with a single AutoML run. The research syste
 AutoPilot-ML puts an experiment loop around the AutoML engine:
 
 1. Dataset intelligence: profile the data and detect the task (implemented).
-2. Experiment planning: build the first Setup and each candidate Setup from the profile, the chosen change and the remaining budget (implemented in Phase 2; using the memory to choose is Phase 3, planned).
-3. AutoML core: run the engine. FLAML today, AutoGluon later as a comparison (FLAML implemented).
+2. Experiment planning: build the first Setup and each candidate Setup from the profile, the chosen change and the remaining budget (implemented in Phase 2; choosing the change from the memory implemented in Phase 3, task 21).
+3. AutoML core: run the engine. FLAML is the engine (implemented); AutoGluon runs only as a comparison system in the benchmark, in its own environment (Phase 3, task 23).
 4. Evaluation: metrics, errors and resource usage on a held-out split (implemented), and, inside a Session, Assessments on fixed folds of the training part (implemented in Phase 2).
 5. Critic: structured diagnosis of each experiment (implemented in Phase 2: 12 kinds, thresholds tuned by a study).
 6. Strategy engine: candidate improvements ranked by a rule table (implemented in Phase 2: 9 Strategies, ranked by severity and cost), or by expected gain per unit of cost learned from the memory (implemented in Phase 3, task 21: Thompson sampling and UCB1; its effect is not measured yet).
@@ -168,11 +168,20 @@ A Session runs the loop on one dataset within a total time, a maximum number of 
 - Strategy catalogue and engine (`strategies.py`, `strategy_engine.py`, data changes in `transforms.py`): 9 Strategies and a rule table that ranks the Proposals by severity, cost and table order; each change is tried once per Session.
 - Judge (`judge.py`): corrected resampled t-test on the paired fold differences; keep, keep_simpler (simpler and not worse by more than 0.005) or discard; alpha 0.20, from the judge study.
 - Resource manager (`resource_manager.py`): 35% of the time for the first Experiment, later budgets from the measured time left, stop rules (Stop pressed, error, time, Experiments, no Proposals, three discards in a row).
-- Experiment memory (`experiment_memory.py`): one record per Verdict in `experiments/memory/memory.jsonl`; nearest past datasets and per-Strategy statistics are available for Phase 3.
+- Experiment memory (`experiment_memory.py`): one record per Verdict in `experiments/memory/memory.jsonl`; nearest past datasets and per-Strategy statistics, read by the learned selectors since Phase 3 (task 21) when the memory is switched on.
 - Records: `experiments/SES-###/session.json` after every step, step files per Experiment, and an MLflow parent run per Session.
 - Dashboard autonomous mode (`app/components/autopilot_viewer.py`) and command line (`scripts/run_autopilot.py`).
 
 The plain-language explanation is in [how-it-works.md](how-it-works.md), section 9, and the class-level view in [architecture.md](architecture.md).
+
+### 8.8 Phase 3 so far (tasks 20 to 24, implemented)
+
+- Datasets (`research/datasets.py`, `research/datasets.json`): 10 development datasets (the four samples and six OpenML datasets) and 6 evaluation datasets, fixed by a written rule before any evaluation run (section 17).
+- Learned strategy choice (`strategy_engine.py`): the selectors `rules`, `random`, `thompson` and `ucb1`. An arm is a Strategy with the kind of Diagnosis it answers; its statistics come from the memory records of the 5 most similar other datasets, weighted by similarity; arms with fewer than 3 records keep their rule-order place.
+- Ablation switches (`SessionSettings`): `use_memory`, the `random` selector, `use_critic=False` (random valid changes, no Diagnoses) and `use_resource_manager=False` (equal shares of the time; only the time and Experiment limits stop the Session). Each is recorded in `session.json`.
+- Comparison systems (`research/systems.py`): `manual` (LightGBM with its library defaults, no search), `flaml` (one search with the whole budget), `autogluon` (AutoGluon-Tabular 1.6.3 in its own conda environment, called as a separate process) and the AutoPilot variants. Every system gets the same training and test rows and columns and is scored by the same Evaluator.
+- Benchmark harness (`research/benchmark.py`, `scripts/run_benchmark.py`): 390 cells (5 main systems at 2 and 5 minutes, 3 ablations at 5 minutes, 6 evaluation datasets, seeds 1 to 5), one CSV row per finished cell, restart where it stopped, checks that the frozen memory comes from development datasets only, and a smoke setting.
+- Not done yet: the statistics module, the frozen memory and the benchmark run with its analysis, and the judge agreement study (tasks 25 to 27).
 
 ## 9. Current implementation
 
@@ -184,8 +193,9 @@ The plain-language explanation is in [how-it-works.md](how-it-works.md), section
 - Explainability: permutation importance, the model's own importance, confusion matrix, ROC curve, residual plots.
 - Tracking: local MLflow (SQLite) plus JSON records.
 - Autonomous layer (Phase 2): see 8.7.
-- Tests: 47 pytest tests at the end of Phase 1; 468 after Phase 2, including short real FLAML runs, whole Sessions with a fake clock, the dashboard through Streamlit's AppTest, and smoke tests of the studies (`report-notes.md`, section 8.6).
-- Not implemented: learned strategy choice and the benchmark (Phase 3), SHAP, automatic target detection, feature engineering beyond the 9 Strategies, resampling.
+- Phase 3 so far: see 8.8.
+- Tests: 47 pytest tests at the end of Phase 1; 468 after Phase 2 and 504 after task 24.1, including short real FLAML runs, whole Sessions with a fake clock, the dashboard through Streamlit's AppTest, smoke tests of the studies, and the benchmark harness with stand-in systems (`report-notes.md`, section 8.6).
+- Not implemented: the benchmark run and its statistics, the judge agreement study (Phase 3, tasks 25 to 27), SHAP, automatic target detection, feature engineering beyond the 9 Strategies, resampling.
 
 ## 10. Proposed modules (written for the Phase 1 review)
 
@@ -201,7 +211,7 @@ Every planned module comes with a way to evaluate it:
 
 ## 11. Autonomous loop (sketch from the Phase 1 review)
 
-Built in Phase 2 in a refined form: every Setup is assessed on the same folds, and the Judge decides whether a change replaces the Accepted_Setup; the memory is written but not yet used for the choice. The current loop is in [how-it-works.md](how-it-works.md), section 9.
+Built in Phase 2 in a refined form: every Setup is assessed on the same folds, and the Judge decides whether a change replaces the Accepted_Setup; the memory is written, and since Phase 3 (task 21) the learned selectors can use it to choose the change when it is switched on. The current loop is in [how-it-works.md](how-it-works.md), section 9.
 
 ```text
 profile  = DatasetProfiler.profile(df, target)
@@ -281,9 +291,9 @@ The resource manager will give each experiment its share of the time, set the nu
 ## 18. Evaluation metrics
 
 - Predictive quality: the primary metric on the outer test split, plus the other task metrics.
-- Efficiency: time to reach a target score, and the area under the best-score-over-time curve.
+- Efficiency: time to reach a target score (the smallest budget at which a system reaches 99% of the best final score of any system on that dataset and seed), and the score at each budget.
 - Experimentation: number of experiments and strategies needed to reach the target.
-- Cost: CPU seconds, wall-clock seconds, and gain per experiment.
+- Cost: wall-clock seconds, and gain per experiment. CPU seconds are not measured: all runs are on one machine, one at a time.
 - Convergence: how much each extra experiment adds, and where the system stops.
 - Consistency: average rank across datasets, spread across seeds, and the worst-case gap to the best system.
 
@@ -296,6 +306,8 @@ The resource manager will give each experiment its share of the time, set the nu
 5. AutoPilot-ML without strategy selection
 6. Full AutoPilot-ML
 
+As built (task 23): 1 is `manual` (LightGBM with its library defaults), 2 `flaml`, 3 `autogluon`, 4 `autopilot_rules` (without the memory the learned choice keeps the rule order, so the Session without memory is the rule-order Session), 5 `random_choice`, and 6 `autopilot_full` (Thompson sampling with the frozen memory).
+
 ## 20. Ablation study
 
 Each variant removes one part of the full system:
@@ -307,6 +319,8 @@ Each variant removes one part of the full system:
 - A4, no critic (strategies chosen without diagnoses): does explicit diagnosis help?
 
 All variants use the same datasets, budgets, seeds and outer splits. They will be compared with paired tests (Wilcoxon signed-rank, and Friedman with a Nemenyi post-hoc test for several variants at once), following Demšar (2006).
+
+As built (task 22): A1 is `autopilot_rules` (the same Session, see section 19), A2 `random_choice`, A3 `no_resource_manager` and A4 `no_critic`; A3 and A4 keep Thompson sampling and the memory, so each removes one part from A0. The ablations run at the 5-minute budget only, to save time.
 
 ## 21. Expected contribution
 

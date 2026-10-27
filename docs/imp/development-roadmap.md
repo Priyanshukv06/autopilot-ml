@@ -36,9 +36,11 @@ Done when: the loop runs unattended on the development datasets within the budge
 
 Status (27 October 2026): done. All milestones are built and tested (468 tests). Phase 2 measurement, 4 sample datasets x 3 seeds at 300 s: the loop's final test scores matched FLAML alone on average (4 better, 4 equal, 4 worse) using about two thirds of the time (report notes, section 9.14).
 
-## Phase 3: Learning and evaluation (next)
+## Phase 3: Learning and evaluation (in progress)
 
-Tasks 20 to 28: development and evaluation datasets (fixed in advance and kept apart), learned strategy choice (Thompson sampling and UCB1 over past outcomes from similar datasets), ablation switches, comparison systems (manual baseline, FLAML alone, AutoGluon), a resumable benchmark (budgets of 2, 5 and 10 minutes, at least 5 seeds), the statistics (Friedman and Nemenyi, Wilcoxon with Holm's correction, effect sizes, time-to-target), the judge agreement study, and the final documents.
+Tasks 20 to 28: development and evaluation datasets (fixed in advance and kept apart), learned strategy choice (Thompson sampling and UCB1 over past outcomes from similar datasets), ablation switches, comparison systems (manual baseline, FLAML alone, AutoGluon), a resumable benchmark (5 seeds; budgets of 2 and 5 minutes, since the 10-minute budget was dropped on 27 October 2026 to fit the laptop), the statistics (Friedman and Nemenyi, Wilcoxon with Holm's correction, effect sizes, time-to-target), the judge agreement study, and the final documents.
+
+Status (27 October 2026): tasks 20 to 24 are built and tested (504 tests): the datasets, the learned strategy choice, the ablation switches, the comparison systems and the benchmark harness. Left: the statistics (task 25), the frozen memory, the benchmark run and its analysis (task 26), the judge agreement study (task 27) and the final documents (task 28).
 
 ## Optional (after Phase 3)
 
@@ -50,7 +52,7 @@ Confirmed on 26 October 2026 (details in `design.md`):
 
 - D2: the Judge refits fixed configurations on the Session's folds and uses the corrected resampled t-test. The judge study (task 17) set alpha to 0.20 (0.10 before). The default stays 3 repeats of 5 folds (15 folds): 5 repeats accepted the same changes at five thirds of the cost.
 - D3: small public OpenML datasets are downloaded once; `imbalanced-learn` is added only for the optional SMOTE task.
-- D4: AutoGluon gets its own conda environment if it does not install next to our pinned libraries (checked at the start of task 23).
+- D4: AutoGluon gets its own conda environment if it does not install next to our pinned libraries. Checked at the start of task 23: it would replace pandas 3.0.6 by 2.3.3, so it runs from the environment `autogluon` as a separate process.
 - D5: not needed. Priyanshu Verma builds all tasks; Salil Kushwah is credited in the final report.
 
 ## Commits

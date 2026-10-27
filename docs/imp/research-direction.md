@@ -1,6 +1,6 @@
 # Research direction
 
-Status: planned. This page sets out what we will measure and how. There are no results here yet, because the autonomous layer has not been built. Any numbers added later must come from the benchmark runs.
+Status (27 October 2026): this page sets out what we will measure and how. The systems and the benchmark harness are built (Phase 3, tasks 20 to 24), but the benchmark has not been run, so there are no results here yet. Any numbers added later must come from the benchmark runs.
 
 ## The main question
 
@@ -50,18 +50,19 @@ The resource manager decides how to split the total budget between experiments, 
 
 ## Protocol
 
-- Budgets: a few fixed total budgets per dataset (for example 2, 5 and 10 minutes).
-- Seeds: at least 5 for every combination of dataset, system and budget.
-- Splits: for a given seed, every system gets the same outer train/test split.
-- Logged for every run: the final test score, the best score over time, the number of experiments, CPU seconds, wall-clock seconds and the strategies chosen.
+- Budgets: total budgets of 2 and 5 minutes per run. A third budget of 10 minutes was planned; it was dropped on 27 October 2026 to fit the laptop (it would add about 20 hours to a grid of about 22). The ablations run at 5 minutes only.
+- Seeds: 5 (1 to 5) for every combination of dataset, system and budget.
+- Splits: for a given seed, every system gets the same outer train/test split and the same columns.
+- Logged for every run (one row per cell, `results/benchmark/benchmark_cells.csv`): the test score and the other test metrics, wall-clock seconds, the number of experiments, the CPU cores, the strategies kept and the system's settings; each Session's record keeps every step. CPU seconds are not measured: all runs are on one machine, one at a time, so wall-clock time is the cost measure.
 - Statistics: Wilcoxon signed-rank tests for pairs of systems over datasets, and the Friedman test with a Nemenyi post-hoc test for several systems at once (Demšar, 2006). Effect sizes and confidence intervals are reported, not only p-values.
+- With two budgets, the "best-score-over-time curve" of H3 is the test score at 2 and at 5 minutes (fixed on 27 October 2026, before any evaluation run).
 
 ## What we measure
 
 - **Predictive quality:** the primary metric on the outer test split (F1, ROC-AUC, R² or RMSE, depending on the task).
-- **Efficiency:** time to reach a target score, and the area under the best-score-over-time curve.
+- **Efficiency:** time to reach a target score (the smallest budget at which a system reaches 99% of the best final score of any system on that dataset and seed), and the score at each budget.
 - **Experimentation:** number of experiments and strategies needed to reach the target.
-- **Cost:** CPU seconds, wall-clock seconds, and utility per experiment.
+- **Cost:** wall-clock seconds, and utility per experiment (CPU seconds are not measured; see the protocol).
 - **Convergence:** how much each extra experiment adds, and where the system stops.
 - **Consistency:** average rank across datasets, spread across seeds, and the worst-case gap to the best system.
 
@@ -73,6 +74,8 @@ The resource manager decides how to split the total budget between experiments, 
 4. AutoPilot-ML without experiment memory: tests H2.
 5. AutoPilot-ML without strategy selection (random or fixed order): tests H3.
 6. The full AutoPilot-ML: tests H1 and H4.
+
+As built (tasks 22 and 23): 1 `manual` (LightGBM with its library defaults), 2 `flaml`, 3 `autogluon` (AutoGluon-Tabular 1.6.3, preset `medium_quality`, in its own environment), 4 `autopilot_rules` (without the memory the learned choice keeps the rule order, so this is the same Session), 5 `random_choice`, 6 `autopilot_full` (Thompson sampling with the frozen memory). Two more ablations remove one part each from the full system: `no_critic` (random valid changes, no Diagnoses) and `no_resource_manager` (equal shares of the time).
 
 ## Studies of the components
 

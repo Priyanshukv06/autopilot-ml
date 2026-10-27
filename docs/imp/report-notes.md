@@ -527,6 +527,19 @@ Built on 27 October 2026 (task 21). Tests: section 8.6.
 
 The random choices use the Session's generator, seeded with the Session seed, so an ablation run can be repeated. Built on 27 October 2026 (task 22). Tests: section 8.6.
 
+**Algorithm 20: comparison systems** (`research/systems.py`, `research/autogluon_worker.py`, task 23; Requirement 21). For one dataset and seed, every system gets the same training and test rows (the Phase 1 split) and the same columns (identifier-like and constant columns of the training part left out, as in a Session's first Setup), the same time budget and CPU cores, and its test predictions are scored by the same Evaluator, so all systems report the same metrics on the same rows.
+
+| System | What it does |
+|---|---|
+| `manual` | LightGBM with its library defaults (100 trees, 31 leaves, learning rate 0.1), trained once with FLAML's data preparation; no search |
+| `flaml` | One FLAML search with the whole budget |
+| `autogluon` | AutoGluon-Tabular 1.6.3, preset `medium_quality`, CPU only, in its own conda environment as a separate process; it writes its predictions, which our Evaluator scores |
+| `autopilot_rules` | A Session with the rule order (Phase 2) |
+| `autopilot_full` | A Session with Thompson sampling on the frozen memory |
+| `random_choice`, `no_critic`, `no_resource_manager` | The ablations of Algorithm 19 (the last two with Thompson sampling and the memory) |
+
+Without memory the learned choice keeps the rule order, so the "no memory" ablation is the same Session as `autopilot_rules` and is not run twice. AutoGluon could not be installed next to our libraries: a pip dry run on 27 October 2026 showed it would replace pandas 3.0.6 by 2.3.3, so it got the separate environment allowed by decision D4. A throwaway run in a temporary folder (30 to 40 s budgets, tic-tac-toe, kin8nm and balance-scale) ran every system end to end; those scores are not results.
+
 **Algorithm 17: Experiment_Memory, version 1** (`app/services/experiment_memory.py`, task 15). After every Verdict the Session appends one line to `experiments/memory/memory.jsonl`: the dataset's fingerprint (a hash of its column names and types, number of rows and target) and the Meta_Features of its training part, the task and metric, the Diagnoses the Proposal answered (kind and severity), the Strategy and its parameters, the Verdict, the Judge's mean and standard deviation of the differences, the number of folds, the step's cost in seconds, its Utility, the engine version and the date. The file is only appended to, and a damaged line is skipped with a warning.
 
 Finding similar datasets: average each stored dataset's Meta_Features over its records, standardise every feature over the stored datasets (dropping features that do not vary), compare only the features both datasets have, and rank by Euclidean distance (same task type only, optionally leaving one dataset out). For the k nearest datasets (5 by default), each (Strategy, diagnosis kind) gets its number of observations, its keep rate with each observation weighted by 1 / (1 + distance), its mean gain when kept and its mean cost. In Phase 2 the memory is written and shown but does not influence any decision; Phase 3's learned strategy choice will read it. SES-001 ran before the memory existed, so the memory starts with the next Session.
@@ -725,7 +738,15 @@ Software (versions pinned in `requirements.txt`):
 
 Why these: all open source, all run offline on a laptop CPU, widely used and documented. FLAML was chosen as the engine because its cost-aware search gives good models on small budgets.
 
-Planned, not used yet: Optuna (searching strategy settings), SHAP (explanations), imbalanced-learn (SMOTE), AutoGluon (comparison baseline), OpenML (benchmark datasets).
+Added in Phase 3 (27 October 2026):
+
+| Area | Tool | Version | Used for |
+|---|---|---|---|
+| Datasets | OpenML (through scikit-learn's `fetch_openml`) | API v1 | Downloading the 12 benchmark datasets once (task 20) |
+| Comparison system | AutoGluon-Tabular, with LightGBM 4.7.0, CatBoost 1.2.10 and xgboost-cpu 3.2.0 | 1.6.3 | The AutoGluon baseline of the benchmark (task 23) |
+| Environment | conda environment `autogluon` (Python 3.11.17, pandas 2.3.3; about 1.1 GB) | | AutoGluon needs pandas below 2.4, the project pins 3.0.6; exact versions in `research/requirements-autogluon.txt` |
+
+Planned, not used yet: Optuna (searching strategy settings), SHAP (explanations), imbalanced-learn (SMOTE).
 
 Sample datasets (all public, small):
 
@@ -1319,7 +1340,8 @@ Future scope (beyond the planned phases):
 | 2026-10-27 | Spec task 21: learned strategy choice (Algorithm 18): `random`, `thompson` and `ucb1` selectors next to `rules`, the `use_memory` switch, the selection of each step in `session.json`, a read-only memory never written; command-line flags and a dashboard switch | c6151fa |
 | 2026-10-27 | Spec task 21.1: 10 selector tests in `tests/test_selectors.py`; the sidebar lists the learned strategy choice as built; documents updated; 482 tests passing in 173.2 s | 5b73142 |
 | 2026-10-27 | Spec task 22: ablation switches (Algorithm 19): `use_critic` (random valid changes, no Diagnoses) and `use_resource_manager` (equal search budgets, only the time and Experiment limits stop), next to `use_memory` and the random order; recorded in `session.json`; command-line flags | 1e840e9 |
-| 2026-10-27 | Spec task 22.1: 4 ablation tests in `tests/test_ablations.py`; 486 tests passing in 182.0 s | see the commit of this date |
+| 2026-10-27 | Spec task 22.1: 4 ablation tests in `tests/test_ablations.py`; 486 tests passing in 182.0 s | 73ae9f5 |
+| 2026-10-27 | Spec task 23: comparison systems (Algorithm 20, `research/systems.py`): manual LightGBM, FLAML alone, AutoGluon through a worker in the new `autogluon` conda environment (decision D4: it needs pandas 2.3), and the AutoPilot variants, all on the same rows and scored by the same Evaluator; a throwaway run of every system | see the commit of this date |
 
 ---
 

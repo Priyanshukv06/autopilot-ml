@@ -15,6 +15,14 @@ Judge study (spec task 17):
     python scripts/run_study.py judge analyse        # rates per (repeats, alpha), the chosen defaults
 
 Raw results: results/studies/judge_study_pairs.csv (one row per pair, number of repeats and alpha).
+
+Judge agreement study (spec task 27; needs the memory build's Sessions, scripts/build_memory.py):
+
+    python scripts/run_study.py agreement run        # the strict comparison of each pair; restarts skip done pairs
+    python scripts/run_study.py agreement analyse    # agreement, Cohen's kappa and the cost ratio
+
+Raw results: results/studies/judge_agreement_pairs.csv (one row per pair); the searches' records in
+experiments/studies/judge_agreement/ and models/studies/judge_agreement/.
 """
 
 from __future__ import annotations
@@ -33,6 +41,7 @@ import pandas as pd  # noqa: E402
 
 from app.services.critic import DEFAULT_THRESHOLDS_PATH, CriticThresholds  # noqa: E402
 from research import critic_study as cs  # noqa: E402
+from research import judge_agreement as ja  # noqa: E402
 from research import judge_study as js  # noqa: E402
 
 RESULTS = ROOT / "results" / "studies"
@@ -140,6 +149,44 @@ def judge_analyse(args: argparse.Namespace) -> None:
           f"power {reported['power']} ({reported['harmful']} harmful and {reported['helpful']} helpful pairs)")
 
 
+def agreement_run(args: argparse.Namespace) -> None:
+    from scripts.run_benchmark import keep_awake
+
+    where = ja.folders(ROOT)
+    pairs = ja.study_pairs(ROOT)
+    done = {r["pair_id"] for r in ja.read_rows(where["pairs"])}
+    print(f"{len(pairs)} pairs, {sum(p.pair_id in done for p in pairs)} already done", flush=True)
+    keep_awake()
+    started = time.perf_counter()
+
+    def report(row: dict, number: int, total: int) -> None:
+        elapsed = time.perf_counter() - started
+        outcome = (f"Judge {row['judge_verdict']}, strict {row['strict_verdict']}, {row['strict_seconds']:.0f} s"
+                   if row["status"] == "completed" else f"FAILED ({str(row['error'])[:150]})")
+        print(f"[{number}/{total}] {row['pair_id']} ({row['dataset']}, {row['strategy']}): {outcome} "
+              f"({elapsed / 60:.1f} min so far)", flush=True)
+
+    ja.run(pairs, where["settings"], where["pairs"], n_jobs=args.cores, limit=args.limit, report=report)
+
+
+def agreement_analyse(args: argparse.Namespace) -> None:
+    where = ja.folders(ROOT)
+    rows = ja.read_rows(where["pairs"])
+    if not rows:
+        sys.exit("No results yet: run 'agreement run' first.")
+    groups = [("all", rows)] + [(f"dataset={d}", [r for r in rows if r["dataset"] == d])
+                                for d in sorted({r["dataset"] for r in rows})]
+    groups += [(f"judge={v}", [r for r in rows if r["judge_verdict"] == v]) for v in ja.VERDICTS]
+    table = pd.DataFrame([{"group": name, **{k: v for k, v in ja.agreement(part).items() if k != "confusion"}}
+                          for name, part in groups if part])
+    table.to_csv(where["summary"], index=False)
+    confusion = ja.agreement(rows)["confusion"]
+    confusion.to_csv(where["confusion"])
+    pd.set_option("display.width", 220)
+    print(table.round(3).to_string(index=False))
+    print("\nRows: Judge's verdict; columns: strict verdict\n" + confusion.to_string())
+
+
 def _tables(values: dict[str, float]) -> dict[str, dict[str, float]]:
     tables: dict[str, dict[str, float]] = {}
     for key, value in values.items():
@@ -150,7 +197,7 @@ def _tables(values: dict[str, float]) -> dict[str, dict[str, float]]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("study", choices=["critic", "judge"])
+    parser.add_argument("study", choices=["critic", "judge", "agreement"])
     parser.add_argument("action", choices=["run", "analyse"])
     parser.add_argument("--seeds", choices=["tuning", "reporting", "all"], default="all")
     parser.add_argument("--limit", type=int, default=0, help="run at most this many new cases")
@@ -158,7 +205,8 @@ def main() -> None:
     parser.add_argument("--freeze", default="", help="write the tuned thresholds under this version label")
     args = parser.parse_args()
     actions = {("critic", "run"): critic_run, ("critic", "analyse"): critic_analyse,
-               ("judge", "run"): judge_run, ("judge", "analyse"): judge_analyse}
+               ("judge", "run"): judge_run, ("judge", "analyse"): judge_analyse,
+               ("agreement", "run"): agreement_run, ("agreement", "analyse"): agreement_analyse}
     actions[(args.study, args.action)](args)
 
 

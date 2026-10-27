@@ -177,6 +177,8 @@ In order (dates and commits in Appendix B):
 | Experiment runs in a background thread | Streamlit reruns the script on every click; the run and its progress survive reruns |
 | Autonomous run: the page does not wait in a loop; a fragment redraws the live view every second (task 18) | A Session takes minutes, and Stop must stay clickable while it runs; the dashboard tests can then press Start and Stop between page runs |
 | The live view is drawn only from the session record, which the Session hands to the page after every save (`on_update`) | One source of truth: the page shows exactly what `session.json` holds, without reading a file that the Session may be rewriting |
+| Benchmark budgets of 120 and 300 s only; ablations at 300 s only (task 24, agreed with the user on 27 October 2026) | The 600 s budget would add about 20 hours to a grid of about 22 hours on one laptop; two budgets still give a score-against-budget comparison and time-to-target |
+| Benchmark rows are only appended; a failed cell is run again as a new row and the analysis reads each cell's last row | Raw results are never edited, and an overnight run can be stopped and restarted at any point |
 
 ### 4.7 Problems met and how they were solved
 
@@ -228,6 +230,32 @@ Requirement 22: development datasets (to build the memory, free to look at) and 
 | regression messy | solar_flare (44966): 1,066 rows, 10 columns (3 text) | student_performance_por (44967): 649 rows, 30 columns (17 text) |
 
 With the four samples there are 10 development and 6 evaluation datasets. Licences: "Public" on OpenML for the CC18 datasets, CC BY 4.0 for the CTR23 datasets (as recorded by OpenML, in `datasets.json`). Each dataset is downloaded once with scikit-learn's `fetch_openml` (cache in `data/raw/openml_cache`) and saved as `data/raw/<name>.csv`; OpenML's ignored columns are left out (for MiceProtein that removes `MouseID` and the three columns from which the class is made). Two regression targets have few integer values (student grades, solar flare counts), so the app's own detector would call them multiclass; the registry records OpenML's task, which the benchmark passes to every system, and the detected one. `python scripts/prepare_datasets.py download` recreates the files from the IDs and versions and checked all 12 against the registry (27 October 2026).
+
+### 4.10 Benchmark harness and grid (task 24, fixed on 27 October 2026)
+
+Requirement 23. `research/benchmark.py` runs the comparison systems of Algorithm 20 over a grid; `scripts/run_benchmark.py run | status [--smoke]` is the command line. A cell is one (system, dataset, budget, seed). In a cell the system gets the same training and test rows and columns as every other system for that dataset and seed, and all CPU cores.
+
+The grid, agreed with the user on 27 October 2026 before any evaluation run:
+
+| Part | Systems | Budgets | Datasets and seeds | Cells |
+|---|---|---|---|---|
+| Main | `manual`, `flaml`, `autogluon`, `autopilot_rules`, `autopilot_full` | 120 s and 300 s | the 6 evaluation datasets x seeds 1 to 5 | 300 |
+| Ablations | `random_choice`, `no_critic`, `no_resource_manager` | 300 s only | the same | 90 |
+
+The design planned a third budget of 600 s (Requirement 23.1 names 2, 5 and 10 minutes). It was dropped to fit the laptop: it would add about 20 hours (4 systems that use their whole budget x 600 s x 30 pairs of dataset and seed). By the same arithmetic the reduced grid needs about 22 hours plus the time above budget, which the smoke run measures; this is an estimate, not a measurement. The command line can still add 600 s with `--budgets`.
+
+How the harness keeps the results safe and fair:
+
+- One CSV row per finished cell, appended at once and forced to disk: the test score and all 11 test metrics, wall time, number of Experiments, model, stop reason, first model's test score and kept Strategies (Sessions), the run ID of the records, training and test rows, columns left out, the split's fingerprint, CPU cores asked for and present, the system's settings, the frozen memory's file, SHA-256 and number of records, the code version (commit, uncommitted changes, library versions), the error of a failed cell, and the start and end times.
+- Restart: cells that have a row are skipped; an interrupted cell has none and runs again. A system that fails gives a row with status `failed`; `--retry-failed` runs those cells again and the analysis uses each cell's last row, so no row is ever edited.
+- Cells run seed by seed (then dataset by dataset and budget by budget), so a run stopped early still has complete seeds for the statistics.
+- The frozen memory: the run refuses to start if it is missing for a system that reads it, if any record comes from an evaluation dataset or from any dataset that is not a development dataset (by name or by the dataset fingerprint; Requirement 22.3), or if earlier rows were made with a memory of another hash; it stops if the file changes during the run. The memory is opened read-only.
+- Only evaluation datasets can enter the grid's rows; trials on other datasets use the smoke setting or a temporary folder.
+- The systems' records go to `experiments/benchmark/` and `models/benchmark/`, apart from the dashboard's history, with MLflow off; the rows go to `results/benchmark/benchmark_cells.csv`.
+- While it runs, the script asks Windows not to sleep (`SetThreadExecutionState`; the request ends with the process), because a laptop that sleeps during a time-limited search would cut that search short.
+- Smoke setting (Requirement 23.4): every system once on titanic (a development dataset, so looking at its result tunes nothing), seed 1, the smallest budget; its own folders (`experiments/benchmark-smoke/`, `results/benchmark/smoke/`). Since 7 of the 8 systems use their whole 120 s, it should take about 15 minutes (arithmetic), more than the "few minutes" of the requirement, because it uses the real budget to measure the time above budget.
+
+A throwaway trial on 27 October 2026 in a temporary folder (penguins, a development dataset, 15 s budget, seed 1, the Phase 2 memory as a stand-in) ran all 8 systems, skipped the 3 finished cells after a stop, wrote every field and left the memory file unchanged (same SHA-256 before and after). Its scores are not results.
 
 ---
 
@@ -1215,7 +1243,7 @@ What this shows, and what it does not:
 
 ### 9.15 Still to produce
 
-- The planned benchmark in `research-direction.md`: six systems, OpenML datasets, several budgets and seeds, paired statistical tests.
+- The benchmark (section 4.10; harness built in task 24, not run yet): first the frozen memory from the development datasets (task 26), then the smoke run, then the 390 cells, then the statistics (task 25).
 - Re-run sections 9.2 to 9.6 with the final code and keep the raw files.
 - Charts: test score against budget; per-seed differences; bootstrap intervals.
 
@@ -1343,7 +1371,8 @@ Future scope (beyond the planned phases):
 | 2026-10-27 | Spec task 22: ablation switches (Algorithm 19): `use_critic` (random valid changes, no Diagnoses) and `use_resource_manager` (equal search budgets, only the time and Experiment limits stop), next to `use_memory` and the random order; recorded in `session.json`; command-line flags | 1e840e9 |
 | 2026-10-27 | Spec task 22.1: 4 ablation tests in `tests/test_ablations.py`; 486 tests passing in 182.0 s | 73ae9f5 |
 | 2026-10-27 | Spec task 23: comparison systems (Algorithm 20, `research/systems.py`): manual LightGBM, FLAML alone, AutoGluon through a worker in the new `autogluon` conda environment (decision D4: it needs pandas 2.3), and the AutoPilot variants, all on the same rows and scored by the same Evaluator; a throwaway run of every system | e81474d |
-| 2026-10-27 | Spec task 23.1: 7 tests of the comparison systems in `tests/test_systems.py`, the AutoGluon bridge tested with stand-in worker scripts; 493 tests passing in 221.9 s | see the commit of this date |
+| 2026-10-27 | Spec task 23.1: 7 tests of the comparison systems in `tests/test_systems.py`, the AutoGluon bridge tested with stand-in worker scripts; 493 tests passing in 221.9 s | bc4d575 |
+| 2026-10-27 | Spec task 24: benchmark harness (`research/benchmark.py`, `scripts/run_benchmark.py run / status`), the reduced grid agreed with the user (390 cells: budgets 120 and 300 s, ablations at 300 s; 600 s dropped), append-only rows with restart, memory guards and a smoke setting (section 4.10); a throwaway trial of all 8 systems | see the commit of this date |
 
 ---
 
@@ -1401,5 +1430,6 @@ Charts already made (in `docs/imp/images`, from `scripts/plot_search_history.py`
 - The development runs (9.2, 9.5), the rehearsal (9.4) and the seed checks (9.6) ran in temporary folders that were deleted afterwards. Only the numbers in this file remain; re-run them for the final report.
 - Phase 2 Sessions: `experiments/SES-###/` (`session.json`, `train_profile.json`) and their Experiments `experiments/EXP-###/` (with `assessment.json`, `diagnoses.json`, `decision.json`), models in `models/EXP-###/`, MLflow parent and child runs in `mlruns/`, and the memory in `experiments/memory/memory.jsonl`. SES-001 is section 9.11; the Sessions of the Phase 2 measurement are listed in `results/phase2/phase2_runs.csv` (column `run_id`). Not in git: back them up.
 - Component studies: summary CSV files in `results/studies/` (in git); the critic study's saved inputs in `experiments/studies/critic_study_inputs.jsonl` (not in git). Phase 2 measurement: `results/phase2/` (in git).
+- Benchmark (once it has run): one row per cell in `results/benchmark/benchmark_cells.csv` and the smoke run in `results/benchmark/smoke/` (in git); the Sessions and Experiments behind the rows in `experiments/benchmark/` and `models/benchmark/` (`benchmark-smoke/` for the smoke run), found by each row's `run_id` (not in git: back them up).
 - Maintained documents: `docs/imp/` (this file, `PROJECT.md`, `how-it-works.md`, `architecture.md`, `development-roadmap.md`, `research-direction.md`) and the charts in `docs/imp/images/`.
 - Archived Phase 1 material: `docs/unimp/PRESENTATION.md` (demo guide; section 7 concepts, section 15 viva questions) and `docs/unimp/Project_Presentation.md` (text presented at the review).

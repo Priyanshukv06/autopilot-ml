@@ -155,6 +155,9 @@ class ManualSystem:
     def __init__(self, engine: AutoMLEngine | None = None) -> None:
         self.engine = engine or FLAMLEngine()
 
+    def describe(self) -> dict[str, Any]:
+        return {"estimator": "lgbm", "config": dict(LIGHTGBM_DEFAULTS), "engine": type(self.engine).__name__}
+
     def run(self, problem: Problem, prepared: Prepared, settings: Settings) -> SystemResult:
         started = time.perf_counter()
         try:
@@ -175,6 +178,10 @@ class FlamlSystem:
 
     def __init__(self, engine: AutoMLEngine | None = None) -> None:
         self.engine = engine
+
+    def describe(self) -> dict[str, Any]:
+        return {"time_budget": "the whole budget", "estimator_list": "FLAML's default",
+                "engine": type(self.engine).__name__ if self.engine else "FLAMLEngine"}
 
     def run(self, problem: Problem, prepared: Prepared, settings: Settings) -> SystemResult:
         started = time.perf_counter()
@@ -200,6 +207,10 @@ class AutoGluonSystem:
         self.python = Path(python or os.environ.get("AUTOPILOT_AUTOGLUON_PYTHON") or default_autogluon_python())
         self.worker = worker or Path(__file__).with_name("autogluon_worker.py")
         self.extra_seconds = extra_seconds  # a run that takes this much longer than its budget is stopped
+
+    def describe(self) -> dict[str, Any]:
+        return {"presets": AUTOGLUON_PRESET, "time_limit": "the whole budget", "extra_seconds": self.extra_seconds,
+                "python": str(self.python)}
 
     def run(self, problem: Problem, prepared: Prepared, settings: Settings) -> SystemResult:
         started = time.perf_counter()
@@ -243,6 +254,10 @@ class AutopilotSystem:
         self.engine = engine
         self.max_experiments = max_experiments
         self.session_factory = session_factory
+
+    def describe(self) -> dict[str, Any]:
+        return {**self.options, "max_experiments": self.max_experiments, "memory_read_only": True,
+                "engine": type(self.engine).__name__ if self.engine else "FLAMLEngine"}
 
     def run(self, problem: Problem, prepared: Prepared, settings: Settings) -> SystemResult:
         started = time.perf_counter()

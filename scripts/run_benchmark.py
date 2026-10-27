@@ -5,6 +5,7 @@ From the project root:
     python scripts/run_benchmark.py run --memory FILE    # the whole grid; a restart skips finished cells
     python scripts/run_benchmark.py run --smoke          # every system once: titanic, seed 1, 120 s
     python scripts/run_benchmark.py status [--smoke]     # cells done, failures, time per system, time left
+    python scripts/run_benchmark.py analyse [--smoke]    # tables and charts in results/benchmark/
 
 FILE is the frozen Experiment_Memory, built from development datasets only. The systems' records go to
 experiments/benchmark/ and models/benchmark/ (benchmark-smoke/ for the smoke setting), and one row per
@@ -80,6 +81,23 @@ def status(args: argparse.Namespace) -> None:
         print(pd.DataFrame(table).to_string(index=False))
 
 
+def analyse(args: argparse.Namespace) -> None:
+    from research import benchmark_analysis
+
+    _, rows_path = benchmark.folders(Path(args.project_root), smoke=args.smoke)
+    rows = benchmark.read_cells(rows_path)
+    if not rows:
+        sys.exit(f"No rows in {rows_path} yet: run 'run' first.")
+    result = benchmark_analysis.analyse(rows, args.budgets, args.ablation_budget)
+    paths = benchmark_analysis.write(result, rows_path.parent)
+    pd.set_option("display.width", 220)
+    pd.set_option("display.max_columns", 30)
+    for name in ("tests", "ranks", "pairs", "time_to_target_summary", "failures"):
+        table = result[name]
+        print(f"\n{name}:\n" + (table.round(4).to_string(index=False) if len(table) else "(none)"))
+    print(f"\n{len(paths)} files written to {rows_path.parent}")
+
+
 def keep_awake() -> None:
     """Ask Windows not to sleep while this process runs (SetThreadExecutionState; it ends with the process)."""
     if os.name == "nt":
@@ -91,7 +109,7 @@ def keep_awake() -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("action", choices=["run", "status"])
+    parser.add_argument("action", choices=["run", "status", "analyse"])
     parser.add_argument("--smoke", action="store_true", help="every system once on one small development dataset")
     parser.add_argument("--memory", help="the frozen Experiment_Memory file (needed for the grid)")
     parser.add_argument("--datasets", nargs="+", help="default: the evaluation datasets (smoke: titanic)")
@@ -105,7 +123,7 @@ def main() -> None:
     parser.add_argument("--retry-failed", action="store_true", help="run cells whose last row failed again")
     parser.add_argument("--project-root", default=str(ROOT), help="folder for the records and results/")
     args = parser.parse_args()
-    run(args) if args.action == "run" else status(args)
+    {"run": run, "status": status, "analyse": analyse}[args.action](args)
 
 
 if __name__ == "__main__":

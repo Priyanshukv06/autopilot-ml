@@ -516,6 +516,17 @@ The profiler now also reports, on the rows it is given, each column's most commo
 
 Built on 27 October 2026 (task 21). Tests: section 8.6.
 
+**Algorithm 19: ablation switches** (`app/services/autopilot.py`, `strategy_engine.py`, `resource_manager.py`, task 22; Requirement 20). Each switch turns one part off, so the benchmark can measure what that part adds; all are recorded in `session.json`.
+
+| Switch | What the Session does instead |
+|---|---|
+| `use_memory` off (default) | The selectors see no memory, so `thompson` and `ucb1` keep the rule order |
+| `selector="random"` | The Proposals of the rule table in a random order (no strategy choice) |
+| `use_critic` off | No Diagnoses. For each of the 9 Strategies one change with random valid parameters (a random used column to drop, a random text column to encode or group, a random numeric column with empty cells for an indicator, all tried learner families but one), kept if it applies and was not tried, in a random order |
+| `use_resource_manager` off | Every search gets total time / maximum Experiments (at least 5 s); nothing is kept back for Assessments, no shorter search after a wasted budget and no longer one for more search time; only the time and Experiment limits stop the Session (and Stop, an error or no change left; no "three discards in a row" rule) |
+
+The random choices use the Session's generator, seeded with the Session seed, so an ablation run can be repeated. Built on 27 October 2026 (task 22). Tests: section 8.6.
+
 **Algorithm 17: Experiment_Memory, version 1** (`app/services/experiment_memory.py`, task 15). After every Verdict the Session appends one line to `experiments/memory/memory.jsonl`: the dataset's fingerprint (a hash of its column names and types, number of rows and target) and the Meta_Features of its training part, the task and metric, the Diagnoses the Proposal answered (kind and severity), the Strategy and its parameters, the Verdict, the Judge's mean and standard deviation of the differences, the number of folds, the step's cost in seconds, its Utility, the engine version and the date. The file is only appended to, and a damaged line is skipped with a warning.
 
 Finding similar datasets: average each stored dataset's Meta_Features over its records, standardise every feature over the stored datasets (dropping features that do not vary), compare only the features both datasets have, and rank by Euclidean distance (same task type only, optionally leaving one dataset out). For the k nearest datasets (5 by default), each (Strategy, diagnosis kind) gets its number of observations, its keep rate with each observation weighted by 1 / (1 + distance), its mean gain when kept and its mean cost. In Phase 2 the memory is written and shown but does not influence any decision; Phase 3's learned strategy choice will read it. SES-001 ran before the memory existed, so the memory starts with the next Session.
@@ -1305,7 +1316,8 @@ Future scope (beyond the planned phases):
 | 2026-10-27 | Spec task 19: Phase 2 measurement (24 runs, 300 s each, 1 h 42 min; section 9.14, Phase 2 conclusions in chapter 10); new section 9 of `how-it-works.md`; `architecture.md`, `PROJECT.md`, the README and the roadmap describe the built autonomous layer; report notes: objectives, method, flowchart 6.6, code size, commands, data locations | e3f7924 |
 | 2026-10-27 | Spec task 20: development and evaluation datasets (`research/datasets.py`, `scripts/prepare_datasets.py`, registry `research/datasets.json`; section 4.9): 6 OpenML datasets for each list, drawn with seed 2026 from six groups of the laptop-sized CC18 and CTR23 datasets, all downloaded and checked; 4 tests; 472 tests passing in 180.7 s | 528e9cd |
 | 2026-10-27 | Spec task 21: learned strategy choice (Algorithm 18): `random`, `thompson` and `ucb1` selectors next to `rules`, the `use_memory` switch, the selection of each step in `session.json`, a read-only memory never written; command-line flags and a dashboard switch | c6151fa |
-| 2026-10-27 | Spec task 21.1: 10 selector tests in `tests/test_selectors.py`; the sidebar lists the learned strategy choice as built; documents updated; 482 tests passing in 173.2 s | see the commit of this date |
+| 2026-10-27 | Spec task 21.1: 10 selector tests in `tests/test_selectors.py`; the sidebar lists the learned strategy choice as built; documents updated; 482 tests passing in 173.2 s | 5b73142 |
+| 2026-10-27 | Spec task 22: ablation switches (Algorithm 19): `use_critic` (random valid changes, no Diagnoses) and `use_resource_manager` (equal search budgets, only the time and Experiment limits stop), next to `use_memory` and the random order; recorded in `session.json`; command-line flags | see the commit of this date |
 
 ---
 

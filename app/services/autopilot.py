@@ -46,10 +46,17 @@ from app.services.experiment_planner import Planner
 from app.services.experiment_tracker import ExperimentTracker, write_json_atomic
 from app.services.judge import Judge, JudgeDecision, JudgeSettings
 from app.services.profiler import DatasetProfile, DatasetProfiler
-from app.services.resource_manager import KEPT, ResourceManager, SessionBudget, StopReason
+from app.services.resource_manager import KEPT, EqualShareManager, ResourceManager, SessionBudget, StopReason
 from app.services.search_summary import SearchSummary
 from app.services.splits import OuterSplit, SessionFolds, SplitError, make_outer_split, make_session_folds
-from app.services.strategy_engine import SELECTORS, Proposal, SelectionContext, StrategySelector, propose
+from app.services.strategy_engine import (
+    SELECTORS,
+    Proposal,
+    SelectionContext,
+    StrategySelector,
+    propose,
+    random_proposals,
+)
 from app.services.task_detector import TaskType
 
 logger = get_logger(__name__)
@@ -72,6 +79,10 @@ class SessionSettings:
     thresholds_path: Path | None = None
     selector: str = "rules"  # rules, random, thompson or ucb1
     use_memory: bool = False  # let the selector read the Experiment_Memory (Requirement 19)
+    # Ablation switches (Requirement 20). Without the Critic, every change is a random valid one; without
+    # the Resource_Manager, every search gets an equal share and only the time and Experiment limits stop.
+    use_critic: bool = True
+    use_resource_manager: bool = True
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -83,6 +94,8 @@ class SessionSettings:
             "thresholds_path": str(self.thresholds_path) if self.thresholds_path else None,
             "selector": self.selector,
             "use_memory": self.use_memory,
+            "use_critic": self.use_critic,
+            "use_resource_manager": self.use_resource_manager,
         }
 
 
@@ -152,8 +165,11 @@ class _Context:
     rm: ResourceManager
     notify: Progress
     dataset_fingerprint: str = ""
+    use_critic: bool = True
 
     def diagnose(self, config: ExperimentConfig, result: ExperimentResult, assessment: Assessment) -> list[Diagnosis]:
+        if not self.use_critic:  # ablation: no Diagnoses at all
+            return []
         search = SearchSummary(**result.search_summary) if result.search_summary else None
         return self.critic.diagnose(profile=self.profile, config=config, assessment=assessment, search=search,
                                     task_type=self.task_type, primary_metric=self.metric)
@@ -214,7 +230,7 @@ class AutopilotSession:
 
         # 2. Records.
         session_id = self.tracker.allocate_session_id()
-        rm = ResourceManager(session.budget, self.clock)
+        rm = (ResourceManager if session.use_resource_manager else EqualShareManager)(session.budget, self.clock)
         state = _State(self, session_id, session, base, thresholds, split, folds,
                        [*notes, *split_notes, *fold_notes], self.planner.safe_exclusions(base, profile),
                        on_update=on_update)
@@ -230,6 +246,7 @@ class AutopilotSession:
                                            base.random_seed),
             critic=Critic(thresholds), judge=Judge(session.judge, test_train_ratio=folds.test_train_ratio),
             rm=rm, notify=notify, dataset_fingerprint=dataset_fingerprint(dataframe, base.target_column),
+            use_critic=session.use_critic,
         )
 
         # 3-4. The first Experiment, its Assessment and its Diagnoses.
@@ -248,20 +265,25 @@ class AutopilotSession:
         while True:
             if stop_requested():
                 rm.request_stop()
-            proposals = selector.rank(propose(accepted.diagnoses, accepted.config, profile, task_type, tried),
-                                      selection)
+            if session.use_critic:
+                proposals = selector.rank(propose(accepted.diagnoses, accepted.config, profile, task_type, tried),
+                                          selection)
+            else:  # ablation: a random valid change, whatever the data looks like
+                families = list(accepted.config.estimator_list or accepted.result.best_config_per_estimator)
+                proposals = random_proposals(accepted.config, accepted.result.feature_columns, families, profile,
+                                             task_type, tried, selection.rng)
             stop = rm.check_stop(len(proposals))
             if stop is not None:
                 break
             proposal = proposals[0]
+            placed = selector.explain(proposal) if session.use_critic else {"selector": "random (no Critic)", "rank": 0}
             wasted = any(d.kind is DiagnosisKind.WASTED_BUDGET for d in accepted.diagnoses)
             budget = rm.next_budget(proposal, accepted.search, wasted)
             if isinstance(budget, StopReason):
                 stop = budget
                 break
             tried.add(proposal.spec.key())
-            accepted = self._candidate_step(ctx, state, len(state.steps), proposal, budget, accepted,
-                                            selector.explain(proposal))
+            accepted = self._candidate_step(ctx, state, len(state.steps), proposal, budget, accepted, placed)
 
         # 6. The Final_Evaluation: the only use of the Test_Part.
         notify("final_evaluation", len(state.steps), "Scoring the first and the final model on the test part")
@@ -581,7 +603,8 @@ class _State:
         params = {"dataset": base.dataset_name, "target": base.target_column, "primary_metric": base.primary_metric,
                   "total_seconds": budget.total_seconds, "max_experiments": budget.max_experiments,
                   "n_jobs": budget.n_jobs, "seed": base.random_seed, "selector": self.session.selector,
-                  "use_memory": self.session.use_memory,
+                  "use_memory": self.session.use_memory, "use_critic": self.session.use_critic,
+                  "use_resource_manager": self.session.use_resource_manager,
                   "judge_alpha": self.session.judge.alpha, "split_fingerprint": self.record["splits"]["outer"]}
         try:
             self.record["mlflow_run_id"] = self.owner.tracker.start_session_run(

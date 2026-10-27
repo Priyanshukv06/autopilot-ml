@@ -206,3 +206,52 @@ class ResourceManager:
 
     def ledger(self) -> list[StepCost]:
         return list(self._ledger)
+
+
+class EqualShareManager(ResourceManager):
+    """The Session without a Resource_Manager (ablation, Requirement 20.1).
+
+    Every search gets the same share, total time / maximum Experiments (at least the minimum, at most the
+    time left); nothing is kept back for Assessments, a wasted budget does not shorten the next search,
+    and more search time gets no larger budget. The Session stops only at the time and Experiment
+    limits, besides Stop, an error, or no Proposal left (there is no patience rule).
+    """
+
+    def share(self) -> int:
+        b = self.budget
+        return max(b.min_experiment_seconds, math.floor(b.total_seconds / b.max_experiments))
+
+    def reserve(self) -> float:
+        return 0.0
+
+    def first_budget(self) -> int:
+        if self._ledger:
+            raise RuntimeError("The first budget is given only once, before any step.")
+        self._deadline = self._start + self.budget.total_seconds
+        return self.share()
+
+    def next_budget(self, proposal: Proposal | None, accepted_search: SearchSummary | None,
+                    wasted_budget: bool) -> int | StopReason:
+        b = self.budget
+        left = self.time_left()
+        if left < b.min_experiment_seconds:
+            return StopReason.TIME
+        if b.max_experiments - len(self._ledger) <= 0:
+            return StopReason.EXPERIMENTS
+        seconds = max(b.min_experiment_seconds, min(self.share(), math.floor(left)))
+        self._deadline = self.clock() + seconds
+        return seconds
+
+    def check_stop(self, proposals_left: int) -> StopReason | None:
+        b = self.budget
+        if self._user_stop:
+            return StopReason.USER
+        if self._error is not None:
+            return StopReason.ERROR
+        if self.time_left() < b.min_experiment_seconds:
+            return StopReason.TIME
+        if len(self._ledger) >= b.max_experiments:
+            return StopReason.EXPERIMENTS
+        if proposals_left <= 0:
+            return StopReason.NO_PROPOSALS
+        return None

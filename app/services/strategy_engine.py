@@ -335,6 +335,65 @@ def propose(
     return sorted(proposals, key=Proposal.ranking_key)
 
 
+def random_proposals(
+    config: ExperimentConfig,
+    feature_columns: list[str],
+    families: list[str],
+    profile: DatasetProfile,
+    task_type: TaskType,
+    tried: set[str],
+    rng: np.random.Generator,
+) -> list[Proposal]:
+    """The Session without the Critic (ablation, Requirement 20.1): for every Strategy of the catalogue, one
+    change with random valid parameters, kept if it applies to ``config`` and was not tried; in a random order.
+
+    ``feature_columns`` are the Accepted_Setup's columns and ``families`` the learner families its search
+    tried. The Proposals answer no Diagnosis.
+    """
+    from app.services.strategies import CATALOGUE
+
+    numeric = set(profile.numerical_features)
+    text = [c for c in feature_columns if c not in numeric]
+    with_missing = [c for c in feature_columns if c in numeric and profile.missing_ratio.get(c, 0.0) > 0]
+
+    def pick(columns: list[str]) -> list[str]:
+        return [columns[int(rng.integers(len(columns)))]] if columns else []
+
+    candidates: list[StrategySpec] = []
+    for strategy_id in CATALOGUE:
+        if strategy_id == "drop_columns":
+            columns = pick(list(feature_columns))
+            params: dict[str, Any] | None = {"columns": columns} if columns else None
+        elif strategy_id in ("frequency_encode", "group_rare_categories"):
+            columns = pick(text)
+            params = {"columns": columns} if columns else None
+        elif strategy_id == "missing_indicator":
+            columns = pick(with_missing)
+            params = {"columns": columns} if columns else None
+        elif strategy_id == "restrict_model_families":
+            if len(families) >= 2:
+                left_out = families[int(rng.integers(len(families)))]
+                params = {"keep": [f for f in families if f != left_out]}
+            else:
+                params = None
+        else:
+            params = {}
+        if params is not None:
+            candidates.append(StrategySpec(strategy_id, params))
+
+    proposals = []
+    for index, spec in enumerate(candidates):
+        strategy = get_strategy(spec.strategy_id)
+        if spec.key() in tried or not strategy.applicable(config, profile, task_type, spec.params):
+            continue
+        proposals.append(Proposal(
+            spec=spec, answers=(), severity=Severity.LOW, cost_class=strategy.cost_class,
+            complexity=strategy.complexity, reason=f"{strategy.describe(spec.params)}. Chosen at random (no Critic).",
+            rule_position=(len(TABLE_ORDER), index), answered=(),
+        ))
+    return [proposals[i] for i in rng.permutation(len(proposals))]
+
+
 def _answer_text(diagnosis: Diagnosis) -> str:
     name = diagnosis.kind.value.replace("_", " ")
     columns = f" of {', '.join(repr(c) for c in diagnosis.columns)}" if diagnosis.columns else ""

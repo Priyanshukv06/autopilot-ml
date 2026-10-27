@@ -49,6 +49,9 @@ def main() -> int:
     parser.add_argument("--selector", default="rules", choices=["rules", "random", "thompson", "ucb1"],
                         help="how the next change is chosen (thompson and ucb1 learn from the memory)")
     parser.add_argument("--use-memory", action="store_true", help="let the selector read the experiment memory")
+    parser.add_argument("--no-critic", action="store_true", help="ablation: random valid changes, no Diagnoses")
+    parser.add_argument("--no-resource-manager", action="store_true",
+                        help="ablation: equal search budgets; only the time and Experiment limits stop")
     parser.add_argument("--test-size", type=float, default=0.2)
     parser.add_argument("--no-mlflow", action="store_true", help="do not log to MLflow")
     parser.add_argument("--project-root", default=str(ROOT), help="folder for experiments/, models/ and mlruns/")
@@ -66,7 +69,8 @@ def main() -> int:
                 excluded_columns=parse_columns(args.exclude), dataset_name=dataset.stem,
             ),
             budget=SessionBudget(total_seconds=args.seconds, max_experiments=args.max_experiments, n_jobs=args.cores),
-            selector=args.selector, use_memory=args.use_memory,
+            selector=args.selector, use_memory=args.use_memory, use_critic=not args.no_critic,
+            use_resource_manager=not args.no_resource_manager,
         )
         result = AutopilotSession(settings=settings, enable_mlflow=not args.no_mlflow).run(
             df, session, progress=lambda stage, step, message: print(f"[{stage}] {message}", flush=True))

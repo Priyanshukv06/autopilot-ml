@@ -504,8 +504,8 @@ def render_memory_records(settings: Settings, df: pd.DataFrame, target: str) -> 
                                 "Cost (s)": st.column_config.NumberColumn(format="%.1f")})
     sessions = len({r.session_id for r in records})
     st.caption(f"{_count(len(records), 'record', 'records')} from {_count(sessions, 'Session', 'Sessions')}, "
-               "newest first. The memory is only written and shown for now; no decision reads it yet "
-               "(planned for Phase 3).")
+               "newest first. The learned Strategy choices (thompson, ucb1) read the records of other, similar "
+               "datasets when the memory is switched on in the advanced settings.")
 
 
 # --------------------------------------------------------------------- helpers

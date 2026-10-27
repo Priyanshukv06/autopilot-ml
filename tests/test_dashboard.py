@@ -91,8 +91,9 @@ def test_the_sidebar_marks_the_built_modules(project):
     at.run()
     sidebar = texts(at.sidebar.markdown)
     assert "✅ Autonomous mode in this dashboard" in sidebar and "✅ Experiment memory" in sidebar
+    assert "✅ Learned strategy choice" in sidebar
     planned = sidebar.split("Planned, not implemented", 1)[1]
-    assert "Autonomous mode" not in planned and "Learned strategy choice" in planned
+    assert "Autonomous mode" not in planned and "Learned" not in planned and "Benchmark" in planned
     assert at.radio(key="mode").value == "Single experiment"  # the default mode is unchanged
 
 

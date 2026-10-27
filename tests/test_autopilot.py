@@ -119,7 +119,8 @@ class ScriptedAssessor:
 
 
 def run_session(tmp_path, *, total=1000, experiments=6, patience=3, shifts=None, gap=0.15, engine_fails=(),
-                assessor_fails=(), stop=None, data=DATA, base=None, search_cap=None, on_update=None):
+                assessor_fails=(), stop=None, data=DATA, base=None, search_cap=None, on_update=None,
+                selector="rules", use_memory=False):
     clock = FakeClock()
     settings = build_settings(tmp_path)
     settings.ensure_directories()
@@ -137,6 +138,7 @@ def run_session(tmp_path, *, total=1000, experiments=6, patience=3, shifts=None,
                                       dataset_name="synthetic"),
         budget=SessionBudget(total_seconds=total, max_experiments=experiments, patience=patience),
         n_repeats=3,  # the scripted Assessor scores 15 folds (BASE_SCORES)
+        selector=selector, use_memory=use_memory,
     )
     result = session.run(data, plan, stop_requested=stop, on_update=on_update)
     record = json.loads((settings.experiments_dir / result.session_id / "session.json").read_text(encoding="utf-8"))

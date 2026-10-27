@@ -2,7 +2,7 @@
 
 Main project document, B.Tech Computer Science major project.
 
-Current status (26 October 2026): the Phase 1 baseline (profiling, task detection, FLAML search, evaluation, MLflow tracking, dashboard) and the Phase 2 rule-based autonomous layer (Session loop, planner, assessor, critic, strategy engine, judge, resource manager, experiment memory, and the autonomous mode of the dashboard) are implemented and tested. Phase 3 (learned strategy choice from the memory, the benchmark against other systems) is planned and not built yet. The only measurements so far are the component studies and the Phase 2 comparison with FLAML alone on the four sample datasets (`report-notes.md`, chapter 9); this document makes no other performance claims.
+Current status (26 October 2026): the Phase 1 baseline (profiling, task detection, FLAML search, evaluation, MLflow tracking, dashboard) and the Phase 2 rule-based autonomous layer (Session loop, planner, assessor, critic, strategy engine, judge, resource manager, experiment memory, and the autonomous mode of the dashboard) are implemented and tested. Phase 3 is in progress: the development and evaluation datasets are fixed (task 20) and the learned strategy choice from the memory is built (task 21); the ablation switches and the benchmark against other systems are planned and not built yet. The only measurements so far are the component studies and the Phase 2 comparison with FLAML alone on the four sample datasets (`report-notes.md`, chapter 9); this document makes no other performance claims.
 
 ## Abstract
 
@@ -67,9 +67,9 @@ AutoPilot-ML puts an experiment loop around the AutoML engine:
 3. AutoML core: run the engine. FLAML today, AutoGluon later as a comparison (FLAML implemented).
 4. Evaluation: metrics, errors and resource usage on a held-out split (implemented), and, inside a Session, Assessments on fixed folds of the training part (implemented in Phase 2).
 5. Critic: structured diagnosis of each experiment (implemented in Phase 2: 12 kinds, thresholds tuned by a study).
-6. Strategy engine: candidate improvements ranked by a rule table (implemented in Phase 2: 9 Strategies, ranked by severity and cost); ranking by expected gain per unit of cost learned from the memory is Phase 3 (planned).
+6. Strategy engine: candidate improvements ranked by a rule table (implemented in Phase 2: 9 Strategies, ranked by severity and cost), or by expected gain per unit of cost learned from the memory (implemented in Phase 3, task 21: Thompson sampling and UCB1; its effect is not measured yet).
 7. Judge: keeps a change only if the fold differences support it (implemented in Phase 2).
-8. Experiment memory: what was tried, on what kind of data, at what cost, with what effect (implemented in Phase 2: written and shown; read for decisions in Phase 3, planned).
+8. Experiment memory: what was tried, on what kind of data, at what cost, with what effect (implemented in Phase 2; read by the learned strategy choice since task 21 when switched on).
 9. Resource manager: share time, experiments and CPU across the loop and decide when to stop (implemented in Phase 2).
 
 ## 7. Architecture
@@ -222,15 +222,15 @@ while budget.remaining() and not budget.should_stop(history):
 return best, history
 ```
 
-## 12. Experiment memory (version 1 built in Phase 2; use for decisions planned for Phase 3)
+## 12. Experiment memory (version 1 built in Phase 2; read by the learned strategy choice since Phase 3, task 21)
 
-Version 1 writes one JSON line per Verdict and can already find the nearest past datasets and summarise each Strategy on them; the plan below is from the Phase 1 review. Each record will hold the dataset meta-features (from `DatasetProfile.meta_features()`), the diagnoses before the experiment, the strategy applied, the engine, the model family and hyperparameters, the primary score before and after, and the cost in wall-clock and CPU seconds.
+Version 1 writes one JSON line per Verdict, finds the nearest past datasets and summarises each Strategy on them; the learned selectors use these summaries. The plan below is from the Phase 1 review. Each record will hold the dataset meta-features (from `DatasetProfile.meta_features()`), the diagnoses before the experiment, the strategy applied, the engine, the model family and hyperparameters, the primary score before and after, and the cost in wall-clock and CPU seconds.
 
 For example, a record might read "severe class imbalance + class_weight + LightGBM gave a change in F1 of x for y seconds", where x and y are measured values.
 
 To use the memory on a new dataset, the meta-features are standardised and the k nearest past datasets are found. For each strategy we then look at the average change in score, the average gain per second and how many times it was tried on those neighbours. The memory starts as the existing JSON records (or SQLite). A vector store such as FAISS or Chroma would only be added if the number of records made it necessary.
 
-## 13. Strategy engine (rule version built in Phase 2; learned ranking planned for Phase 3)
+## 13. Strategy engine (rule version built in Phase 2; learned ranking built in Phase 3, task 21)
 
 The rule table as planned for the Phase 1 review is below. The built version (Phase 2) implements the rows for overfitting (smaller trees), underfitting and a still-improving search (more search time), class imbalance (class weights), heavy missingness (indicators or dropping), high cardinality (frequency encoding, grouping rare values, or dropping), identifier and constant columns (drop), redundant features (drop one of the pair), weak model families (fewer families) and an unreliable validation score (a smoother search metric). SMOTE, target encoding, threshold tuning and feature interactions are not built. A first rule table, from diagnosis to candidate strategies:
 

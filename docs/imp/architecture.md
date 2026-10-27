@@ -170,10 +170,11 @@ experiments/studies/                    saved inputs of the critic study (for re
 results/studies/, results/phase2/       summary CSV files (in git)
 ```
 
-## Planned for Phase 3
+## Phase 3: built so far and planned
 
-- Learned strategy choice: `random`, `thompson` and `ucb1` selectors next to `rules`, reading `ExperimentMemory.strategy_stats` for the nearest past datasets.
-- Ablation switches in `SessionSettings` (`use_memory`, `use_critic`, `use_resource_manager`).
+- Built (task 20): `research/datasets.py` and `research/datasets.json`, the fixed development and evaluation datasets.
+- Built (task 21): `RandomSelector`, `ThompsonSelector` and `UCB1Selector` next to `RulesSelector` (`services/strategy_engine.py`), with `SelectionContext(memory, meta_features, task_type, fingerprint, rng)`; they read `ExperimentMemory.strategy_stats` for the nearest past datasets when `SessionSettings.use_memory` is on, and each step records its `selection`.
+- Planned: ablation switches in `SessionSettings` (`use_critic`, `use_resource_manager`, and a random order).
 - Comparison systems (`research/systems.py`): a manual LightGBM, FLAML alone, AutoGluon (an `AutoMLEngine` in its own environment if needed) and the AutoPilot variants; a resumable benchmark and its statistics.
 
 ## Why it is built this way

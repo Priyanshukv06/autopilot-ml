@@ -10,7 +10,7 @@ We are building it in stages, and this README keeps them apart:
 
 - **Phase 1, the baseline (built):** CSV → dataset profiling → task detection → FLAML AutoML → evaluation → MLflow tracking → Streamlit dashboard.
 - **Phase 2, the autonomous loop (built):** a Session that searches, assesses, diagnoses, changes and judges Setups by itself within a time budget, and records every decision in an experiment memory. It runs from the dashboard or the command line.
-- **Phase 3 (planned, not built yet):** choosing changes from what the memory learned on similar datasets, and a benchmark against FLAML alone, AutoGluon and a manual baseline.
+- **Phase 3 (in progress):** built so far: the fixed development and evaluation datasets, and choosing changes from what the memory learned on similar datasets (Thompson sampling, UCB1). Planned, not built yet: the ablation switches and a benchmark against FLAML alone, AutoGluon and a manual baseline.
 
 The detailed project document is [docs/imp/PROJECT.md](docs/imp/PROJECT.md). To understand how the current system and FLAML work, step by step and with diagrams, read [docs/imp/how-it-works.md](docs/imp/how-it-works.md). All maintained documents are in [docs/imp](docs/imp), including the running notes for the final report. The Phase 1 review material is archived in [docs/unimp](docs/unimp).
 
@@ -52,7 +52,8 @@ Autonomous run (Phase 2):
 - **Judge:** a change is kept only if the paired fold differences support it (corrected resampled t-test), or if it is simpler and not worse.
 - **Spend the budget:** the first Experiment gets 35% of the time; later ones get budgets from the measured time left; the Session stops for time, Experiments, no more changes to try, three discards in a row, or Stop.
 - **Report:** the first and the final model are scored once on the test part, side by side. Every step, Diagnosis and Verdict is saved (`experiments/SES-###/session.json`) and can be replayed.
-- **Remember:** every Verdict becomes a record in `experiments/memory/memory.jsonl`, with a description of the dataset, the change, its effect and its cost. In Phase 2 the memory is written and shown, but no decision reads it yet.
+- **Remember:** every Verdict becomes a record in `experiments/memory/memory.jsonl`, with a description of the dataset, the change, its effect and its cost.
+- **Learn which change to try (Phase 3):** with the memory switched on, the `thompson` (Thompson sampling) and `ucb1` selectors put first the changes that were kept, with a good gain per second, on the most similar past datasets; changes with fewer than 3 past records keep their rule-order place.
 
 ## Architecture
 
@@ -211,7 +212,7 @@ Exact versions are pinned in `requirements.txt`. Optuna and SHAP are part of the
 
 - CSV and single-table tabular data only. No text, images, time series or clustering.
 - You choose the target column yourself. Automatic target detection is not implemented.
-- The autonomous loop changes one thing at a time, tries each change at most once per Session, and follows a fixed rule order. The memory is recorded but does not choose anything yet (Phase 3).
+- The autonomous loop changes one thing at a time and tries each change at most once per Session. By default it follows a fixed rule order; the learned order needs a memory with records of similar datasets, and whether it helps is what the Phase 3 benchmark will measure.
 - Its data changes are the 9 Strategies above. There is no other feature engineering and no resampling (SMOTE is an optional extra, not built).
 - Every Setup is refitted 15 times for its Assessment, which takes a share of the budget, more so on bigger data.
 - The Judge compares refits of configurations that FLAML chose on the same training part, so both scores are a little optimistic; pairing removes much of this, not all.

@@ -244,19 +244,22 @@ class AutoGluonSystem:
 
 
 class AutopilotSystem:
-    """A Session with the variant's settings; the memory is opened read-only, so it stays frozen."""
+    """A Session with the variant's settings. The memory is opened read-only, so it stays frozen; only the
+    memory builder (``research/memory_build.py``) passes ``read_only=False`` and its own ``options``."""
 
     def __init__(self, name: str, memory_path: Path | None, engine: AutoMLEngine | None = None,
-                 max_experiments: int = MAX_EXPERIMENTS, session_factory: Any = AutopilotSession) -> None:
+                 max_experiments: int = MAX_EXPERIMENTS, session_factory: Any = AutopilotSession,
+                 options: dict[str, Any] | None = None, read_only: bool = True) -> None:
         self.name = name
-        self.options = AUTOPILOT_VARIANTS[name]
+        self.options = dict(options) if options is not None else AUTOPILOT_VARIANTS[name]
         self.memory_path = memory_path
         self.engine = engine
         self.max_experiments = max_experiments
         self.session_factory = session_factory
+        self.read_only = read_only
 
     def describe(self) -> dict[str, Any]:
-        return {**self.options, "max_experiments": self.max_experiments, "memory_read_only": True,
+        return {**self.options, "max_experiments": self.max_experiments, "memory_read_only": self.read_only,
                 "engine": type(self.engine).__name__ if self.engine else "FLAMLEngine"}
 
     def run(self, problem: Problem, prepared: Prepared, settings: Settings) -> SystemResult:
@@ -264,7 +267,7 @@ class AutopilotSystem:
         try:
             memory_file = self.memory_path or (settings.experiments_dir / "memory" / "empty.jsonl")
             session = self.session_factory(settings=settings, engine=self.engine, enable_mlflow=False,
-                                           memory=ExperimentMemory(memory_file, read_only=True))
+                                           memory=ExperimentMemory(memory_file, read_only=self.read_only))
             plan = SessionSettings(base=base_config(problem),
                                    budget=SessionBudget(total_seconds=problem.budget_seconds,
                                                         max_experiments=self.max_experiments, n_jobs=problem.n_jobs),

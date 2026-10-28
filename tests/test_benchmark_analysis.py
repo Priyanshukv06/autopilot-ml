@@ -1,6 +1,8 @@
 """Tests for the benchmark analysis (spec task 26): which rows are scored, complete blocks, the families of
 comparisons, time-to-target and the written tables and charts, on hand-made rows."""
 
+import math
+
 import pandas as pd
 import pytest
 
@@ -78,9 +80,20 @@ def test_time_to_target_of_the_main_systems():
     summary = result["time_to_target_summary"].set_index("system")
     # the best score of each pair is autopilot_full's at 300 s (0.76 + noise); 99% of it is about 0.752
     assert summary.loc["autopilot_full", "reached_by_120s"] == 0 and summary.loc["autopilot_full", "reached_by_300s"] == 8
-    assert summary.loc["manual", "never"] == 8 and pd.isna(summary.loc["manual", "median_time_to_target"])
+    assert summary.loc["manual", "never"] == 8 and summary.loc["manual", "median_time_to_target"] == math.inf
+    assert summary.loc["autopilot_full", "median_time_to_target"] == 300
     assert list(summary.index) == list(benchmark.MAIN_SYSTEMS)
     assert set(result["time_to_target"]["system"]) == set(benchmark.MAIN_SYSTEMS)  # no ablation
+    pairs = result["time_to_target_pairs"].set_index(["system_a", "system_b"])
+    assert pairs.loc[("autopilot_full", "manual")].to_dict() == {"pairs": 8, "a_earlier": 8, "same": 0, "a_later": 0}
+    assert pairs.loc[("autopilot_full", "flaml"), "a_earlier"] == 8  # FLAML never reaches 99% of 0.76 here
+
+
+def test_the_median_time_to_target_counts_never_as_later_than_every_budget():
+    assert ba.median_time([120, 300, math.nan]) == 300  # 2 of 3 reached by 300 s
+    assert ba.median_time([120, 120, 300, 300]) == 120  # half by 120 s
+    assert ba.median_time([120, math.nan, math.nan, None]) == math.inf  # fewer than half ever reached it
+    assert math.isnan(ba.median_time([]))
 
 
 def test_the_tables_and_charts_are_written(tmp_path):
@@ -88,6 +101,7 @@ def test_the_tables_and_charts_are_written(tmp_path):
     paths = ba.write(result, tmp_path)
     names = {p.name for p in paths}
     assert {"analysis_tests.csv", "analysis_pairs.csv", "analysis_per_dataset.csv", "score_against_budget.png",
+            "analysis_time_to_target_pairs.csv",
             "cd_main_120s.png", "cd_main_300s.png", "cd_ablations_300s.png"} <= names
     assert all(p.exists() and p.stat().st_size > 0 for p in paths)
     per_dataset = pd.read_csv(tmp_path / "analysis_per_dataset.csv")

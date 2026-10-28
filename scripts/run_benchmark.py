@@ -92,7 +92,7 @@ def analyse(args: argparse.Namespace) -> None:
     paths = benchmark_analysis.write(result, rows_path.parent)
     pd.set_option("display.width", 220)
     pd.set_option("display.max_columns", 30)
-    for name in ("tests", "ranks", "pairs", "time_to_target_summary", "failures"):
+    for name in ("tests", "ranks", "pairs", "time_to_target_summary", "time_to_target_pairs", "failures"):
         table = result[name]
         print(f"\n{name}:\n" + (table.round(4).to_string(index=False) if len(table) else "(none)"))
     print(f"\n{len(paths)} files written to {rows_path.parent}")

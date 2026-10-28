@@ -136,6 +136,13 @@ def per_dataset(frame: pd.DataFrame) -> pd.DataFrame:
     return out.sort_values(["budget_seconds", "dataset", "order"]).drop(columns="order").reset_index(drop=True)
 
 
+def median_time(times: Sequence[float]) -> float:
+    """The smallest budget by which at least half of the runs reached the target, with a run that never
+    reached it counted as later than every budget (inf when fewer than half reached it)."""
+    ordered = sorted(math.inf if t is None or (isinstance(t, float) and math.isnan(t)) else float(t) for t in times)
+    return ordered[math.ceil(len(ordered) / 2) - 1] if ordered else math.nan
+
+
 def targets(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Time-to-target of the main systems per dataset and seed, and a summary per system."""
     main = frame[frame["system"].isin(benchmark.MAIN_SYSTEMS)].rename(columns={"signed": "score"})
@@ -144,7 +151,7 @@ def targets(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     rows = []
     for system, group in detail.groupby("system", sort=False):
         row = {"system": system, "pairs": len(group), "never": int((~group["reached"]).sum()),
-               "median_time_to_target": float(group["time_to_target"].median()) if group["reached"].any() else None}
+               "median_time_to_target": median_time(group["time_to_target"].tolist())}
         for budget in budgets:
             row[f"reached_by_{int(budget)}s"] = int((group["time_to_target"] <= budget).sum())
         rows.append(row)
@@ -155,6 +162,22 @@ def targets(frame: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     return detail, summary
 
 
+def target_pairs(detail: pd.DataFrame, pairs: Sequence[tuple[str, str]] = tuple(FAMILIES["main"]["pairs"])) -> pd.DataFrame:
+    """For each pair of systems, over the (dataset, seed) pairs where both ran: how often a reached the target
+    at an earlier budget than b, at the same one (or neither reached it), or later; never counts as later than
+    every budget. A description, not a test: with two budgets most pairs tie."""
+    times = detail.assign(t=detail["time_to_target"].fillna(math.inf)).pivot_table(
+        index=["dataset", "seed"], columns="system", values="t", aggfunc="first")
+    rows = []
+    for a, b in pairs:
+        if a not in times or b not in times:
+            continue
+        both = times[[a, b]].dropna()
+        rows.append({"system_a": a, "system_b": b, "pairs": len(both), "a_earlier": int((both[a] < both[b]).sum()),
+                     "same": int((both[a] == both[b]).sum()), "a_later": int((both[a] > both[b]).sum())})
+    return pd.DataFrame(rows, columns=["system_a", "system_b", "pairs", "a_earlier", "same", "a_later"])
+
+
 def analyse(rows: Sequence[dict[str, Any]], budgets: Iterable[int] = benchmark.BUDGETS,
             ablation_budget: int = benchmark.ABLATION_BUDGET) -> dict[str, Any]:
     """Every table of the analysis, and the comparisons for the charts."""
@@ -163,16 +186,16 @@ def analyse(rows: Sequence[dict[str, Any]], budgets: Iterable[int] = benchmark.B
     comparisons.append(compare_family(frame, "ablations", ablation_budget))
     detail, summary = targets(frame)
     return {"frame": frame, "comparisons": comparisons, **family_tables(comparisons), "per_dataset": per_dataset(frame),
-            "time_to_target": detail, "time_to_target_summary": summary, "failures": failures(rows),
-            "timing": pd.DataFrame(benchmark.timing(rows))}
+            "time_to_target": detail, "time_to_target_summary": summary, "time_to_target_pairs": target_pairs(detail),
+            "failures": failures(rows), "timing": pd.DataFrame(benchmark.timing(rows))}
 
 
 def write(result: dict[str, Any], folder: Path) -> list[Path]:
     """The tables as CSV files and the charts as PNG files in ``folder`` (charts in ``folder/figures``)."""
     folder.mkdir(parents=True, exist_ok=True)
     paths = []
-    for name in ("tests", "ranks", "pairs", "per_dataset", "time_to_target", "time_to_target_summary", "failures",
-                 "timing"):
+    for name in ("tests", "ranks", "pairs", "per_dataset", "time_to_target", "time_to_target_summary",
+                 "time_to_target_pairs", "failures", "timing"):
         path = folder / f"analysis_{name}.csv"
         result[name].to_csv(path, index=False)
         paths.append(path)

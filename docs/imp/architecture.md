@@ -1,6 +1,6 @@
 # Architecture
 
-This page describes the code as it is now: the Phase 1 baseline (one experiment), the Phase 2 autonomous layer (a Session of experiments) and the Phase 3 parts built so far (learned strategy choice, ablation switches, comparison systems and the benchmark harness). The statistics and the judge agreement study are planned, and the benchmark has not been run yet. For a plain-language walkthrough of the same system and of how FLAML works inside it, see [how-it-works.md](how-it-works.md); the full design and the code shapes are in the spec's `design.md`.
+This page describes the code as it is now: the Phase 1 baseline (one experiment), the Phase 2 autonomous layer (a Session of experiments) and the Phase 3 parts built so far (learned strategy choice, ablation switches, comparison systems, the benchmark harness with its statistics and analysis, the frozen memory build and the judge agreement study). The benchmark has been running since 28 October 2026 and the judge agreement study runs after it; neither has results yet. For a plain-language walkthrough of the same system and of how FLAML works inside it, see [how-it-works.md](how-it-works.md); the full design and the code shapes are in the spec's `design.md`.
  
 ## Layers
 
@@ -169,8 +169,13 @@ experiments/memory/memory.jsonl         one record per Verdict, append-only
 experiments/studies/                    saved inputs of the critic study (for replay)
 experiments/benchmark/, models/benchmark/   the benchmark's Sessions, Experiments and models
                                         (benchmark-smoke/ for the smoke setting), MLflow off
+experiments/benchmark-memory/           the 30 Sessions that built the frozen memory, and its log
+experiments/studies/judge_agreement/    the judge agreement study's searches
 results/studies/, results/phase2/       summary CSV files (in git)
 results/benchmark/benchmark_cells.csv   one row per finished benchmark cell (in git)
+results/benchmark/frozen_memory.jsonl   the frozen memory the benchmark reads (in git), with
+                                        frozen_memory_summary.csv and memory_sessions.csv
+results/studies/judge_agreement_*.csv   the judge agreement study's rows and summaries (in git)
 ```
 
 ## Phase 3: built so far and planned
@@ -180,7 +185,10 @@ results/benchmark/benchmark_cells.csv   one row per finished benchmark cell (in 
 - Built (task 22): ablation switches in `SessionSettings`: `selector="random"`, `use_critic=False` (no Diagnoses; `random_proposals` picks random valid changes) and `use_resource_manager=False` (`EqualShareManager` in `services/resource_manager.py`: equal shares, no reserve, only the time and Experiment limits stop), next to `use_memory`; each is recorded in `session.json` and has a command-line flag.
 - Built (task 23): `research/systems.py`. `Problem` is one benchmark cell and `prepare(problem, settings)` gives every system the same `Prepared` split and columns; `ManualSystem` (LightGBM defaults through `fit_config`), `FlamlSystem` (`AutoMLRunner` with the whole budget), `AutoGluonSystem` (runs `research/autogluon_worker.py` in the conda environment `autogluon` as a separate process and scores its predictions with the shared `Evaluator`) and `AutopilotSystem` (a Session with the settings of `AUTOPILOT_VARIANTS` and a read-only memory) each return a `SystemResult`, and a failure is a result, not an exception.
 - Built (task 24): `research/benchmark.py`. `grid` and `smoke_grid` make the `Cell`s (system, dataset, budget, seed); `run` appends one row per finished cell to `results/benchmark/benchmark_cells.csv`, skips cells that have a row, and checks the frozen memory's hash; `preflight` checks the datasets, the AutoGluon Python and the memory's sources before a run; `read_cells`, `latest` and `timing` read the rows back. `scripts/run_benchmark.py run | status [--smoke]` is the command line.
-- Planned: `research/statistics.py` (task 25), the benchmark run and its analysis (task 26) and `research/judge_agreement.py` (task 27).
+- Built (task 25): `research/stat_tests.py`, the benchmark statistics: `friedman` (with Iman and Davenport's F), `nemenyi_cd` and `cliques` (the bars of a critical-difference diagram), `compare_pairs` (Wilcoxon with Holm's correction, rank-biserial correlation, bootstrap interval of the median difference) and `time_to_target`. It is not called `statistics.py`: the AutoGluon worker runs as a script from `research/`, and a `statistics.py` there would hide Python's own module from it.
+- Built (task 26): `research/memory_build.py` with `scripts/build_memory.py run | status | freeze` builds the frozen memory (30 Sessions on the development datasets in a random order; only finished Sessions' records are copied to `results/benchmark/frozen_memory.jsonl`, which is never rewritten). `research/benchmark_analysis.py` with `scripts/run_benchmark.py analyse` turns the rows into the tests, per-dataset tables, time-to-target and charts; it compares systems only on the (dataset, seed) blocks where all of them completed.
+- Built (task 27): `research/judge_agreement.py` with `scripts/run_study.py agreement run | analyse`: the judged steps of the memory-build Sessions, each compared again with new FLAML searches on 5 inner splits of the Session's training part and the Judge's own rules; agreement, Cohen's kappa and the cost ratio.
+- Running: the benchmark (since 28 October 2026), then the judge agreement study.
 
 ## Why it is built this way
 

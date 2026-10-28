@@ -10,7 +10,7 @@ We are building it in stages, and this README keeps them apart:
 
 - **Phase 1, the baseline (built):** CSV → dataset profiling → task detection → FLAML AutoML → evaluation → MLflow tracking → Streamlit dashboard.
 - **Phase 2, the autonomous loop (built):** a Session that searches, assesses, diagnoses, changes and judges Setups by itself within a time budget, and records every decision in an experiment memory. It runs from the dashboard or the command line.
-- **Phase 3 (in progress):** built so far: the fixed development and evaluation datasets, choosing changes from what the memory learned on similar datasets (Thompson sampling, UCB1), switches that turn single parts of the loop off (for the ablations), the comparison systems (a manual LightGBM baseline, FLAML alone and AutoGluon) and a resumable benchmark harness. Not done yet: the benchmark run, its statistics and the judge agreement study, so there are no benchmark results yet.
+- **Phase 3 (in progress):** built so far: the fixed development and evaluation datasets, choosing changes from what the memory learned on similar datasets (Thompson sampling, UCB1), switches that turn single parts of the loop off (for the ablations), the comparison systems (a manual LightGBM baseline, FLAML alone and AutoGluon), a resumable benchmark harness, its statistics and analysis, the frozen experiment memory the benchmark reads, and the judge agreement study. The benchmark has been running since 28 October 2026 and the judge agreement study runs after it, so there are no benchmark results yet.
 
 The detailed project document is [docs/imp/PROJECT.md](docs/imp/PROJECT.md). To understand how the current system and FLAML work, step by step and with diagrams, read [docs/imp/how-it-works.md](docs/imp/how-it-works.md). All maintained documents are in [docs/imp](docs/imp), including the running notes for the final report. The Phase 1 review material is archived in [docs/unimp](docs/unimp).
 
@@ -139,9 +139,13 @@ python scripts/prepare_datasets.py download # the 12 OpenML datasets of research
 The Phase 3 benchmark (records go to `experiments/benchmark/` and `models/benchmark/`, one row per finished cell to `results/benchmark/`; a restart skips finished cells):
 
 ```bash
-python scripts/run_benchmark.py run --smoke              # every system once on titanic, seed 1, 120 s
-python scripts/run_benchmark.py run --memory FILE        # the grid; FILE is the frozen experiment memory
+python scripts/build_memory.py run                       # 30 Sessions on the development datasets (about 2 h)
+python scripts/build_memory.py freeze                    # -> results/benchmark/frozen_memory.jsonl
+python scripts/run_benchmark.py run --smoke --memory results/benchmark/frozen_memory.jsonl
+python scripts/run_benchmark.py run --memory results/benchmark/frozen_memory.jsonl   # the 390 cells
 python scripts/run_benchmark.py status                   # cells done, failures, time per system, time left
+python scripts/run_benchmark.py analyse                  # tests, tables and charts in results/benchmark/
+python scripts/run_study.py agreement run                # the judge agreement study; then: agreement analyse
 ```
 
 AutoGluon needs pandas 2.3 and this project pins pandas 3.0, so the benchmark runs AutoGluon from its own conda environment (decision D4). Create it once (versions in `research/requirements-autogluon.txt`):
@@ -254,7 +258,7 @@ All in `app/services/`:
 - `experiment_memory.py`: the memory records, the nearest past datasets and per-Strategy statistics.
 - `search_summary.py`: how a search spent its time, for the budget Diagnoses.
 
-The studies that tuned the Critic and the Judge, the Phase 2 measurement, the dataset registry, the comparison systems and the benchmark harness are in `research/`.
+The studies that tuned the Critic and the Judge, the Phase 2 measurement, the dataset registry, the comparison systems, the benchmark harness, its statistics and analysis, the frozen memory build and the judge agreement study are in `research/`.
 
 ## Research direction
 
@@ -262,13 +266,13 @@ The question we want to answer:
 
 > Can an autonomous experimentation layer improve the efficiency and effectiveness of conventional AutoML by learning from previous experiments, diagnosing model weaknesses, selecting appropriate improvement strategies, and allocating computational resources adaptively?
 
-The benchmark compares a manual LightGBM baseline, FLAML alone, AutoGluon, AutoPilot-ML with the rule order (which is also AutoPilot-ML without the experiment memory) and the full AutoPilot-ML (Thompson sampling with the memory), plus three ablations (random order, no Critic, no Resource_Manager), on 6 evaluation datasets with total budgets of 2 and 5 minutes and 5 seeds. They will be compared on test score, time to reach a target score, number of experiments, compute cost and consistency across datasets. The harness is built; the benchmark has not been run yet. The plan is in [docs/imp/research-direction.md](docs/imp/research-direction.md).
+The benchmark compares a manual LightGBM baseline, FLAML alone, AutoGluon, AutoPilot-ML with the rule order (which is also AutoPilot-ML without the experiment memory) and the full AutoPilot-ML (Thompson sampling with the memory), plus three ablations (random order, no Critic, no Resource_Manager), on 6 evaluation datasets with total budgets of 2 and 5 minutes and 5 seeds. They will be compared on test score, time to reach a target score, number of experiments, compute cost and consistency across datasets. The benchmark has been running since 28 October 2026; there are no results yet. The plan is in [docs/imp/research-direction.md](docs/imp/research-direction.md).
 
 ## Roadmap
 
 1. Baseline: profiling, task detection, FLAML, evaluation, MLflow, dashboard, history (done)
 2. Rule-based loop: assessor, critic, strategy catalogue and rule engine, judge, resource manager, planner, records and experiment memory, dashboard autonomous mode, critic and judge studies, measurement against FLAML alone (done)
-3. Learned strategy selection (bandits, memory-based), benchmark datasets, ablation switches, comparison systems (manual, FLAML alone, AutoGluon) and the benchmark harness (built); the benchmark run, its statistics and the judge agreement study (in progress)
+3. Learned strategy selection (bandits, memory-based), benchmark datasets, ablation switches, comparison systems (manual, FLAML alone, AutoGluon), the benchmark harness, statistics and analysis, the frozen memory and the judge agreement study (built); the benchmark and judge agreement runs (in progress)
 4. Optional extras: SMOTE, more data strategies, SHAP, local LLM explanations, an API, packaging
 
 The summary is in [docs/imp/development-roadmap.md](docs/imp/development-roadmap.md). The detailed plan is a Kiro spec (requirements, design and ordered tasks) in the workspace folder `.kiro/specs/autopilot-ml/`, one level above this repository.
@@ -291,14 +295,16 @@ autopilot-ml/
 │   ├── core/               settings and logging
 │   └── services/           Phase 1 services and the autonomous layer (see above)
 ├── research/               synthetic data, the critic and judge studies, the Phase 2 measurement,
-│                           the dataset registry, the comparison systems and the benchmark harness
+│                           the dataset registry, the comparison systems, the benchmark harness,
+│                           statistics and analysis, the memory build, the judge agreement study
 ├── results/                summary CSV files of the studies, measurements and benchmark (in git)
 ├── data/sample/            small public demo datasets
 ├── scripts/                run_autopilot.py: one Session from the command line
-│                           run_study.py: the critic and judge studies
+│                           run_study.py: the critic, judge and judge agreement studies
 │                           run_phase2.py: Sessions against FLAML alone
 │                           prepare_datasets.py: the OpenML datasets of research/datasets.json
-│                           run_benchmark.py: the Phase 3 benchmark
+│                           build_memory.py: the frozen memory of the benchmark
+│                           run_benchmark.py: the Phase 3 benchmark and its analysis
 │                           compare_seeds.py: compare two setups over several splits
 │                           plot_search_history.py: charts of one experiment's search
 ├── experiments/            JSON records of experiments and Sessions, and the memory (generated, not in git)

@@ -40,7 +40,7 @@ Status (27 October 2026): done. All milestones are built and tested (468 tests).
 
 Tasks 20 to 28: development and evaluation datasets (fixed in advance and kept apart), learned strategy choice (Thompson sampling and UCB1 over past outcomes from similar datasets), ablation switches, comparison systems (manual baseline, FLAML alone, AutoGluon), a resumable benchmark (5 seeds; budgets of 2 and 5 minutes, since the 10-minute budget was dropped on 27 October 2026 to fit the laptop), the statistics (Friedman and Nemenyi, Wilcoxon with Holm's correction, effect sizes, time-to-target), the judge agreement study, and the final documents.
 
-Status (27 October 2026): tasks 20 to 24 are built and tested (504 tests): the datasets, the learned strategy choice, the ablation switches, the comparison systems and the benchmark harness. Left: the statistics (task 25), the frozen memory, the benchmark run and its analysis (task 26), the judge agreement study (task 27) and the final documents (task 28).
+Status (28 October 2026): tasks 20 to 25 are built and tested (533 tests): the datasets, the learned strategy choice, the ablation switches, the comparison systems, the benchmark harness and its statistics. Of task 26, the frozen memory (27 October), the smoke run and the analysis code are done, and the benchmark has been running since 28 October 2026 (about a day); task 27's study is built and runs after the benchmark. Left: the results of both runs, and the final documents (task 28).
 
 ## Optional (after Phase 3)
 

@@ -1298,7 +1298,7 @@ What this shows, and what it does not:
 
 ### 9.16 Still to produce
 
-- The benchmark (section 4.10): the frozen memory (section 9.15) and the smoke run are done; still to run: the 390 cells and the analysis.
+- The benchmark (section 4.10): the frozen memory (section 9.15) and the smoke run are done; the 390 cells started on 28 October 2026 at 14:02 (code ec2be03 with no uncommitted changes, the frozen memory 4baeb012...), with the judge agreement study set to start after them in the same background command; then the analysis.
 - The judge agreement study (section 4.11): 57 pairs from the memory-build Sessions (balance-scale, breast_cancer, titanic, vehicle and wilt 8 each, kin8nm 7, california_housing and student_performance_por 3, penguins and tic-tac-toe 2; the Judge said discard 28, keep_simpler 20, keep 9), to run after the benchmark so that the two do not share the CPU.
 - Re-run sections 9.2 to 9.6 with the final code and keep the raw files.
 - Charts: test score against budget; per-seed differences; bootstrap intervals.
@@ -1443,7 +1443,8 @@ Future scope (beyond the planned phases):
 | 2026-10-27 | Spec task 26: the benchmark analysis (`research/benchmark_analysis.py`, `scripts/run_benchmark.py analyse`; section 4.10): complete blocks only, three families of comparisons with their own pairs, per-dataset tables, time-to-target, critical-difference diagrams and score-against-budget charts; fixed before any benchmark cell ran; 6 tests | 6c7ad8e |
 | 2026-10-27 | Spec task 27: the judge agreement study (`research/judge_agreement.py`, `scripts/run_study.py agreement`; design in section 4.11, fixed before any strict comparison ran) and 6 tests | 26f7718 |
 | 2026-10-27 | Spec task 26: built and froze the benchmark memory (30 Sessions, 17:10 to 18:54, none failed; 97 records, 13 of 20 arms with at least 3; SHA-256 4baeb012...; section 9.15) | 41737c8 |
-| 2026-10-27 | Spec task 26: smoke run with the frozen memory (all 8 systems completed on titanic, 12 min 50 s; section 4.10) and a check of every system type on a synthetic boolean target | see the commit of this date |
+| 2026-10-27 | Spec task 26: smoke run with the frozen memory (all 8 systems completed on titanic, 12 min 50 s; section 4.10) and a check of every system type on a synthetic boolean target | ec2be03 |
+| 2026-10-28 | Started the 390 benchmark cells at 14:02, with the judge agreement study (57 pairs) queued after them; documents updated to say what is built and what is running | see the commit of this date |
 
 ---
 

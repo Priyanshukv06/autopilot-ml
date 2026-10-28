@@ -2,7 +2,7 @@
 
 Main project document, B.Tech Computer Science major project.
 
-Current status (27 October 2026): the Phase 1 baseline (profiling, task detection, FLAML search, evaluation, MLflow tracking, dashboard) and the Phase 2 rule-based autonomous layer (Session loop, planner, assessor, critic, strategy engine, judge, resource manager, experiment memory, and the autonomous mode of the dashboard) are implemented and tested. Phase 3 is in progress: the development and evaluation datasets are fixed (task 20), and the learned strategy choice from the memory (task 21), the ablation switches (task 22), the comparison systems (task 23: a manual LightGBM baseline, FLAML alone and AutoGluon) and a resumable benchmark harness (task 24) are built and tested (8.8). The benchmark itself, its statistics and the judge agreement study have not been run yet. The only measurements so far are the component studies and the Phase 2 comparison with FLAML alone on the four sample datasets (`report-notes.md`, chapter 9); this document makes no other performance claims.
+Current status (28 October 2026): the Phase 1 baseline (profiling, task detection, FLAML search, evaluation, MLflow tracking, dashboard) and the Phase 2 rule-based autonomous layer (Session loop, planner, assessor, critic, strategy engine, judge, resource manager, experiment memory, and the autonomous mode of the dashboard) are implemented and tested. Phase 3 is in progress: the development and evaluation datasets are fixed (task 20), and the learned strategy choice from the memory (task 21), the ablation switches (task 22), the comparison systems (task 23: a manual LightGBM baseline, FLAML alone and AutoGluon) a resumable benchmark harness (task 24), its statistics (task 25), its analysis and frozen experiment memory (task 26) and the judge agreement study (task 27) are built and tested (8.8). The benchmark has been running since 28 October 2026 and the judge agreement study runs after it, so there are no results from them yet. The only measurements so far are the component studies and the Phase 2 comparison with FLAML alone on the four sample datasets (`report-notes.md`, chapter 9); this document makes no other performance claims.
 
 ## Abstract
 
@@ -181,7 +181,11 @@ The plain-language explanation is in [how-it-works.md](how-it-works.md), section
 - Ablation switches (`SessionSettings`): `use_memory`, the `random` selector, `use_critic=False` (random valid changes, no Diagnoses) and `use_resource_manager=False` (equal shares of the time; only the time and Experiment limits stop the Session). Each is recorded in `session.json`.
 - Comparison systems (`research/systems.py`): `manual` (LightGBM with its library defaults, no search), `flaml` (one search with the whole budget), `autogluon` (AutoGluon-Tabular 1.6.3 in its own conda environment, called as a separate process) and the AutoPilot variants. Every system gets the same training and test rows and columns and is scored by the same Evaluator.
 - Benchmark harness (`research/benchmark.py`, `scripts/run_benchmark.py`): 390 cells (5 main systems at 2 and 5 minutes, 3 ablations at 5 minutes, 6 evaluation datasets, seeds 1 to 5), one CSV row per finished cell, restart where it stopped, checks that the frozen memory comes from development datasets only, and a smoke setting.
-- Not done yet: the statistics module, the frozen memory and the benchmark run with its analysis, and the judge agreement study (tasks 25 to 27).
+- Statistics (`research/stat_tests.py`): the Friedman test, the Nemenyi critical difference, Wilcoxon tests with Holm's correction, rank-biserial effect sizes, bootstrap intervals and time-to-target (Demšar, 2006), checked against published reference values.
+- Frozen memory (`research/memory_build.py`): 30 Sessions on the development datasets wrote 97 records, frozen on 27 October 2026 (`report-notes.md`, section 9.15); the benchmark reads it and never writes it.
+- Analysis (`research/benchmark_analysis.py`): critical-difference diagrams, score-against-budget charts, per-dataset tables and time-to-target, with the comparisons fixed before any benchmark cell ran.
+- Judge agreement study (`research/judge_agreement.py`): 57 decisions of the Judge from the memory-build Sessions, each made again by new FLAML searches on 5 inner splits; agreement, Cohen's kappa and the cost of each method.
+- Running: the benchmark (since 28 October 2026, about a day), then the judge agreement study.
 
 ## 9. Current implementation
 
@@ -194,8 +198,9 @@ The plain-language explanation is in [how-it-works.md](how-it-works.md), section
 - Tracking: local MLflow (SQLite) plus JSON records.
 - Autonomous layer (Phase 2): see 8.7.
 - Phase 3 so far: see 8.8.
-- Tests: 47 pytest tests at the end of Phase 1; 468 after Phase 2 and 504 after task 24.1, including short real FLAML runs, whole Sessions with a fake clock, the dashboard through Streamlit's AppTest, smoke tests of the studies, and the benchmark harness with stand-in systems (`report-notes.md`, section 8.6).
-- Not implemented: the benchmark run and its statistics, the judge agreement study (Phase 3, tasks 25 to 27), SHAP, automatic target detection, feature engineering beyond the 9 Strategies, resampling.
+- Tests: 47 pytest tests at the end of Phase 1; 468 after Phase 2 and 533 on 27 October 2026, including short real FLAML runs, whole Sessions with a fake clock, the dashboard through Streamlit's AppTest, smoke tests of the studies, the benchmark harness with stand-in systems, and the statistics against reference values (`report-notes.md`, section 8.6).
+- Not finished: the benchmark and judge agreement runs and their results (Phase 3, tasks 26 and 27).
+- Not implemented: SHAP, automatic target detection, feature engineering beyond the 9 Strategies, resampling.
 
 ## 10. Proposed modules (written for the Phase 1 review)
 

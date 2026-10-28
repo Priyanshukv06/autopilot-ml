@@ -6,9 +6,9 @@ Everything here has been checked. The numbers come from our own runs, mostly EXP
 
 - To see the diagrams, open this file in Kiro and press Ctrl+Shift+V (Markdown preview). The diagrams are drawn by Mermaid; the charts are PNG files in the `images` folder next to this file.
 - The technical reference for the same code is `architecture.md`. The notes for the final report are in `report-notes.md`.
-- Phase 3 so far: choosing changes from the memory and the switches that turn single parts of the loop off are in section 9.3. The comparison systems and the benchmark harness are research tools outside the app; they are described in `architecture.md` and in the report notes (section 4.10). The benchmark has not been run yet, so nothing here comes from it.
+- Phase 3 so far: choosing changes from the memory and the switches that turn single parts of the loop off are in section 9.3. The comparison systems and the benchmark harness are research tools outside the app; they are described in `architecture.md` and in the report notes (section 4.10). The benchmark has been running since 28 October 2026; nothing here comes from it yet.
 
-Last updated: 27 October 2026 (Phase 3 parts of section 9.3)
+Last updated: 28 October 2026 (status of the Phase 3 runs)
 
 ## Contents
 

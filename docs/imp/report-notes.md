@@ -255,7 +255,7 @@ How the harness keeps the results safe and fair:
 - Only evaluation datasets can enter the grid's rows; trials on other datasets use the smoke setting or a temporary folder.
 - The systems' records go to `experiments/benchmark/` and `models/benchmark/`, apart from the dashboard's history, with MLflow off; the rows go to `results/benchmark/benchmark_cells.csv`.
 - While it runs, the script asks Windows not to sleep (`SetThreadExecutionState`; the request ends with the process), because a laptop that sleeps during a time-limited search would cut that search short.
-- Smoke setting (Requirement 23.4): every system once on titanic (a development dataset, so looking at its result tunes nothing), seed 1, the smallest budget; its own folders (`experiments/benchmark-smoke/`, `results/benchmark/smoke/`). Since 7 of the 8 systems use their whole 120 s, it should take about 15 minutes (arithmetic), more than the "few minutes" of the requirement, because it uses the real budget to measure the time above budget.
+- Smoke setting (Requirement 23.4): every system once on titanic (a development dataset, so looking at its result tunes nothing), seed 1, the smallest budget; its own folders (`experiments/benchmark-smoke/`, `results/benchmark/smoke/`). It took 12 min 50 s (below), more than the "few minutes" of the requirement, because it uses the real budget to measure the time above budget.
 
 The frozen memory (task 26, `research/memory_build.py`, `scripts/build_memory.py run | status | freeze`), decided on 27 October 2026 before the build: one Session per development dataset and seed (1 to 3), 30 Sessions of 300 s, at most 8 Experiments, starting from an empty memory file (the 34 Phase 2 records are not used, so the frozen memory comes from one written procedure). The Sessions try the applicable changes in a random order without reading the memory. Reason: with the rule order the same changes come first on the same data, so most (Strategy, diagnosis kind) arms would stay below the 3 records a learned selector needs before it moves an arm; a random order spreads the records over every change that applies. One row per finished Session goes to `results/benchmark/memory_sessions.csv`, and `freeze` copies only the records of finished Sessions to `results/benchmark/frozen_memory.jsonl` (in git, never rewritten) with a summary per arm; its SHA-256 is then in every benchmark row.
 
@@ -266,6 +266,10 @@ The analysis (task 26, `research/benchmark_analysis.py`, `scripts/run_benchmark.
 - Also reported: wins, ties and losses over the 30 blocks of each pair (as a description only, since seeds of one dataset are not independent), per-dataset tables (mean and standard deviation of the test score over seeds, mean wall time), time-to-target of the main systems, critical-difference diagrams and a score-against-budget chart per dataset.
 
 A throwaway trial on 27 October 2026 in a temporary folder (penguins, a development dataset, 15 s budget, seed 1, the Phase 2 memory as a stand-in) ran all 8 systems, skipped the 3 finished cells after a stop, wrote every field and left the memory file unchanged (same SHA-256 before and after). Its scores are not results.
+
+Smoke run (task 26, 27 October 2026, 19:22 to 19:35; code 41737c8 with no uncommitted changes; the frozen memory, SHA-256 4baeb012..., 97 records; all 16 cores): every system completed on titanic with seed 1 and the 120 s budget. Wall times: manual 4.2 s, FLAML 120.5 s, AutoGluon 48.1 s (it stopped well before its time limit), and the five Sessions 113.0 to 127.3 s, at most 7.3 s above the budget (`no_resource_manager`); all five Sessions stopped for time, after 2 to 7 Experiments. The full system made its 5 changes in rule order: titanic's arms (missing values, high cardinality) have no records from the other binary development datasets (the memory leaves out titanic's own records), and the one arm with a record had 1, below the 3 needed. From these times the 390 cells need about 18 to 22 hours (arithmetic, not measured; most of the range is how long AutoGluon runs). Titanic is a development dataset, so these scores are a check of the harness, not results. Raw rows: `results/benchmark/smoke/benchmark_cells.csv`; the Sessions and the log `run.log` in `experiments/benchmark-smoke/`.
+
+Before the grid, a check of every system type on a synthetic binary dataset with a boolean target (400 rows, ratio 4, read back from CSV as True/False, as pc4's target is; no development dataset has a boolean target) in a temporary folder: manual, FLAML, AutoGluon and two Session variants completed with all 7 classification metrics. Only the evaluation datasets' column types and target types were looked at for this, not their values.
 
 ### 4.11 Judge agreement study design (task 27, fixed on 27 October 2026)
 
@@ -1294,8 +1298,8 @@ What this shows, and what it does not:
 
 ### 9.16 Still to produce
 
-- The benchmark (section 4.10): the frozen memory is built (section 9.15); still to run: the smoke setting, the 390 cells, and the analysis.
-- The judge agreement study (section 4.11).
+- The benchmark (section 4.10): the frozen memory (section 9.15) and the smoke run are done; still to run: the 390 cells and the analysis.
+- The judge agreement study (section 4.11): 57 pairs from the memory-build Sessions (balance-scale, breast_cancer, titanic, vehicle and wilt 8 each, kin8nm 7, california_housing and student_performance_por 3, penguins and tic-tac-toe 2; the Judge said discard 28, keep_simpler 20, keep 9), to run after the benchmark so that the two do not share the CPU.
 - Re-run sections 9.2 to 9.6 with the final code and keep the raw files.
 - Charts: test score against budget; per-seed differences; bootstrap intervals.
 
@@ -1438,7 +1442,8 @@ Future scope (beyond the planned phases):
 | 2026-10-27 | Spec task 26, first part: the frozen memory's build (`research/memory_build.py`, `scripts/build_memory.py`; 30 Sessions on the development datasets with a random order, only finished Sessions frozen; section 4.10) and 4 tests; a throwaway trial (titanic, 40 s) ran, froze and summarised; 521 tests passing in 217.1 s | 94714d2 |
 | 2026-10-27 | Spec task 26: the benchmark analysis (`research/benchmark_analysis.py`, `scripts/run_benchmark.py analyse`; section 4.10): complete blocks only, three families of comparisons with their own pairs, per-dataset tables, time-to-target, critical-difference diagrams and score-against-budget charts; fixed before any benchmark cell ran; 6 tests | 6c7ad8e |
 | 2026-10-27 | Spec task 27: the judge agreement study (`research/judge_agreement.py`, `scripts/run_study.py agreement`; design in section 4.11, fixed before any strict comparison ran) and 6 tests | 26f7718 |
-| 2026-10-27 | Spec task 26: built and froze the benchmark memory (30 Sessions, 17:10 to 18:54, none failed; 97 records, 13 of 20 arms with at least 3; SHA-256 4baeb012...; section 9.15) | see the commit of this date |
+| 2026-10-27 | Spec task 26: built and froze the benchmark memory (30 Sessions, 17:10 to 18:54, none failed; 97 records, 13 of 20 arms with at least 3; SHA-256 4baeb012...; section 9.15) | 41737c8 |
+| 2026-10-27 | Spec task 26: smoke run with the frozen memory (all 8 systems completed on titanic, 12 min 50 s; section 4.10) and a check of every system type on a synthetic boolean target | see the commit of this date |
 
 ---
 

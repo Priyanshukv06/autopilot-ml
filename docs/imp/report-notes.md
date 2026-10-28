@@ -97,18 +97,28 @@ The baseline solves part 1 with one AutoML run. The research system works on bot
 |---|---|---|
 | O1 | Baseline: profiling, task detection, FLAML training, held-out evaluation, explanations, experiment tracking, dashboard | Done (Phase 1) |
 | O2 | Critic: automatic, structured diagnosis of each experiment, with evidence | Done (Phase 2: 12 kinds, measured by the critic study) |
-| O3 | Strategy engine: map diagnoses to candidate changes and rank them (rules, then bandits, then memory) | Rules done (Phase 2: 9 Strategies); bandits on memory records built (Phase 3, task 21: Thompson sampling and UCB1); their effect is measured by the benchmark (planned) |
+| O3 | Strategy engine: map diagnoses to candidate changes and rank them (rules, then bandits, then memory) | Rules done (Phase 2: 9 Strategies); bandits on memory records built (Phase 3, task 21: Thompson sampling and UCB1); their effect is being measured by the benchmark (running since 28 October 2026) |
 | O4 | Planner and autonomous loop, with a fair comparison of every change over several splits | Done (Phase 2: Assessor on 15 folds and the Judge, measured by the judge study) |
-| O5 | Experiment memory: reuse what worked on similar datasets | Recording done (Phase 2); reuse built (Phase 3, task 21: the learned selectors read the nearest datasets' records); the frozen memory and its measured effect are planned (task 26) |
+| O5 | Experiment memory: reuse what worked on similar datasets | Recording done (Phase 2); reuse built (Phase 3, task 21: the learned selectors read the nearest datasets' records); the frozen memory built on 27 October 2026 (97 records, section 9.15); its effect is being measured by the benchmark |
 | O6 | Resource manager: share the time and CPU budget and decide when to stop (utility = improvement / cost) | Done (Phase 2: budgets, stop rules and the utility of each step recorded); stopping on expected utility needs the memory (Phase 3) |
-| O7 | Evaluation against a manual baseline, FLAML and AutoGluon, with ablations, on public datasets and several seeds | Planned |
+| O7 | Evaluation against a manual baseline, FLAML and AutoGluon, with ablations, on public datasets and several seeds | Built (tasks 20 to 26); running since 28 October 2026 (390 cells: 6 OpenML evaluation datasets, budgets of 120 and 300 s, 5 seeds) |
 
 - Scope: CSV, single-table tabular data; binary, multiclass and regression; laptop CPU; fully offline.
 - Out of scope: text, images, time series, clustering; LLMs as decision makers; cloud or paid services.
 - Limits in the current code: time budget 5 to 3600 s, at least 20 labelled rows, test share 0.05 to 0.5. The user chooses the target column.
 - Research questions RQ1 to RQ4 and hypotheses H1 to H4: `PROJECT.md` sections 15 and 16, and `research-direction.md`.
 
-Still to add: success criteria with numbers, once the first Phase 2 results exist.
+Success criteria for the benchmark, written on 28 October 2026 at about 14:25. At that time 8 of the 390 cells had finished, all on pc4 with seed 1, and their scores had been printed in the run's log; the criteria below only translate the hypotheses (written in October 2026) into the analysis of section 4.10 and do not use those scores. "Difference" is the per-dataset difference of signed test scores (each dataset's mean over its seeds; positive means the first system is better), and "interval" is its 95% bootstrap interval of the median over the 6 evaluation datasets.
+
+| Hypothesis | Comparison | Supported if | Contradicted if |
+|---|---|---|---|
+| H4: the full system is not worse than FLAML at the same budget | `autopilot_full` against `flaml`, at 120 s and at 300 s | the interval lies above -0.005 (the Judge's margin) at both budgets | the interval lies below -0.005 at either budget |
+| H1: the full system reaches the target sooner than FLAML | time-to-target, `autopilot_full` against `flaml` | it reaches the target at an earlier budget in more (dataset, seed) pairs than the other way round, and its median time-to-target is not later | the other way round |
+| H2: without the memory, the loop does worse | `autopilot_full` against `autopilot_rules`, at 300 s (also shown at 120 s) | the interval lies above 0 | the interval lies below 0 |
+| H3: without strategy selection, the loop does worse | `autopilot_full` against `random_choice`, at 300 s | the interval lies above 0 | the interval lies below 0 |
+| RQ3 and the Critic: adaptive budgets and diagnoses help | `autopilot_full` against `no_resource_manager` and against `no_critic`, at 300 s | the interval lies above 0 | the interval lies below 0 |
+
+Otherwise the result is "not shown". The Wilcoxon p-values with Holm's correction are reported next to these, but with 6 datasets they cannot fall below 0.05 for any pair once two or more pairs are compared (section 5, Algorithm 21), so no claim rests on them alone. The Friedman test and the Nemenyi critical difference show whether any system stands apart from the others at a budget.
 
 ---
 
@@ -1446,7 +1456,8 @@ Future scope (beyond the planned phases):
 | 2026-10-27 | Spec task 26: built and froze the benchmark memory (30 Sessions, 17:10 to 18:54, none failed; 97 records, 13 of 20 arms with at least 3; SHA-256 4baeb012...; section 9.15) | 41737c8 |
 | 2026-10-27 | Spec task 26: smoke run with the frozen memory (all 8 systems completed on titanic, 12 min 50 s; section 4.10) and a check of every system type on a synthetic boolean target | ec2be03 |
 | 2026-10-28 | Started the 390 benchmark cells at 14:02, with the judge agreement study (57 pairs) queued after them; documents updated to say what is built and what is running | 7dfe4da |
-| 2026-10-28 | Analysis fix (section 4.10): the median time-to-target counts runs that never reached the target, and pair counts of who reached it earlier were added; made after the first 6 cells had run. Only the analysis tests were run (7 passed, one core); the full suite runs after the benchmark so as not to share the CPU with it | see the commit of this date |
+| 2026-10-28 | Analysis fix (section 4.10): the median time-to-target counts runs that never reached the target, and pair counts of who reached it earlier were added; made after the first 6 cells had run. Only the analysis tests were run (7 passed, one core); the full suite runs after the benchmark so as not to share the CPU with it | d9c34bf |
+| 2026-10-28 | Success criteria for H1 to H4 (chapter 3), written after 8 of the 390 cells; objectives O3, O5 and O7 updated | see the commit of this date |
 
 ---
 

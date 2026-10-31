@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 import time
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from typing import Any, Literal
 
 import numpy as np
@@ -68,6 +68,7 @@ class Assessment:
     seconds: float = 0.0
     failed: bool = False
     error: str | None = None
+    reused_from: str | None = None  # the Experiment whose identical refits these fold scores are (since 31 Oct 2026)
 
     def values(self, metric: str, part: Part) -> np.ndarray:
         """One value per fold, in fold order; NaN where the metric could not be computed."""
@@ -132,24 +133,36 @@ class Assessor:
         self._cache: dict[str, Assessment] = {}
 
     @staticmethod
-    def cache_key(setup_key: str | None, estimator: str, config: dict[str, Any]) -> str:
-        """The setup key alone is not enough: more search time keeps the Setup but can find
-        another configuration, which must be assessed again."""
-        return json.dumps([setup_key, estimator, to_jsonable(config)], sort_keys=True)
+    def refit_key(columns: Any, config: ExperimentConfig, estimator: str, best_config: dict[str, Any]) -> str:
+        """What the refits depend on: the feature columns, the Setup's Data_Steps and class weights, and the
+        winning learner and configuration. The rest of a Setup (learner list, search metric, search-space
+        limits, time) only changes what the search finds, so two Setups with the same key give the same fold
+        scores. Since 31 October 2026; before, the whole setup key was used, so a Setup that only searched
+        fewer learners and found the same model was refitted 15 times for the same scores."""
+        steps = [spec.to_dict() for spec in as_specs(config.data_steps)]
+        return json.dumps([[str(c) for c in columns], steps, config.class_weight, estimator, to_jsonable(best_config)],
+                          sort_keys=True)
 
-    def cached(self, result: ExperimentResult) -> Assessment | None:
-        return self._cache.get(self.cache_key(result.setup_key, result.best_estimator, result.best_config))
+    def cached(self, X_train: pd.DataFrame, config: ExperimentConfig, result: ExperimentResult) -> Assessment | None:
+        return self._cache.get(self.refit_key(X_train.columns, config, result.best_estimator, result.best_config))
 
     def assess(
         self, X_train: pd.DataFrame, y_train: pd.Series, config: ExperimentConfig, result: ExperimentResult
     ) -> Assessment:
-        """Assess the winning configuration of ``result``, or return the earlier Assessment of it.
+        """Assess the winning configuration of ``result``, or reuse the fold scores of an earlier Assessment
+        with the same refits (a copy that names this Experiment and the one it was made for).
 
         ``X_train`` and ``y_train`` must be the Training_Part the folds were made on, in the same order.
         """
-        key = self.cache_key(result.setup_key, result.best_estimator, result.best_config)
+        key = self.refit_key(X_train.columns, config, result.best_estimator, result.best_config)
         if key in self._cache:
-            return self._cache[key]
+            earlier = self._cache[key]
+            if earlier.experiment_id == result.experiment_id:
+                return earlier
+            logger.info("%s refits like %s: reusing its %d fold scores", result.experiment_id,
+                        earlier.experiment_id, len(earlier.folds))
+            return replace(earlier, setup_key=result.setup_key or "", experiment_id=result.experiment_id,
+                           folds=list(earlier.folds), seconds=0.0, reused_from=earlier.experiment_id)
         if len(X_train) != self.n_rows or len(y_train) != self.n_rows:
             raise ExperimentError(
                 f"The Assessor needs the {self.n_rows} training rows its folds were made on "

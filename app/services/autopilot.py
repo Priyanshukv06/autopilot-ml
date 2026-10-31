@@ -499,7 +499,8 @@ def _brief(assessment: Assessment, metric: str) -> dict[str, Any]:
     return {"metric": metric, "validation_mean": validation_mean, "validation_std": validation_std,
             "train_mean": train_mean, "train_std": train_std, "baseline_mean": baseline_mean,
             "n_folds": len(assessment.folds), "seconds": round(assessment.seconds, 2),
-            "failed": assessment.failed, "error": assessment.error}
+            "failed": assessment.failed, "error": assessment.error,
+            **({"reused_from": assessment.reused_from} if assessment.reused_from else {})}
 
 
 def _change(proposal: dict[str, Any] | None) -> str:

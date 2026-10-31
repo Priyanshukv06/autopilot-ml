@@ -4,6 +4,7 @@ Most tests use a small logistic-regression engine that records each refit, so th
 FLAML. The repeatability test uses real FLAML refits.
 """
 
+from dataclasses import replace
 from types import SimpleNamespace
 
 import numpy as np
@@ -13,7 +14,7 @@ from pandas.api.types import is_numeric_dtype
 from sklearn.linear_model import LogisticRegression
 from sklearn.utils.class_weight import compute_sample_weight
 
-from app.services.assessor import REPEAT_TOLERANCE, Assessor
+from app.services.assessor import REPEAT_TOLERANCE, Assessment, Assessor
 from app.services.automl_runner import ExperimentConfig, ExperimentError, FLAMLEngine
 from app.services.splits import make_outer_split, make_session_folds
 from app.services.task_detector import TaskType
@@ -143,17 +144,28 @@ def test_class_weights_come_from_each_folds_training_rows():
     assert all(call["sample_weight"] is None for call in plain.calls)
 
 
-def test_a_cached_setup_is_not_refitted_but_a_new_configuration_is():
+def test_identical_refits_are_reused_but_a_new_configuration_or_data_is_assessed():
     X, y, _ = training_part()
     engine = RecordingEngine()
     assessor, _ = make_assessor(engine, y)
     first = assessor.assess(X, y, CONFIG, result_for())
-    assert assessor.assess(X, y, CONFIG, result_for(experiment_id="EXP-002")) is first
-    assert assessor.cached(result_for()) is first and len(engine.calls) == 15
+    assert assessor.assess(X, y, CONFIG, result_for()) is first  # the same Experiment again
+    assert assessor.cached(X, CONFIG, result_for()) is first and len(engine.calls) == 15
+    # Another Setup whose refits are the same (here it searched fewer learners and found the same model):
+    # its fold scores are reused, not refitted (since 31 October 2026)
+    fewer = replace(CONFIG, estimator_list=["logreg"])
+    reused = assessor.assess(X, y, fewer, result_for(setup_key="setup-b", experiment_id="EXP-002"))
+    assert len(engine.calls) == 15 and reused is not first and reused.folds == first.folds
+    assert (reused.experiment_id, reused.setup_key, reused.reused_from, reused.seconds) == (
+        "EXP-002", "setup-b", "EXP-001", 0.0)
+    assert Assessment.from_dict(reused.to_dict()) == reused and first.reused_from is None
     # Same Setup, other configuration (for example after more search time): assessed again.
     second = assessor.assess(X, y, CONFIG, result_for(config={"C": 0.1}))
-    assert second is not first and len(engine.calls) == 30
-    assert assessor.cached(result_for(setup_key="setup-b")) is None
+    assert second is not first and second.reused_from is None and len(engine.calls) == 30
+    # Other data treatment (class weights) or other columns: assessed again.
+    weighted = assessor.assess(X, y, replace(CONFIG, class_weight="balanced"), result_for(experiment_id="EXP-004"))
+    assert weighted.reused_from is None and len(engine.calls) == 45
+    assert assessor.cached(X.drop(columns=[X.columns[0]]), CONFIG, result_for()) is None
 
 
 def test_a_failing_fold_marks_the_assessment_as_failed():

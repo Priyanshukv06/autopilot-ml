@@ -287,7 +287,8 @@ Before the grid, a check of every system type on a synthetic binary dataset with
 
 Requirement 25: does the cheap Judge (refits of FLAML's chosen configuration on the Session's 15 folds, decision D2) decide like a strict comparison that searches again? `research/judge_agreement.py`, `scripts/run_study.py agreement run | analyse`. Fixed before any strict comparison ran:
 
-- Pairs: the judged steps of the 30 Sessions that built the frozen memory (development datasets only), so they are decisions the Judge really made; at most 8 per dataset, drawn with seed 2026 where a dataset has more, so that no dataset dominates.
+- Pairs: the judged steps of the 30 Sessions that built the frozen memory (development datasets only), so they are decisions the Judge really made; at most 2 per dataset, drawn with seed 2026 where a dataset has more, so that no dataset dominates. The first design allowed 8 per dataset (57 pairs, about 2.5 hours); it was lowered to 2 on 31 October 2026, before any strict comparison ran, because the user asked for shorter runs. That gives 20 pairs from 17 Sessions; the Judge had said keep 4, keep_simpler 8 and discard 8.
+- Power: the study waits before each pair while the laptop is on battery, and a pair that ends on battery is marked `excluded` and runs again (as for the benchmark, section 9.16).
 - For each pair: the accepted and the candidate Setup as the Session recorded them, on the Session's training part (rebuilt from its seed and checked against the Session's split fingerprint; the test part is never read). 5 random 80/20 splits of the training part (stratified for classification); for each split and Setup a new FLAML search on the inner training rows (at most 25 trials with a 60 s cap, as in the judge study, no warm start), scored on the inner validation rows. The 5 differences are judged with the Judge's own code and settings (alpha 0.20, margin 0.005, the same "simpler" flag), with the corrected resampled t-test for 20% validation rows (ratio 0.25).
 - Reported: agreement and Cohen's kappa on the three verdicts and on accepted (keep or keep_simpler) against discarded, the 3 x 3 table, and the cost ratio (the strict comparison's 10 searches against the Judge's two Assessments, per pair and in total).
 
@@ -1346,7 +1347,7 @@ From the records of the 42 development-data Sessions at 300 s: the 30 that built
 ### 9.18 Still to produce
 
 - The benchmark: stopped after 33 cells, 23 usable (section 9.16); the rest of the grid is not planned (the user's decision, 31 October 2026). If more is run later, the harness re-runs the 10 excluded cells first and waits while the laptop is on battery.
-- The judge agreement study (section 4.11): 57 pairs from the memory-build Sessions (balance-scale, breast_cancer, titanic, vehicle and wilt 8 each, kin8nm 7, california_housing and student_performance_por 3, penguins and tic-tac-toe 2; the Judge said discard 28, keep_simpler 20, keep 9). Not run: it was queued after the benchmark and stopped with it.
+- The judge agreement study (section 4.11): 57 pairs from the memory-build Sessions (balance-scale, breast_cancer, titanic, vehicle and wilt 8 each, kin8nm 7, california_housing and student_performance_por 3, penguins and tic-tac-toe 2; the Judge said discard 28, keep_simpler 20, keep 9). It was queued after the benchmark and stopped with it; on 31 October 2026 it was reduced to 20 of these pairs (section 4.11) and run on its own.
 - Re-run sections 9.2 to 9.6 with the final code and keep the raw files.
 - Charts: test score against budget; per-seed differences; bootstrap intervals.
 

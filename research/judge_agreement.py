@@ -10,9 +10,12 @@ Fixed on 27 October 2026, before any strict comparison ran:
 
 - Pairs: every step with a Verdict of the 30 Sessions that built the benchmark's frozen memory
   (``research/memory_build.py``: the 10 development datasets, seeds 1 to 3, random order), so the pairs are
-  decisions the Judge really made, on development data only. At most 8 pairs per dataset, drawn at random
-  with seed 2026 when a dataset has more, so that no dataset dominates; pairs run seed by seed, then dataset
-  by dataset and step by step.
+  decisions the Judge really made, on development data only. At most 2 pairs per dataset (8 until
+  31 October 2026, lowered before any strict comparison ran, to keep the run to about an hour), drawn at
+  random with seed 2026 when a dataset has more, so that no dataset dominates; pairs run seed by seed, then
+  dataset by dataset and step by step.
+- Power: the command line waits before each pair while the laptop is on battery; a pair that ends on battery
+  is written with status ``excluded`` (its searches may have been cut short by standby) and runs again.
 - Each pair: the Accepted_Setup and the Candidate_Setup as the Session recorded them (columns, Data_Steps,
   class weights, metrics, learners, limits); the Session's Training_Part, rebuilt from its seed and checked
   against the Session's split fingerprint; the outer Test_Part is never read.
@@ -29,6 +32,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -48,7 +52,7 @@ from app.services.task_detector import TaskType
 from research import benchmark, memory_build
 from research.datasets import datasets
 
-MAX_PER_DATASET = 8
+MAX_PER_DATASET = 2  # 8 until 31 October 2026; lowered before any strict comparison ran, to keep the run short
 SELECTION_SEED = 2026
 INNER_SPLITS = 5
 INNER_TEST_SIZE = 0.2
@@ -253,9 +257,13 @@ COLUMNS = ("pair_id", "dataset", "seed", "session_id", "step", "strategy", "para
 
 def run(pairs: Sequence[StudyPair], settings: Settings, rows_path: Path, *, n_jobs: int = -1,
         load: Callable[[str], benchmark.Dataset] = benchmark.load_dataset, engine: AutoMLEngine | None = None,
-        limit: int = 0, report: Callable[[dict[str, Any], int, int], None] | None = None) -> list[dict[str, Any]]:
-    """Run the pairs that have no row yet, one row each, appended as each finishes."""
-    seen = {r["pair_id"] for r in read_rows(rows_path)}
+        limit: int = 0, report: Callable[[dict[str, Any], int, int], None] | None = None,
+        power: Callable[[], bool | None] | None = None, sleep: Callable[[float], None] = time.sleep,
+        on_wait: Callable[[], None] | None = None) -> list[dict[str, Any]]:
+    """Run the pairs that have no usable row yet, one row each, appended as each finishes. With ``power``
+    (for example ``benchmark.on_battery``) each pair waits while the laptop is on battery, and a pair that ends
+    on battery is written as ``excluded``, its reused searches are dropped, and it runs again next time."""
+    seen = {r["pair_id"] for r in read_rows(rows_path) if r.get("status") != "excluded"}
     todo = []
     for pair in pairs:  # each pair once, also when it is listed twice
         if pair.pair_id not in seen:
@@ -270,7 +278,12 @@ def run(pairs: Sequence[StudyPair], settings: Settings, rows_path: Path, *, n_jo
     for number, pair in enumerate(todo, start=1):
         if pair.dataset not in loaded:
             loaded[pair.dataset] = load(pair.dataset)
+        if power is not None:
+            benchmark.wait_for_power(power, sleep, on_wait)
         row = run_pair(pair, loaded[pair.dataset], settings, cache, n_jobs=n_jobs, engine=engine)
+        if power is not None and power() is True:
+            row.update({"status": "excluded", "error": "the laptop was on battery at the end of the pair"})
+            cache.clear()  # searches made during this pair may have been cut short
         _append(rows_path, row)
         written.append(row)
         if report is not None:
@@ -307,6 +320,7 @@ def cohen_kappa(first: Sequence[str], second: Sequence[str], labels: Sequence[st
 def agreement(rows: Iterable[dict[str, Any]]) -> dict[str, Any]:
     """Agreement and Cohen's kappa on the verdicts and on accepted against discarded, the confusion table,
     and the costs, over the completed pairs."""
+    rows = list(rows)
     done = [r for r in rows if r.get("status") == "completed" and r.get("strict_verdict")]
     judge = [r["judge_verdict"] for r in done]
     strict = [r["strict_verdict"] for r in done]
@@ -319,7 +333,8 @@ def agreement(rows: Iterable[dict[str, Any]]) -> dict[str, Any]:
     ratios = [float(r["cost_ratio"]) for r in done if r.get("cost_ratio") is not None]
     n = len(done)
     return {
-        "pairs": n, "failed": sum(1 for r in rows if r.get("status") != "completed"),
+        "pairs": n, "failed": sum(1 for r in rows if r.get("status") == "failed"),
+        "excluded": sum(1 for r in rows if r.get("status") == "excluded"),
         "agreement": sum(a == b for a, b in zip(judge, strict)) / n if n else None,
         "kappa": cohen_kappa(judge, strict, VERDICTS) if n else None,
         "accepted_agreement": sum(a == b for a, b in zip(accepted(judge), accepted(strict))) / n if n else None,

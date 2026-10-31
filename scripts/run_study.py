@@ -40,6 +40,7 @@ sys.path.insert(0, str(ROOT))
 import pandas as pd  # noqa: E402
 
 from app.services.critic import DEFAULT_THRESHOLDS_PATH, CriticThresholds  # noqa: E402
+from research import benchmark  # noqa: E402
 from research import critic_study as cs  # noqa: E402
 from research import judge_agreement as ja  # noqa: E402
 from research import judge_study as js  # noqa: E402
@@ -162,11 +163,13 @@ def agreement_run(args: argparse.Namespace) -> None:
     def report(row: dict, number: int, total: int) -> None:
         elapsed = time.perf_counter() - started
         outcome = (f"Judge {row['judge_verdict']}, strict {row['strict_verdict']}, {row['strict_seconds']:.0f} s"
-                   if row["status"] == "completed" else f"FAILED ({str(row['error'])[:150]})")
+                   if row["status"] == "completed" else f"{row['status'].upper()} ({str(row['error'])[:150]})")
         print(f"[{number}/{total}] {row['pair_id']} ({row['dataset']}, {row['strategy']}): {outcome} "
               f"({elapsed / 60:.1f} min so far)", flush=True)
 
-    ja.run(pairs, where["settings"], where["pairs"], n_jobs=args.cores, limit=args.limit, report=report)
+    ja.run(pairs, where["settings"], where["pairs"], n_jobs=args.cores, limit=args.limit, report=report,
+           power=benchmark.on_battery,
+           on_wait=lambda: print("The laptop is on battery: waiting for mains power before the next pair", flush=True))
 
 
 def agreement_analyse(args: argparse.Namespace) -> None:

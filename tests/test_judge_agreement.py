@@ -148,3 +148,24 @@ def test_one_strict_comparison_end_to_end(tmp_path):
     [failed] = ja.run([bad], settings, rows_path, load=TOYS.__getitem__, engine=TwoTrials())
     assert failed["status"] == "failed" and "fingerprints differ" in failed["error"]
     assert np.isfinite(row["strict_seconds"]) and len(ja.read_rows(rows_path)) == 2
+
+
+def test_a_pair_that_ends_on_battery_is_excluded_and_runs_again(tmp_path, monkeypatch):
+    def fake_pair(pair, dataset, settings, cache, **kwargs):
+        cache[("SES-001", "accepted")] = ["searches"]
+        return {column: None for column in ja.COLUMNS} | {
+            "pair_id": pair.pair_id, "status": "completed", "judge_verdict": "keep", "strict_verdict": "keep",
+            "judge_seconds": 8.0, "strict_seconds": 80.0, "cost_ratio": 10.0}
+
+    monkeypatch.setattr(ja, "run_pair", fake_pair)
+    pair = ja.StudyPair("SES-001/EXP-002", "toy_a", 1, "SES-001", 1, "f", "EXP-001", "EXP-002", dict(SETUP),
+                        dict(SETUP), "drop_columns", {}, True, {"verdict": "keep", "metric": "f1"}, 8.0)
+    settings, rows_path = ja.folders(tmp_path)["settings"], ja.folders(tmp_path)["pairs"]
+    answers, naps = iter([True, False, True]), []  # wait once, start on AC, end on battery
+    [row] = ja.run([pair], settings, rows_path, load=TOYS.__getitem__, power=lambda: next(answers), sleep=naps.append)
+    assert naps == [30] and row["status"] == "excluded" and "battery" in row["error"]
+    [again] = ja.run([pair], settings, rows_path, load=TOYS.__getitem__, power=lambda: False)
+    assert again["status"] == "completed" and len(ja.read_rows(rows_path)) == 2
+    assert ja.run([pair], settings, rows_path, load=TOYS.__getitem__, power=lambda: False) == []
+    summary = ja.agreement(ja.read_rows(rows_path))
+    assert (summary["pairs"], summary["failed"], summary["excluded"]) == (1, 0, 1)

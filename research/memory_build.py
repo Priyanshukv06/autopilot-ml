@@ -108,21 +108,24 @@ def freeze(memory_path: Path, rows: Sequence[dict[str, Any]], frozen_path: Path)
 
 def summary(memory_path: Path) -> pd.DataFrame:
     """Per task type, Strategy and diagnosis kind (the selectors' arms, counted as ``strategy_stats`` counts
-    them: a record under every kind it answered): records, datasets, keeps and the mean Judge difference
-    and cost."""
+    them: a record under every kind it answered): records, datasets, keeps (verdict keep or keep_simpler),
+    records without effect, keeps that the arm statistics count (since 31 October 2026), and the mean Judge
+    difference and cost."""
     rows = []
     for record in ExperimentMemory(memory_path, read_only=True).records():
         kinds = sorted({d["kind"] for d in record.diagnoses}) or ["none"]
         for kind in kinds:
             rows.append({"task_type": record.task_type, "strategy": record.strategy["strategy_id"],
                          "diagnosis_kind": kind, "dataset": record.dataset_name, "kept": record.kept,
+                         "no_effect": record.no_effect, "counts_as_kept": record.counts_as_kept,
                          "mean_difference": record.mean_difference, "cost_seconds": record.cost_seconds})
     if not rows:
         return pd.DataFrame(columns=["task_type", "strategy", "diagnosis_kind", "records", "datasets", "keeps",
-                                     "mean_difference", "mean_cost_seconds"])
+                                     "no_effect", "counted_keeps", "mean_difference", "mean_cost_seconds"])
     frame = pd.DataFrame(rows)
     grouped = frame.groupby(["task_type", "strategy", "diagnosis_kind"], sort=True)
     return grouped.agg(records=("kept", "size"), datasets=("dataset", "nunique"), keeps=("kept", "sum"),
+                       no_effect=("no_effect", "sum"), counted_keeps=("counts_as_kept", "sum"),
                        mean_difference=("mean_difference", "mean"),
                        mean_cost_seconds=("cost_seconds", "mean")).reset_index()
 

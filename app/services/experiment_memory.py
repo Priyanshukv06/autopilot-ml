@@ -25,6 +25,7 @@ logger = get_logger(__name__)
 
 MEMORY_SCHEMA_VERSION = 1
 KEPT_VERDICTS = ("keep", "keep_simpler")
+NO_EFFECT_TOLERANCE = 1e-12  # the Assessor's refit tolerance (REPEAT_TOLERANCE)
 
 
 def dataset_fingerprint(dataframe: pd.DataFrame, target_column: str) -> str:
@@ -60,6 +61,18 @@ class MemoryRecord:
     def kept(self) -> bool:
         return self.verdict in KEPT_VERDICTS
 
+    @property
+    def no_effect(self) -> bool:
+        """The Judge's fold differences were all zero within the refit tolerance: the change gave the same
+        fold scores (in practice the same model), so it is no evidence that the Strategy helps."""
+        return abs(self.mean_difference) <= NO_EFFECT_TOLERANCE and abs(self.std_difference) <= NO_EFFECT_TOLERANCE
+
+    @property
+    def counts_as_kept(self) -> bool:
+        """What the arm statistics count as a keep: kept, and with a measurable effect (since 31 October
+        2026; before, a kept step that changed nothing counted as a keep too)."""
+        return self.kept and not self.no_effect
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -75,10 +88,12 @@ class StrategyStats:
     strategy_id: str
     diagnosis_kind: str
     observations: int
-    weighted_keeps: float  # sum of 1 / (1 + distance) over kept observations
-    weighted_discards: float
-    mean_gain_when_kept: float | None  # mean of the Judge's mean difference over kept observations
+    weighted_keeps: float  # sum of 1 / (1 + distance) over observations that count as kept
+    weighted_discards: float  # over the others, including kept steps that changed nothing
+    mean_gain_when_kept: float | None  # mean of the Judge's mean difference over observations that count as kept
     mean_cost_seconds: float
+    datasets: int = 0  # distinct datasets among the observations
+    no_effect: int = 0  # observations whose change made no difference to any fold score
 
     @property
     def keep_rate(self) -> float:
@@ -145,7 +160,8 @@ class ExperimentMemory:
     def strategy_stats(self, meta_features: dict[str, float], task_type: str, k: int = 5,
                        exclude_fingerprint: str | None = None) -> list[StrategyStats]:
         """How each (Strategy, diagnosis kind) did on the k nearest datasets; each observation is weighted
-        by 1 / (1 + distance of its dataset). Sorted by Strategy and kind."""
+        by 1 / (1 + distance of its dataset). A kept step that changed no fold score counts as not kept
+        (``MemoryRecord.counts_as_kept``). Sorted by Strategy and kind."""
         records = self.records()
         nearest = dict(self._nearest(records, meta_features, task_type, k, exclude_fingerprint))
         arms: dict[tuple[str, str], list[tuple[MemoryRecord, float]]] = {}
@@ -157,15 +173,17 @@ class ExperimentMemory:
                 arms.setdefault((record.strategy["strategy_id"], kind), []).append((record, weight))
         stats = []
         for (strategy_id, kind), observed in sorted(arms.items()):
-            kept = [r for r, _ in observed if r.kept]
+            kept = [r for r, _ in observed if r.counts_as_kept]
             stats.append(StrategyStats(
                 strategy_id=strategy_id,
                 diagnosis_kind=kind,
                 observations=len(observed),
-                weighted_keeps=sum(w for r, w in observed if r.kept),
-                weighted_discards=sum(w for r, w in observed if not r.kept),
+                weighted_keeps=sum(w for r, w in observed if r.counts_as_kept),
+                weighted_discards=sum(w for r, w in observed if not r.counts_as_kept),
                 mean_gain_when_kept=sum(r.mean_difference for r in kept) / len(kept) if kept else None,
                 mean_cost_seconds=sum(r.cost_seconds for r, _ in observed) / len(observed),
+                datasets=len({r.dataset_fingerprint for r, _ in observed}),
+                no_effect=sum(1 for r, _ in observed if r.no_effect),
             ))
         return stats
 

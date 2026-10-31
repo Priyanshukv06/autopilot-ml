@@ -1,5 +1,6 @@
 """Tests for the Experiment_Memory, version 1 (task 15.1 of the spec)."""
 
+import dataclasses
 import json
 import logging
 import math
@@ -159,11 +160,30 @@ def test_strategy_statistics_on_a_small_hand_made_memory(memory):
     weights = stats[("class_weight_balanced", "none")]
     assert weights.keep_rate == 0.0 and weights.mean_gain_when_kept is None
     assert weights.weighted_discards == pytest.approx(weight_b)
+    assert (hc.datasets, over.datasets, weights.datasets) == (2, 1, 1) and hc.no_effect == 0
     assert StrategyStats(**{k: v for k, v in hc.to_dict().items() if k != "keep_rate"}) == hc
     # Leaving A out keeps only B's records.
     only_b = {(s.strategy_id, s.diagnosis_kind): s for s in memory.strategy_stats({"x": 0.0}, "binary",
                                                                                    exclude_fingerprint="A")}
     assert only_b[("drop_columns", "high_cardinality")].observations == 1
+
+
+def test_a_kept_step_that_changed_nothing_does_not_count_as_kept(memory):
+    # Added on 31 October 2026: in the frozen memory 16 of 24 restrict_model_families records were kept with
+    # every fold difference exactly 0, which made the Strategy look like the most reliable one.
+    nothing = dataclasses.replace(record(0, "A", verdict="keep_simpler", diff=0.0), std_difference=0.0)
+    noise = dataclasses.replace(record(1, "B", verdict="keep", diff=7e-18), std_difference=2e-16)  # SES-020
+    real = record(2, "B", verdict="keep_simpler", diff=0.0)  # mean 0 but the folds differed (sd 0.01)
+    gain = record(3, "A", verdict="keep", diff=0.03)
+    for r in (nothing, noise, real, gain):
+        memory.add(r)
+    assert [r.no_effect for r in (nothing, noise, real, gain)] == [True, True, False, False]
+    assert [r.counts_as_kept for r in (nothing, noise, real, gain)] == [False, False, True, True]
+    assert nothing.kept and noise.kept  # the verdict itself is unchanged
+    [arm] = memory.strategy_stats({"x": 0.0}, "binary")
+    assert (arm.observations, arm.no_effect, arm.datasets) == (4, 2, 2)
+    assert arm.weighted_keeps == pytest.approx(2.0) and arm.weighted_discards == pytest.approx(2.0)
+    assert arm.mean_gain_when_kept == pytest.approx(0.015)  # (0.0 + 0.03) / 2
 
 
 def test_an_empty_memory(memory):

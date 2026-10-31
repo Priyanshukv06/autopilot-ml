@@ -45,9 +45,9 @@ def memory_with(tmp_path, entries):
     return memory
 
 
-def context(memory, seed=0, fingerprint="NEW"):
+def context(memory, seed=0, fingerprint="NEW", min_datasets=2):
     return SelectionContext(memory=memory, meta_features={"x": 0.0}, task_type=TaskType.BINARY,
-                            fingerprint=fingerprint, rng=np.random.default_rng(seed))
+                            fingerprint=fingerprint, rng=np.random.default_rng(seed), min_datasets=min_datasets)
 
 
 def keys(proposals):
@@ -107,11 +107,27 @@ def test_too_few_observations_keep_the_rule_order(tmp_path, selector):
     assert keys(selector().rank(PROPOSALS, context(two))) == keys(RulesSelector().rank(PROPOSALS))
     # Only the places of the known arms are re-filled: drop_columns (unknown) keeps the first place.
     known = memory_with(tmp_path / "known", [
-        ("A", "class_weight_balanced", "class_imbalance", "discard", 0.0, 10.0, 4),
-        ("A", "regularised_search_space", "overfitting", "keep", 0.05, 10.0, 4),
+        ("A", "class_weight_balanced", "class_imbalance", "discard", 0.0, 10.0, 2),
+        ("B", "class_weight_balanced", "class_imbalance", "discard", 0.0, 10.0, 2),
+        ("A", "regularised_search_space", "overfitting", "keep", 0.05, 10.0, 2),
+        ("B", "regularised_search_space", "overfitting", "keep", 0.05, 10.0, 2),
     ])
     assert keys(selector().rank(PROPOSALS, context(known))) == ["drop_columns", "regularised_search_space",
                                                                 "class_weight_balanced"]
+
+
+@pytest.mark.parametrize("selector", [ThompsonSelector, UCB1Selector])
+def test_an_arm_seen_on_one_dataset_keeps_the_rule_order(tmp_path, selector):
+    # Added on 31 October 2026: 6 records each, but all from dataset A
+    one = memory_with(tmp_path, [("A", "class_weight_balanced", "class_imbalance", "discard", 0.0, 10.0, 6),
+                                 ("A", "regularised_search_space", "overfitting", "keep", 0.05, 10.0, 6)])
+    chooser = selector()
+    assert keys(chooser.rank(PROPOSALS, context(one))) == keys(RulesSelector().rank(PROPOSALS))
+    assert chooser.explain(TREES)["observations"] == 6 and chooser.explain(TREES)["datasets"] == 1
+    assert chooser.explain(TREES)["score"] is None
+    # with min_datasets 1 (the selectors of 27 October 2026) the same records move the arms
+    assert keys(selector().rank(PROPOSALS, context(one, min_datasets=1))) == [
+        "drop_columns", "regularised_search_space", "class_weight_balanced"]
 
 
 def test_the_current_dataset_is_left_out(tmp_path):
@@ -124,9 +140,9 @@ def test_the_current_dataset_is_left_out(tmp_path):
 def test_the_same_memory_and_seed_give_the_same_choices(tmp_path):
     memory = memory_with(tmp_path, [
         ("A", "class_weight_balanced", "class_imbalance", "keep", 0.02, 10.0, 2),
-        ("A", "class_weight_balanced", "class_imbalance", "discard", 0.0, 10.0, 2),
+        ("B", "class_weight_balanced", "class_imbalance", "discard", 0.0, 10.0, 2),
         ("B", "drop_columns", "high_cardinality", "keep", 0.02, 10.0, 2),
-        ("B", "drop_columns", "high_cardinality", "discard", 0.0, 10.0, 2),
+        ("A", "drop_columns", "high_cardinality", "discard", 0.0, 10.0, 2),
     ])
 
     def scores(seed):
@@ -139,8 +155,10 @@ def test_the_same_memory_and_seed_give_the_same_choices(tmp_path):
 
 
 def test_ucb1_score_worked_by_hand_and_ties_go_to_the_cheaper_arm(tmp_path):
-    memory = memory_with(tmp_path, [("A", "class_weight_balanced", "class_imbalance", "keep", 0.05, 20.0, 3),
-                                    ("A", "smoother_search_metric", "class_imbalance", "keep", 0.05, 5.0, 3)])
+    memory = memory_with(tmp_path, [("A", "class_weight_balanced", "class_imbalance", "keep", 0.05, 20.0, 2),
+                                    ("B", "class_weight_balanced", "class_imbalance", "keep", 0.05, 20.0, 1),
+                                    ("A", "smoother_search_metric", "class_imbalance", "keep", 0.05, 5.0, 2),
+                                    ("B", "smoother_search_metric", "class_imbalance", "keep", 0.05, 5.0, 1)])
     smoother = proposal("smoother_search_metric", "class_imbalance", cost="normal", row=8)
     chooser = UCB1Selector()
     ranked = chooser.rank([WEIGHTS, smoother], context(memory))
@@ -153,10 +171,11 @@ def test_ucb1_score_worked_by_hand_and_ties_go_to_the_cheaper_arm(tmp_path):
 def test_a_session_with_memory_uses_the_learned_choice(tmp_path):
     def prefill(root):
         memory = ExperimentMemory(root / "experiments" / "memory" / "memory.jsonl")
-        for n in range(4):  # on another dataset, class weights helped and dropping columns did not
-            memory.add(record(n, fingerprint="OTHER", strategy="class_weight_balanced", verdict="keep", diff=0.05,
+        for n in range(4):  # on two other datasets, class weights helped and dropping columns did not
+            other = f"OTHER{n % 2}"
+            memory.add(record(n, fingerprint=other, strategy="class_weight_balanced", verdict="keep", diff=0.05,
                               kinds=("class_imbalance",)))
-            memory.add(record(10 + n, fingerprint="OTHER", strategy="drop_columns", verdict="discard", diff=0.0,
+            memory.add(record(10 + n, fingerprint=other, strategy="drop_columns", verdict="discard", diff=0.0,
                               kinds=("high_cardinality",)))
 
     first_change = {}

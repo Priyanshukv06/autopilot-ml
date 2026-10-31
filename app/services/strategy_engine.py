@@ -136,6 +136,9 @@ class Proposal:
 
 
 MIN_OBSERVATIONS = 3  # an arm with fewer observations keeps its rule-order position (Requirement 19.4)
+# ... and so does an arm whose observations come from fewer datasets (added 31 October 2026: 7 of the 13
+# arms of the frozen memory with 3 or more observations had all of them from one dataset)
+MIN_DATASETS = 2
 NEAREST_DATASETS = 5
 MIN_COST_SECONDS = 1.0  # floor of an arm's mean cost, so a very cheap arm cannot divide by almost zero
 
@@ -150,6 +153,7 @@ class SelectionContext:
     fingerprint: str | None  # the current dataset; its own records are left out, so only other datasets count
     rng: np.random.Generator  # seeded from the Session seed (Requirement 19.5)
     k: int = NEAREST_DATASETS
+    min_datasets: int = MIN_DATASETS  # 1 gives the selectors of 27 October 2026
 
 
 class StrategySelector(Protocol):
@@ -205,8 +209,9 @@ class _MemorySelector(RulesSelector):
     """Ranks by a score from the memory's arm statistics on the nearest past datasets of the same task.
 
     The Proposals are first put in rule order. The places of the Proposals whose arm has at least
-    MIN_OBSERVATIONS observations are then filled by those Proposals, best score first; the others keep
-    their places. Without a memory every arm has 0 observations, so the result is the rule order.
+    MIN_OBSERVATIONS observations from at least ``context.min_datasets`` datasets are then filled by those
+    Proposals, best score first; the others keep their places. Without a memory every arm has 0
+    observations, so the result is the rule order.
     """
 
     def rank(self, proposals: list[Proposal], context: SelectionContext | None = None) -> list[Proposal]:
@@ -218,12 +223,13 @@ class _MemorySelector(RulesSelector):
             arm = arm_of(proposal)
             arm_stats = stats.get(arm)
             observations = arm_stats.observations if arm_stats else 0
+            datasets = arm_stats.datasets if arm_stats else 0
             score = None
-            if arm_stats is not None and observations >= MIN_OBSERVATIONS:
+            if arm_stats is not None and observations >= MIN_OBSERVATIONS and datasets >= context.min_datasets:
                 score = self._score(arm_stats, stats, context)
                 known.append(((-score, self._tie(arm_stats), position), position))
             info[proposal.spec.key()] = {"selector": self.name, "arm": list(arm), "observations": observations,
-                                         "score": score, "rule_rank": position}
+                                         "datasets": datasets, "score": score, "rule_rank": position}
         slots = sorted(position for _, position in known)
         ranked = list(ordered)
         for slot, (_, position) in zip(slots, sorted(known)):

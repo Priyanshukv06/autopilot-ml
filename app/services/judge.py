@@ -106,8 +106,11 @@ class Judge:
         ties = len(d) - wins - losses
         if std <= REPEAT_TOLERANCE:  # all differences equal: decide on the mean alone (rule 6)
             t = p_better = p_worse = None
-            keep = mean > s.min_gain
-            keep_simpler = candidate_is_simpler and mean >= -s.non_inferiority_margin
+            # A mean within the refit tolerance is no difference: the same model refitted can differ by
+            # rounding noise (7e-18 in SES-020 of the memory build), which must not count as a gain.
+            gain = mean if abs(mean) > REPEAT_TOLERANCE else 0.0
+            keep = gain > s.min_gain
+            keep_simpler = candidate_is_simpler and gain >= -s.non_inferiority_margin
         else:
             t, df = corrected_resampled_t(d, self.test_train_ratio)
             p_better, p_worse = float(stats.t.sf(t, df)), float(stats.t.cdf(t, df))

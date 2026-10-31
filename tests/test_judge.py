@@ -27,6 +27,18 @@ def compare(differences, simpler=False, metric="f1", settings=RULES, accepted=AC
     return judge.compare(assessment(accepted, metric), assessment(candidate, metric), candidate_is_simpler=simpler)
 
 
+# --------------------------------------------------------------------------- refit noise
+def test_a_difference_within_the_refit_tolerance_is_no_gain():
+    # the same model refitted can differ in the 16th digit (memory build, SES-020: mean 7e-18); found on
+    # 31 October 2026, when such a step had been judged "keep"
+    candidate = [np.nextafter(a, 1.0) if j in (0, 2) else a for j, a in enumerate(ACCEPTED)]
+    judge = Judge(JudgeSettings(), test_train_ratio=0.25)
+    noisy = judge.compare(assessment(ACCEPTED), assessment(candidate), candidate_is_simpler=False)
+    assert 0 < noisy.mean_difference < 1e-15 and noisy.verdict == "discard" and noisy.ties == 5
+    simpler = judge.compare(assessment(ACCEPTED), assessment(candidate), candidate_is_simpler=True)
+    assert simpler.verdict == "keep_simpler"
+
+
 # --------------------------------------------------------------------------- the statistic
 def test_corrected_t_and_p_values_against_hand_computation():
     # mean = 0.07 / 5 = 0.014; variance = sum((d - 0.014)^2) / 4 = 0.00092 / 4 = 0.00023

@@ -198,7 +198,7 @@ The plain-language explanation is in [how-it-works.md](how-it-works.md), section
 - Explainability: permutation importance, the model's own importance, confusion matrix, ROC curve, residual plots.
 - Tracking: local MLflow (SQLite) plus JSON records.
 - Autonomous layer (Phase 2): see 8.7.
-- Phase 3 so far: see 8.8.
+- Phase 3: see 8.8.
 - Tests: 47 pytest tests at the end of Phase 1; 468 after Phase 2 and 541 on 31 October 2026, including short real FLAML runs, whole Sessions with a fake clock, the dashboard through Streamlit's AppTest, smoke tests of the studies, the benchmark harness with stand-in systems, and the statistics against reference values (`report-notes.md`, section 8.6).
 - Not run: the rest of the benchmark grid (357 of 390 cells; the user decided on 31 October 2026 not to run it), so hypotheses H1 to H4 are not tested.
 - Not implemented: SHAP, automatic target detection, feature engineering beyond the 9 Strategies, resampling.

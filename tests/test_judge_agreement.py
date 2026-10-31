@@ -140,8 +140,9 @@ def test_one_strict_comparison_end_to_end(tmp_path):
     assert len(rows) == 1 and rows[0]["status"] == "completed", rows[0]["error"]  # the same pair once
     row = rows[0]
     assert row["strict_verdict"] in ja.VERDICTS and len(json.loads(row["strict_differences"])) == 5
+    # cost_ratio is rounded to 3 decimals from the unrounded seconds, strict_seconds to 2 decimals
     assert len(json.loads(row["accepted_searches"])) == 5 and row["cost_ratio"] == pytest.approx(
-        row["strict_seconds"] / 8.0, rel=1e-3)
+        row["strict_seconds"] / 8.0, abs=0.002)
     assert ja.run([pair], settings, rows_path, load=TOYS.__getitem__, engine=TwoTrials()) == []  # restart
     bad = ja.StudyPair(**{**pair.__dict__, "pair_id": "SES-001/EXP-009", "split_fingerprint": "other"})
     [failed] = ja.run([bad], settings, rows_path, load=TOYS.__getitem__, engine=TwoTrials())

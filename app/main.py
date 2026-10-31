@@ -63,8 +63,13 @@ def render_sidebar(settings: Settings) -> str:
             "- ✅ Learned strategy choice from the memory (Thompson sampling, UCB1)\n"
             "- ✅ Autonomous mode in this dashboard"
         )
+        st.markdown("**Research tools (command line, `scripts/`)**")
+        st.markdown(
+            "- ✅ Benchmark against FLAML alone, AutoGluon and a manual baseline, with ablations\n"
+            "- ✅ Critic, Judge and judge agreement studies"
+        )
         st.markdown("**Planned, not implemented**")
-        st.markdown("- 🕒 Benchmark against FLAML alone, AutoGluon and a manual baseline")
+        st.markdown("- 🕒 Optional extras: SMOTE, target encoding, SHAP, an API")
         st.divider()
         st.caption("Runs fully locally: no paid APIs, no cloud services.")
         st.caption(f"MLflow store: `{settings.mlflow_tracking_uri}`")

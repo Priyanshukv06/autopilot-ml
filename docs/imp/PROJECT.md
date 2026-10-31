@@ -2,7 +2,7 @@
 
 Main project document, B.Tech Computer Science major project.
 
-Current status (28 October 2026): the Phase 1 baseline (profiling, task detection, FLAML search, evaluation, MLflow tracking, dashboard) and the Phase 2 rule-based autonomous layer (Session loop, planner, assessor, critic, strategy engine, judge, resource manager, experiment memory, and the autonomous mode of the dashboard) are implemented and tested. Phase 3 is in progress: the development and evaluation datasets are fixed (task 20), and the learned strategy choice from the memory (task 21), the ablation switches (task 22), the comparison systems (task 23: a manual LightGBM baseline, FLAML alone and AutoGluon) a resumable benchmark harness (task 24), its statistics (task 25), its analysis and frozen experiment memory (task 26) and the judge agreement study (task 27) are built and tested (8.8). The benchmark has been running since 28 October 2026 and the judge agreement study runs after it, so there are no results from them yet. The only measurements so far are the component studies and the Phase 2 comparison with FLAML alone on the four sample datasets (`report-notes.md`, chapter 9); this document makes no other performance claims.
+Current status (31 October 2026): the Phase 1 baseline (profiling, task detection, FLAML search, evaluation, MLflow tracking, dashboard) and the Phase 2 rule-based autonomous layer (Session loop, planner, assessor, critic, strategy engine, judge, resource manager, experiment memory, and the autonomous mode of the dashboard) are implemented and tested. Phase 3 is in progress: the development and evaluation datasets are fixed (task 20), and the learned strategy choice from the memory (task 21), the ablation switches (task 22), the comparison systems (task 23: a manual LightGBM baseline, FLAML alone and AutoGluon) a resumable benchmark harness (task 24), its statistics (task 25), its analysis and frozen experiment memory (task 26) and the judge agreement study (task 27) are built and tested (8.8). The benchmark was stopped early (23 usable runs on 2 evaluation datasets with 1 seed) and the judge agreement study ran on 20 decisions; their results (`report-notes.md`, sections 9.16 to 9.18) are observations, not tested claims. The only measurements so far are the component studies and the Phase 2 comparison with FLAML alone on the four sample datasets (`report-notes.md`, chapter 9); this document makes no other performance claims.
 
 ## Abstract
 
@@ -174,7 +174,7 @@ A Session runs the loop on one dataset within a total time, a maximum number of 
 
 The plain-language explanation is in [how-it-works.md](how-it-works.md), section 9, and the class-level view in [architecture.md](architecture.md).
 
-### 8.8 Phase 3 so far (tasks 20 to 24, implemented)
+### 8.8 Phase 3 (tasks 20 to 28, implemented)
 
 - Datasets (`research/datasets.py`, `research/datasets.json`): 10 development datasets (the four samples and six OpenML datasets) and 6 evaluation datasets, fixed by a written rule before any evaluation run (section 17).
 - Learned strategy choice (`strategy_engine.py`): the selectors `rules`, `random`, `thompson` and `ucb1`. An arm is a Strategy with the kind of Diagnosis it answers; its statistics come from the memory records of the 5 most similar other datasets, weighted by similarity; arms with fewer than 3 records keep their rule-order place.
@@ -185,7 +185,8 @@ The plain-language explanation is in [how-it-works.md](how-it-works.md), section
 - Frozen memory (`research/memory_build.py`): 30 Sessions on the development datasets wrote 97 records, frozen on 27 October 2026 (`report-notes.md`, section 9.15); the benchmark reads it and never writes it.
 - Analysis (`research/benchmark_analysis.py`): critical-difference diagrams, score-against-budget charts, per-dataset tables and time-to-target, with the comparisons fixed before any benchmark cell ran.
 - Judge agreement study (`research/judge_agreement.py`): 57 decisions of the Judge from the memory-build Sessions, each made again by new FLAML searches on 5 inner splits; agreement, Cohen's kappa and the cost of each method.
-- Running: the benchmark (since 28 October 2026, about a day), then the judge agreement study.
+- Runs: the benchmark stopped after 33 of its 390 cells, when the laptop went into standby on battery; 23 cells are usable (`report-notes.md`, section 9.16). The judge agreement study ran on 20 decisions: 8 verdicts agreed (Cohen's kappa 0.05) and the strict check cost 2.4 times as much (section 9.18).
+- Changes after reading the results (31 October 2026): a mean difference within the refit tolerance is no gain for the Judge; identical refits reuse their fold scores; a learned selector moves a change only with records from at least 2 datasets, and kept steps that changed nothing no longer count as successes. Their effect on scores is not measured.
 
 ## 9. Current implementation
 
@@ -198,8 +199,8 @@ The plain-language explanation is in [how-it-works.md](how-it-works.md), section
 - Tracking: local MLflow (SQLite) plus JSON records.
 - Autonomous layer (Phase 2): see 8.7.
 - Phase 3 so far: see 8.8.
-- Tests: 47 pytest tests at the end of Phase 1; 468 after Phase 2 and 533 on 27 October 2026, including short real FLAML runs, whole Sessions with a fake clock, the dashboard through Streamlit's AppTest, smoke tests of the studies, the benchmark harness with stand-in systems, and the statistics against reference values (`report-notes.md`, section 8.6).
-- Not finished: the benchmark and judge agreement runs and their results (Phase 3, tasks 26 and 27).
+- Tests: 47 pytest tests at the end of Phase 1; 468 after Phase 2 and 541 on 31 October 2026, including short real FLAML runs, whole Sessions with a fake clock, the dashboard through Streamlit's AppTest, smoke tests of the studies, the benchmark harness with stand-in systems, and the statistics against reference values (`report-notes.md`, section 8.6).
+- Not run: the rest of the benchmark grid (357 of 390 cells; the user decided on 31 October 2026 not to run it), so hypotheses H1 to H4 are not tested.
 - Not implemented: SHAP, automatic target detection, feature engineering beyond the 9 Strategies, resampling.
 
 ## 10. Proposed modules (written for the Phase 1 review)

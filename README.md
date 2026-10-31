@@ -10,7 +10,7 @@ We are building it in stages, and this README keeps them apart:
 
 - **Phase 1, the baseline (built):** CSV → dataset profiling → task detection → FLAML AutoML → evaluation → MLflow tracking → Streamlit dashboard.
 - **Phase 2, the autonomous loop (built):** a Session that searches, assesses, diagnoses, changes and judges Setups by itself within a time budget, and records every decision in an experiment memory. It runs from the dashboard or the command line.
-- **Phase 3 (in progress):** built so far: the fixed development and evaluation datasets, choosing changes from what the memory learned on similar datasets (Thompson sampling, UCB1), switches that turn single parts of the loop off (for the ablations), the comparison systems (a manual LightGBM baseline, FLAML alone and AutoGluon), a resumable benchmark harness, its statistics and analysis, the frozen experiment memory the benchmark reads, and the judge agreement study. The benchmark has been running since 28 October 2026 and the judge agreement study runs after it, so there are no benchmark results yet.
+- **Phase 3, learning and evaluation (built):** fixed development and evaluation datasets, choosing changes from what the memory learned on similar datasets (Thompson sampling, UCB1), switches that turn single parts of the loop off (for the ablations), comparison systems (a manual LightGBM baseline, FLAML alone and AutoGluon), a resumable benchmark with its statistics, a frozen experiment memory, and a study of how far the cheap Judge agrees with searching again. The benchmark was stopped early (23 usable runs on 2 datasets with 1 seed), so its results are observations, not tested claims; see Results below.
 
 The detailed project document is [docs/imp/PROJECT.md](docs/imp/PROJECT.md). To understand how the current system and FLAML work, step by step and with diagrams, read [docs/imp/how-it-works.md](docs/imp/how-it-works.md). All maintained documents are in [docs/imp](docs/imp), including the running notes for the final report. The Phase 1 review material is archived in [docs/unimp](docs/unimp).
 
@@ -231,7 +231,8 @@ Exact versions are pinned in `requirements.txt`. Optuna and SHAP are part of the
 
 - CSV and single-table tabular data only. No text, images, time series or clustering.
 - You choose the target column yourself. Automatic target detection is not implemented.
-- The autonomous loop changes one thing at a time and tries each change at most once per Session. By default it follows a fixed rule order; the learned order needs a memory with records of similar datasets, and whether it helps is what the Phase 3 benchmark will measure.
+- The autonomous loop changes one thing at a time and tries each change at most once per Session. By default it follows a fixed rule order; the learned order needs a memory with records of similar datasets (at least 3 records from at least 2 datasets for a change), and the stopped benchmark could not show whether it helps.
+- The Judge decides on refits of the configurations the searches found. A study that searched again for 20 of its decisions agreed with it on 8 (Cohen's kappa 0.05), so one verdict is evidence, not proof.
 - Its data changes are the 9 Strategies above. There is no other feature engineering and no resampling (SMOTE is an optional extra, not built).
 - Every Setup is refitted 15 times for its Assessment, which takes a share of the budget, more so on bigger data.
 - The Judge compares refits of configurations that FLAML chose on the same training part, so both scores are a little optimistic; pairing removes much of this, not all.
@@ -266,13 +267,28 @@ The question we want to answer:
 
 > Can an autonomous experimentation layer improve the efficiency and effectiveness of conventional AutoML by learning from previous experiments, diagnosing model weaknesses, selecting appropriate improvement strategies, and allocating computational resources adaptively?
 
-The benchmark compares a manual LightGBM baseline, FLAML alone, AutoGluon, AutoPilot-ML with the rule order (which is also AutoPilot-ML without the experiment memory) and the full AutoPilot-ML (Thompson sampling with the memory), plus three ablations (random order, no Critic, no Resource_Manager), on 6 evaluation datasets with total budgets of 2 and 5 minutes and 5 seeds. They will be compared on test score, time to reach a target score, number of experiments, compute cost and consistency across datasets. The benchmark has been running since 28 October 2026; there are no results yet. The plan is in [docs/imp/research-direction.md](docs/imp/research-direction.md).
+The benchmark compares a manual LightGBM baseline, FLAML alone, AutoGluon, AutoPilot-ML with the rule order (which is also AutoPilot-ML without the experiment memory) and the full AutoPilot-ML (Thompson sampling with the memory), plus three ablations (random order, no Critic, no Resource_Manager), on 6 evaluation datasets with total budgets of 2 and 5 minutes and 5 seeds. They are compared on test score, time to reach a target score, number of experiments, compute cost and consistency across datasets. The plan is in [docs/imp/research-direction.md](docs/imp/research-direction.md).
+
+## Results
+
+All measured on one laptop (CPU only, 16 logical cores); the details, settings and raw files are in [docs/imp/report-notes.md](docs/imp/report-notes.md), chapter 9.
+
+- **Critic study** (270 synthetic datasets with planted problems): the data-level Diagnoses raised no false alarm; overfitting was found with precision 0.88 and recall 0.91; unreliable validation is weak (precision 0.27).
+- **Judge study** (84 pairs of Setups with a known true difference): on the reporting seeds the Judge kept 0 of 18 harmful changes and 10 of 12 helpful ones.
+- **Loop against FLAML alone** (4 sample datasets x 3 seeds, 300 s): about the same final test scores on average (4 better, 4 equal, 4 worse), using about two thirds of the time.
+- **Benchmark** (stopped early: 23 usable runs, pc4 and cylinder-bands, seed 1): the full system was never below FLAML alone (pc4 F1 0.600 and 0.613 against 0.590 at 120 and 300 s; cylinder-bands equal at 120 s, 0.872 against 0.870 at 300 s). With 2 datasets no test can confirm this.
+- **Judge agreement** (20 real decisions, each checked by new searches on 5 inner splits): 8 of 20 verdicts agreed (kappa 0.05), and the strict check cost 2.4 times as much.
+- **From the development Sessions:** only changes kept as significantly better raised the test score (+0.016 on average, 8 of 11 Sessions better). Three flaws found in the records were fixed: rounding noise counted once as a gain, unchanged models counted as successes in the memory, and changes seen on only one dataset steered the learned order.
+
+## Use of AI tools
+
+This project was developed in Kiro, an AI-assisted code editor built on VS Code. Kiro's AI agent wrote most of the code, the tests and the documents, following the spec in `.kiro/specs/autopilot-ml/` (requirements, design and ordered tasks), and it also ran the experiments and analysed their results. Priyanshu Verma set the goals and constraints, made the design and run decisions recorded in the spec's `design.md` and in the report notes, and reviewed the work. The application itself uses no AI service: every decision in AutoPilot-ML comes from its own rules and statistics, and no language model is called when it runs.
 
 ## Roadmap
 
 1. Baseline: profiling, task detection, FLAML, evaluation, MLflow, dashboard, history (done)
 2. Rule-based loop: assessor, critic, strategy catalogue and rule engine, judge, resource manager, planner, records and experiment memory, dashboard autonomous mode, critic and judge studies, measurement against FLAML alone (done)
-3. Learned strategy selection (bandits, memory-based), benchmark datasets, ablation switches, comparison systems (manual, FLAML alone, AutoGluon), the benchmark harness, statistics and analysis, the frozen memory and the judge agreement study (built); the benchmark and judge agreement runs (in progress)
+3. Learned strategy selection (bandits, memory-based), benchmark datasets, ablation switches, comparison systems (manual, FLAML alone, AutoGluon), the benchmark harness, statistics and analysis, the frozen memory and the judge agreement study (done; the benchmark grid was stopped early)
 4. Optional extras: SMOTE, more data strategies, SHAP, local LLM explanations, an API, packaging
 
 The summary is in [docs/imp/development-roadmap.md](docs/imp/development-roadmap.md). The detailed plan is a Kiro spec (requirements, design and ordered tasks) in the workspace folder `.kiro/specs/autopilot-ml/`, one level above this repository.

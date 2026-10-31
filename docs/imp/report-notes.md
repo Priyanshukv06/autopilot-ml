@@ -40,7 +40,7 @@ Notes:
 - Research question: "Can an autonomous experimentation layer improve the efficiency and effectiveness of conventional AutoML by learning from previous experiments, diagnosing model weaknesses, selecting appropriate improvement strategies, and allocating computational resources adaptively?"
 - Text already written: `PROJECT.md` Abstract, Acknowledgement, sections 1 and 2.
 
-Still to add: a short paragraph on how the report is organised, written at the end.
+Draft of the paragraph on how the report is organised (31 October 2026; adjust it to the final chapter titles): Chapter 2 reviews AutoML systems and the ways they learn across datasets. Chapter 3 states the problem, the objectives and the hypotheses. Chapter 4 describes the method: the phases, the datasets, the benchmark and the studies. Chapter 5 gives the algorithms, from one experiment to the autonomous loop, the learned choice of changes and the statistics. Chapter 6 shows the diagrams, chapter 7 the tools, and chapter 8 the implementation and its tests. Chapter 9 reports every measurement with its settings: the Phase 1 experiments, the component studies, the loop against FLAML alone, the frozen memory, the stopped benchmark and the judge agreement study. Chapter 10 draws the conclusions and lists the future work.
 
 ---
 
@@ -117,6 +117,8 @@ Success criteria for the benchmark, written on 28 October 2026 at about 14:25. A
 | H2: without the memory, the loop does worse | `autopilot_full` against `autopilot_rules`, at 300 s (also shown at 120 s) | the interval lies above 0 | the interval lies below 0 |
 | H3: without strategy selection, the loop does worse | `autopilot_full` against `random_choice`, at 300 s | the interval lies above 0 | the interval lies below 0 |
 | RQ3 and the Critic: adaptive budgets and diagnoses help | `autopilot_full` against `no_resource_manager` and against `no_critic`, at 300 s | the interval lies above 0 | the interval lies below 0 |
+
+Outcome (31 October 2026): the benchmark stopped after 23 usable cells on 2 datasets with 1 seed (section 9.16), so none of H1 to H4 can be decided by these criteria: every interval over 2 datasets is wide and rests on one seed. The observations are reported as such in section 9.16 and chapter 10.
 
 Otherwise the result is "not shown". The Wilcoxon p-values with Holm's correction are reported next to these, but with 6 datasets they cannot fall below 0.05 for any pair once two or more pairs are compared (section 5, Algorithm 21), so no claim rests on them alone. The Friedman test and the Nemenyi critical difference show whether any system stands apart from the others at a budget.
 
@@ -224,7 +226,7 @@ In order (dates and commits in Appendix B):
 - Correction made afterwards (12 October 2026): the presentation explained the validation/test disagreement on seed 42 with shared ticket numbers. Measurement showed this does not hold up (section 9.7). The archived files carry a note.
 - Feedback from the guide: to fill in.
 
-Still to add: Phase 2 work as it happens.
+Phase 2 and Phase 3 work: sections 4.6 to 4.11, chapter 9 and the work log (Appendix B).
 
 ### 4.9 Datasets for Phase 3 (task 20, fixed on 27 October 2026)
 
@@ -888,6 +890,21 @@ After Phase 2 (26 October 2026, code of commit 940225a), counted the same way:
 
 Total: 13,400 lines in 62 Python files (7,172 in `app/`, 1,154 in `research/`, 613 in `scripts/`, 4,461 in `tests/`), plus the 64-line thresholds file.
 
+After Phase 3 (31 October 2026, code of commit 812eec4), counted the same way: 17,610 lines in 82 Python files (7,511 in 29 files of `app/`, 3,278 in 13 of `research/`, 965 in 8 of `scripts/`, 5,856 in 32 of `tests/`, of which 31 test files). The Phase 3 files:
+
+| File | Lines | Main parts |
+|---|---|---|
+| `research/benchmark.py` | 446 | `Cell`, `grid`, `smoke_grid`, `run`, `run_cell`, `preflight`, the exclusions and the power checks |
+| `research/judge_agreement.py` | 353 | `StudyPair`, `study_pairs`, `run_pair`, `strict_decision`, `cohen_kappa`, `agreement` |
+| `research/systems.py` | 342 | `Problem`, `prepare`, `ManualSystem`, `FlamlSystem`, `AutoGluonSystem`, `AutopilotSystem` |
+| `research/benchmark_analysis.py` | 292 | `blocks`, `compare_family`, `targets`, `target_pairs`, the CD diagram and the score chart |
+| `research/datasets.py` | 255 | the dataset registry and its selection rule |
+| `research/stat_tests.py` | 247 | Friedman, Iman and Davenport, Nemenyi, Wilcoxon with Holm, rank-biserial, bootstrap, time-to-target |
+| `research/memory_build.py` | 133 | the frozen memory's build, `freeze` and `summary` |
+| `research/autogluon_worker.py` | 56 | the AutoGluon run in its own environment |
+| `scripts/run_benchmark.py`, `build_memory.py`, `run_study.py` | 142, 84, 217 | the command lines of the benchmark, the memory build and the three studies |
+| `app/services/strategy_engine.py` | 406 | the rule table and the four selectors (200 lines after Phase 2) |
+
 ### 8.2 Main interfaces
 
 ```python
@@ -960,7 +977,7 @@ python scripts/run_phase2.py run            # and: run_phase2.py analyse
 python scripts/prepare_datasets.py download # recreate data/raw/ from research/datasets.json
 ```
 
-### 8.6 Tests (541, about 209 s on 31 October 2026)
+### 8.6 Tests (541, about 215 s on 31 October 2026)
 
 Phase 1 ended with the first three files below (47 tests, about 29 to 41 s). Phase 2 has added the others so far. Full suite on 26 October 2026 after task 16: 457 passed in 139.7 s on the laptop in chapter 7; without the 4 study smoke tests marked slow (`python -m pytest -q -m "not slow"`, marker registered in `pytest.ini`), 453 passed in 123.6 s. After task 17: 458 passed in 150.4 s. After task 18.1: 465 passed in 175.8 s; without the 9 tests marked slow (4 study smoke tests and the 5 dashboard tests), 456 passed in 127.6 s. After task 19 (27 October 2026): 468 passed in 174.0 s. After task 21.1: 482 passed in 173.2 s. After task 22.1: 486 passed in 182.0 s. After task 23.1: 493 passed in 221.9 s. After task 24.1: 504 passed in 218.6 s. After task 25.1: 517 passed in 222.0 s. With the memory build (task 26): 521 passed in 217.1 s. With the benchmark analysis and the judge agreement study: 533 passed in 229.2 s. With the analysis fix of 28 October and the power checks of 31 October 2026: 536 passed in 234.6 s (a first run had one failure, a rounding tolerance in `test_judge_agreement.py`, fixed in e6de199). With the Judge fix, the Assessment reuse and the learned-choice changes (31 October 2026): 541 passed in 208.8 s. The counts below were taken from pytest's list of collected tests.
 
@@ -1007,7 +1024,22 @@ Phase 1 ended with the first three files below (47 tests, about 29 to 41 s). Pha
 - `unseen_category_warnings` and `_showwarning_without_search_noise`
 - `ExperimentTracker.allocate_experiment_id` and `ExperimentTracker.log_run`
 
-Still to add: Phase 2 modules, updated line counts and test counts.
+Phase 2 and 3 code worth including:
+
+- `corrected_resampled_t` and `Judge.compare` (`app/services/judge.py`): the corrected t-test and the three verdicts
+- `Assessor.assess` and `Assessor.refit_key` (`app/services/assessor.py`): refits on fixed folds, and when they can be reused
+- `Critic.diagnose` and one rule, for example `_redundant_features` (`app/services/critic.py`)
+- `propose` and `ThompsonSelector._score` (`app/services/strategy_engine.py`): the rule table and the learned score
+- `ResourceManager.next_budget` and `should_stop` (`app/services/resource_manager.py`)
+- `ExperimentMemory.strategy_stats` (`app/services/experiment_memory.py`): the arm statistics
+- `friedman`, `nemenyi_cd` and `compare_pairs` (`research/stat_tests.py`)
+
+### 8.8 Final check (task 28, 31 October 2026)
+
+- Whole test suite: 541 passed in 214.6 s (code of commit d6cdf1c; only documents uncommitted).
+- Smoke benchmark of the final code in a temporary folder, with the frozen memory (4baeb012...) and all 16 cores, from 23:11:56 to 23:24:37 on mains power (no wait for power, no cell ended on battery): all 8 systems completed on titanic with seed 1 and 120 s. The library versions in the rows are the same as in the smoke run of 27 October. 6 of the 8 test scores equal those of 27 October; FLAML alone scored 0.7692 (0.7500 before; 357 trials against 276, since a time-limited search depends on timing) and `no_resource_manager` 0.8000 (0.7500 before). The full system made 7 Experiments, kept the same changes as the rule order, and its last step (fewer model families, same model) reused the fold scores of an earlier step instead of refitting (Algorithm 9), so the reuse works in a real Session. Wall times 4.3 s (manual) to 122.1 s. Titanic is a development dataset: this is a check, not a result.
+- Dashboard: the 5 dashboard tests ran with the suite (Streamlit's AppTest, including a whole autonomous Session through the page with 3-trial searches), and the app was started with `streamlit run app/main.py` and answered its health check (HTTP 200, "ok") and its page (HTTP 200). No Session was clicked through by hand in a browser.
+- Found during the check: the smoke run's log held about 37,800 lines of one scikit-learn warning ("`sklearn.utils.parallel.delayed` should be used with `sklearn.utils.parallel.Parallel`", 11.8 MB), printed during the FLAML-alone cell and three Session cells, while the logs of the earlier runs (smoke, memory build, benchmark, judge agreement) have none. The cause was not found; the rows and scores look normal. Open item (Appendix D).
 
 ---
 
@@ -1368,12 +1400,13 @@ What this shows, and what it does not:
 - Against this, section 9.17 found that the Judge's `keep` steps did carry over to the outer test part in the development Sessions (+0.016 on average, 8 of 11 better). So the study does not show that the Judge is wrong; it shows that its verdicts are not reproduced by searching again, which limits how much a single verdict should be trusted.
 - 20 pairs give wide intervals: a kappa anywhere from about -0.2 to 0.3 fits these data. A larger study, with strict searches as large as the Sessions', is future work.
 
-### 9.19 Still to produce
+### 9.19 What was not produced, and why
 
-- The benchmark: stopped after 33 cells, 23 usable (section 9.16); the rest of the grid is not planned (the user's decision, 31 October 2026). If more is run later, the harness re-runs the 10 excluded cells first and waits while the laptop is on battery.
-- The judge agreement study (section 4.11): 57 pairs from the memory-build Sessions (balance-scale, breast_cancer, titanic, vehicle and wilt 8 each, kin8nm 7, california_housing and student_performance_por 3, penguins and tic-tac-toe 2; the Judge said discard 28, keep_simpler 20, keep 9). It was queued after the benchmark and stopped with it; on 31 October 2026 it was reduced to 20 of these pairs (section 4.11) and run (section 9.18).
-- Re-run sections 9.2 to 9.6 with the final code and keep the raw files.
-- Charts: test score against budget; per-seed differences; bootstrap intervals.
+- The benchmark grid: stopped after 33 of 390 cells, 23 usable (section 9.16); the rest is not planned (the user's decision, 31 October 2026), so hypotheses H1 to H4 are not tested (chapter 3). If more is run later, the harness re-runs the 10 excluded cells first and waits while the laptop is on battery; it then runs the changed selectors (Algorithm 18), so its rows would not be comparable with the 23 cells without saying so.
+- The judge agreement study: 20 of the 57 available pairs (section 9.18).
+- The improvements of 31 October 2026 (Algorithms 9 and 18) are tested but not measured on new data.
+- Sections 9.2 to 9.6 (Phase 1) ran in temporary folders that were deleted; only their numbers remain. Re-running them with the final code would give raw files for the report (open item, Appendix D).
+- Charts available: the critical-difference diagrams and the score-against-budget chart of the 23 benchmark cells (`results/benchmark/figures/`, 2 datasets, descriptive only), and the Phase 1 search charts (`docs/imp/images/`). Per-seed difference and bootstrap charts were not made, since the benchmark has one seed.
 
 ---
 
@@ -1394,9 +1427,11 @@ Conclusions so far (Phase 2, 27 October 2026):
 
 Conclusions so far (Phase 3, 31 October 2026; the benchmark was stopped early, so these are observations, not tested claims):
 
-1. The learned strategy choice, the ablation switches, the comparison systems, the resumable benchmark with its statistics, and the frozen memory are built and tested; the benchmark ran 23 usable cells on 2 evaluation datasets with 1 seed before the laptop's standby cut it short (section 9.16).
+1. The learned strategy choice, the ablation switches, the comparison systems, the resumable benchmark with its statistics, the frozen memory and the judge agreement study are built and tested (541 tests); the benchmark ran 23 usable cells on 2 evaluation datasets with 1 seed before the laptop's standby cut it short (section 9.16).
 2. On those cells the full system was never below FLAML alone (pc4: 0.600 and 0.613 against 0.590; cylinder-bands: equal at 120 s, 0.872 against 0.870 at 300 s), and on pc4 above the rule order; with 2 datasets no test can confirm this.
 3. Across the 42 development Sessions, only changes the Judge kept as significantly better raised the test score (+0.016 on average, 8 of 11 Sessions better); "simpler and not worse" changes left it about where it was (section 9.17). The loop's value so far is efficiency and explained decisions more than higher scores.
+4. The cheap Judge's verdicts were not reproduced by searching again: on 20 real pairs it agreed with a strict comparison (new 25-trial searches on 5 inner splits) on 8 verdicts (kappa 0.05), and 3 of its 4 significant gains were judged worse there (section 9.18). Together with point 3, a single verdict should be read as evidence from fixed refits, not as a proven gain. The strict comparison cost 2.4 times as much even with its smaller searches.
+5. Reading the records showed three flaws, now fixed and tested: rounding noise counted as a gain once (section 4.7), steps that changed nothing counted as successes in the memory, and arms seen on one dataset steered the learned order (Algorithms 9 and 18). Their effect on test scores is not measured.
 
 Scope for improvement found in the results (31 October 2026; ranked by how directly the data points to it; the first three are built, the others are future work):
 
@@ -1419,6 +1454,8 @@ Future scope (beyond the planned phases):
 - SHAP explanations for the whole model and for single predictions
 - Group-aware validation as an option for related rows
 - Warm starts after "smaller trees": move the Accepted_Setup's best configurations into the limited search space instead of leaving them out, and measure whether that helps (section 4.7)
+- Run the benchmark grid in full on mains power (390 cells, about a day), so that H1 to H4 can be tested, and a judge agreement study with strict searches as large as the Sessions'
+- The improvements 4 to 8 of the table above
 - An optional local language model (for example through Ollama) to explain diagnoses in plain language; decisions stay measurable and do not depend on it
 - A REST API (FastAPI), a Docker image and a database backend for several users
 - Time-series and text features, once the tabular loop is shown to work
@@ -1542,7 +1579,9 @@ Future scope (beyond the planned phases):
 | 2026-10-31 | Judge fix: a mean difference within the refit tolerance is no gain (one `keep` of the memory build came from rounding noise; section 4.7). Replaying the 20 study pairs' saved Assessments with the fixed Judge gives the recorded verdicts for 19 and `keep_simpler` instead of `keep` for that one | fabac45 |
 | 2026-10-31 | Assessment reuse (improvement 3 of chapter 10, first half): the Assessor's cache key is now what the refits depend on (columns, Data_Steps, class weights, learner, configuration), so a candidate that refits like an earlier Setup reuses its fold scores (`reused_from`); in the memory build this would have saved the Assessments of 18 of 97 steps, 149.7 s of 6,203.6 s (Algorithm 9) | 9cc1054 |
 | 2026-10-31 | Learned choice (improvements 2 and 3 of chapter 10): an arm moves only with records from 2 or more datasets, and a kept step that changed no fold score counts as not kept; on the frozen memory 6 of 20 arms can move (13 before) and 34 of 97 records count as kept (53 before) (Algorithm 18); 541 tests passing in 208.8 s | 376a62f |
-| 2026-10-31 | Spec task 27: judge agreement study on 20 pairs (22:14 to 22:47): agreement 8 of 20, kappa 0.048; accepted against discarded 11 of 20, kappa 0.043; the strict comparison cost 2.38 times the Judge's Assessments (section 9.18) | see the commit of this date |
+| 2026-10-31 | Spec task 27: judge agreement study on 20 pairs (22:14 to 22:47): agreement 8 of 20, kappa 0.048; accepted against discarded 11 of 20, kappa 0.043; the strict comparison cost 2.38 times the Judge's Assessments (section 9.18) | 812eec4 |
+| 2026-10-31 | Dashboard sidebar: the benchmark and the studies listed as built research tools, the optional extras as planned | d6cdf1c |
+| 2026-10-31 | Spec task 28: README (results, AI tools used), `PROJECT.md`, `architecture.md`, `how-it-works.md`, `development-roadmap.md` and `research-direction.md` brought in line with the finished system; report notes completed where the material exists (organisation of the report, code size after Phase 3, code listings, outcome of the hypotheses, conclusions, open items); final check: 541 tests passing in 214.6 s, a smoke benchmark of all 8 systems, and the dashboard started and answering its health check (section 8.8) | see the commit of this date |
 
 ---
 
@@ -1570,6 +1609,11 @@ Screenshots to take (not taken yet unless marked):
 
 Charts to make for chapter 9: test score against budget (9.5), per-seed differences (9.6), bootstrap intervals (9.3).
 
+Charts made from the Phase 3 benchmark (in `results/benchmark/figures/`, 31 October 2026, from the 23 usable cells; descriptive only, section 9.16):
+
+- [x] Critical-difference diagrams: `cd_main_120s.png`, `cd_main_300s.png`, `cd_ablations_300s.png`
+- [x] Test score against budget per dataset: `score_against_budget.png`
+
 Charts already made (in `docs/imp/images`, from `scripts/plot_search_history.py`, 22 October 2026):
 
 - [x] EXP-001: every trial over time with the best so far (`exp001_search_timeline.png`)
@@ -1587,7 +1631,10 @@ Charts already made (in `docs/imp/images`, from `scripts/plot_search_history.py`
 - Re-run the result tables with the final code, same seeds, and keep the raw files
 - Render the diagrams as images
 - Back up `experiments/` and `mlruns/` regularly (they are not in git)
-- Check whether the department wants AI-assisted tools declared (the Kiro editor includes an AI assistant)
+- Check whether the department wants AI-assisted tools declared. The README now has a section on the AI tools used (task 28); use the department's wording if it has one
+- Take the screenshots of Appendix C (they need the app open in a browser; none were taken by the tools that built it)
+- Find why the final smoke run's log repeated a scikit-learn warning about 37,800 times (section 8.8) before running the full benchmark grid, whose log could otherwise grow to hundreds of megabytes
+- Read the papers of Appendix A.3 before citing them (chapter 2's "still to add")
 - Design decisions D2 to D4 (spec `design.md`) were confirmed on 26 October 2026. D5 (splitting the work) is not needed: Priyanshu Verma builds all tasks alone. Credit Salil Kushwah (23U02003) as the second group member in the final report
 - The spec in `.kiro/specs/autopilot-ml/` is outside the git repository, like the steering rule. Keep a copy with the report material, or move `.kiro` into the repository if the repository folder becomes the Kiro workspace
 - Find out which warnings pytest listed once on 22 October: one of three identical test runs ended with "47 passed, 350 warnings", the other two with no warnings. The output of that run was not kept, so the warning types are unknown. All tests passed every time

@@ -1,6 +1,6 @@
 # Research direction
 
-Status (28 October 2026): this page sets out what we will measure and how. The systems, the benchmark harness, its statistics and analysis, and the frozen memory are built (Phase 3, tasks 20 to 26), and the benchmark has been running since 28 October 2026, so there are no results here yet. Any numbers added later must come from the benchmark runs.
+Status (31 October 2026): this page sets out what we planned to measure and how. Everything below is built (Phase 3, tasks 20 to 27). The benchmark stopped after 23 usable cells on 2 evaluation datasets with 1 seed, so the hypotheses could not be tested; what was measured is in the report notes, sections 9.15 to 9.18, and the planned grid can still be run in full with `scripts/run_benchmark.py`.
 
 ## The main question
 

@@ -1,6 +1,6 @@
 # Architecture
 
-This page describes the code as it is now: the Phase 1 baseline (one experiment), the Phase 2 autonomous layer (a Session of experiments) and the Phase 3 parts built so far (learned strategy choice, ablation switches, comparison systems, the benchmark harness with its statistics and analysis, the frozen memory build and the judge agreement study). The benchmark has been running since 28 October 2026 and the judge agreement study runs after it; neither has results yet. For a plain-language walkthrough of the same system and of how FLAML works inside it, see [how-it-works.md](how-it-works.md); the full design and the code shapes are in the spec's `design.md`.
+This page describes the code as it is now: the Phase 1 baseline (one experiment), the Phase 2 autonomous layer (a Session of experiments) and the Phase 3 parts built so far (learned strategy choice, ablation switches, comparison systems, the benchmark harness with its statistics and analysis, the frozen memory build and the judge agreement study). The benchmark was stopped after 33 of its 390 cells, and the judge agreement study ran on 20 pairs; the results are in the report notes (sections 9.16 to 9.18). For a plain-language walkthrough of the same system and of how FLAML works inside it, see [how-it-works.md](how-it-works.md); the full design and the code shapes are in the spec's `design.md`.
  
 ## Layers
 
@@ -173,6 +173,7 @@ experiments/benchmark-memory/           the 30 Sessions that built the frozen me
 experiments/studies/judge_agreement/    the judge agreement study's searches
 results/studies/, results/phase2/       summary CSV files (in git)
 results/benchmark/benchmark_cells.csv   one row per finished benchmark cell (in git)
+results/benchmark/excluded_cells.csv    rows that must not be scored, with the reason (in git)
 results/benchmark/frozen_memory.jsonl   the frozen memory the benchmark reads (in git), with
                                         frozen_memory_summary.csv and memory_sessions.csv
 results/studies/judge_agreement_*.csv   the judge agreement study's rows and summaries (in git)
@@ -188,7 +189,7 @@ results/studies/judge_agreement_*.csv   the judge agreement study's rows and sum
 - Built (task 25): `research/stat_tests.py`, the benchmark statistics: `friedman` (with Iman and Davenport's F), `nemenyi_cd` and `cliques` (the bars of a critical-difference diagram), `compare_pairs` (Wilcoxon with Holm's correction, rank-biserial correlation, bootstrap interval of the median difference) and `time_to_target`. It is not called `statistics.py`: the AutoGluon worker runs as a script from `research/`, and a `statistics.py` there would hide Python's own module from it.
 - Built (task 26): `research/memory_build.py` with `scripts/build_memory.py run | status | freeze` builds the frozen memory (30 Sessions on the development datasets in a random order; only finished Sessions' records are copied to `results/benchmark/frozen_memory.jsonl`, which is never rewritten). `research/benchmark_analysis.py` with `scripts/run_benchmark.py analyse` turns the rows into the tests, per-dataset tables, time-to-target and charts; it compares systems only on the (dataset, seed) blocks where all of them completed.
 - Built (task 27): `research/judge_agreement.py` with `scripts/run_study.py agreement run | analyse`: the judged steps of the memory-build Sessions, each compared again with new FLAML searches on 5 inner splits of the Session's training part and the Judge's own rules; agreement, Cohen's kappa and the cost ratio.
-- Running: the benchmark (since 28 October 2026), then the judge agreement study.
+- Changed on 31 October 2026, after reading the results: `Judge.compare` treats a mean difference within `REPEAT_TOLERANCE` as 0; `Assessor.refit_key(columns, config, estimator, best_config)` replaces the cache key, so identical refits reuse their fold scores (`Assessment.reused_from`); `SelectionContext.min_datasets` (2) and `StrategyStats.datasets` keep an arm seen on one dataset in rule order, and `MemoryRecord.counts_as_kept` leaves out kept steps that changed no fold score; the benchmark and the judge agreement study wait while the laptop is on battery and exclude a cell or pair that ends on battery (`results/benchmark/excluded_cells.csv`, status `excluded`).
 
 ## Why it is built this way
 

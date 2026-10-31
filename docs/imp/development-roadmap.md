@@ -36,11 +36,11 @@ Done when: the loop runs unattended on the development datasets within the budge
 
 Status (27 October 2026): done. All milestones are built and tested (468 tests). Phase 2 measurement, 4 sample datasets x 3 seeds at 300 s: the loop's final test scores matched FLAML alone on average (4 better, 4 equal, 4 worse) using about two thirds of the time (report notes, section 9.14).
 
-## Phase 3: Learning and evaluation (in progress)
+## Phase 3: Learning and evaluation (done, with shortened runs)
 
 Tasks 20 to 28: development and evaluation datasets (fixed in advance and kept apart), learned strategy choice (Thompson sampling and UCB1 over past outcomes from similar datasets), ablation switches, comparison systems (manual baseline, FLAML alone, AutoGluon), a resumable benchmark (5 seeds; budgets of 2 and 5 minutes, since the 10-minute budget was dropped on 27 October 2026 to fit the laptop), the statistics (Friedman and Nemenyi, Wilcoxon with Holm's correction, effect sizes, time-to-target), the judge agreement study, and the final documents.
 
-Status (28 October 2026): tasks 20 to 25 are built and tested (533 tests): the datasets, the learned strategy choice, the ablation switches, the comparison systems, the benchmark harness and its statistics. Of task 26, the frozen memory (27 October), the smoke run and the analysis code are done, and the benchmark has been running since 28 October 2026 (about a day); task 27's study is built and runs after the benchmark. Left: the results of both runs, and the final documents (task 28).
+Status (31 October 2026): tasks 20 to 28 are done (541 tests). The benchmark stopped after 33 of its 390 cells, when the laptop went into standby on battery; 23 cells are usable, and the user decided not to run the rest. The judge agreement study ran on 20 decisions instead of 57. Three flaws found in the records were fixed afterwards (report notes, chapter 10). Next, if wanted: the full benchmark on mains power, and the optional tasks below.
 
 ## Optional (after Phase 3)
 

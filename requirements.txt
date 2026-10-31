@@ -21,6 +21,9 @@ plotly==7.1.0
 # Static charts for the documentation and the report (scripts/plot_search_history.py)
 matplotlib==3.11.2
 
+# SMOTE for the optional smote Strategy (task 29, decision D3); adds sklearn-compat 0.1.6
+imbalanced-learn==0.14.2
+
 # Configuration (.env loading)
 python-dotenv==1.2.4
 

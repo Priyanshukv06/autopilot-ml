@@ -41,6 +41,7 @@ from app.services.evaluator import (
 )
 from app.services.experiment_tracker import ExperimentTracker
 from app.services.profiler import DatasetProfile, DatasetProfiler, analyze_class_balance
+from app.services.resampling import RESAMPLERS, make_resampler
 from app.services.search_summary import summarize_search
 from app.services.splits import OuterSplit, SplitError, make_outer_split
 from app.services.task_detector import TaskDetector, TaskType
@@ -168,6 +169,9 @@ class ExperimentConfig:
     search_space_limits: dict[str, dict[str, dict[str, float]]] = field(default_factory=dict)
     starting_points: dict[str, dict[str, Any]] | None = None  # learner family -> configuration
     max_iter: int | None = None  # fixed number of trials (tests only)
+    # None or a name of resampling.RESAMPLERS ("smote", optional Requirement 26): applied by FLAML to the
+    # training rows of each search fold and of the final model, and by the Assessor to each fold's training rows
+    resampler: str | None = None
 
     def setup(self) -> dict[str, Any]:
         """The settings that define the Setup, as JSON-safe values.
@@ -178,21 +182,22 @@ class ExperimentConfig:
         """
         task = self.task_type.value if isinstance(self.task_type, TaskType) else self.task_type
         steps = [step.to_dict() if hasattr(step, "to_dict") else step for step in self.data_steps]
-        return to_jsonable(
-            {
-                "target_column": self.target_column,
-                "task_type": task,
-                "primary_metric": self.primary_metric,
-                "random_seed": self.random_seed,
-                "test_size": self.test_size,
-                "excluded_columns": sorted(self.excluded_columns),
-                "estimator_list": sorted(self.estimator_list) if self.estimator_list else None,
-                "data_steps": steps,
-                "class_weight": self.class_weight,
-                "search_metric": self.search_metric,
-                "search_space_limits": self.search_space_limits or {},
-            }
-        )
+        setup = {
+            "target_column": self.target_column,
+            "task_type": task,
+            "primary_metric": self.primary_metric,
+            "random_seed": self.random_seed,
+            "test_size": self.test_size,
+            "excluded_columns": sorted(self.excluded_columns),
+            "estimator_list": sorted(self.estimator_list) if self.estimator_list else None,
+            "data_steps": steps,
+            "class_weight": self.class_weight,
+            "search_metric": self.search_metric,
+            "search_space_limits": self.search_space_limits or {},
+        }
+        if self.resampler is not None:  # only when set, so that earlier Setups keep their keys
+            setup["resampler"] = self.resampler
+        return to_jsonable(setup)
 
     def setup_key(self) -> str:
         """Short stable hash of ``setup()``: equal for two configs that define the same Setup."""
@@ -260,7 +265,11 @@ class AutoMLEngine(Protocol):
         n_jobs: int,
         sample_weight: np.ndarray | None = None,
     ) -> Any:
-        """Train exactly one configuration. Returns a model with predict (and predict_proba, classes_)."""
+        """Train exactly one configuration. Returns a model with predict (and predict_proba, classes_).
+
+        ``fit`` and ``fit_config`` may also take ``resampler`` (a name of ``resampling.RESAMPLERS``); it is
+        passed only when a Setup has one, so an engine that never resamples need not accept it.
+        """
         ...
 
 
@@ -411,6 +420,7 @@ class FLAMLEngine:
         search_space_limits: dict[str, dict[str, dict[str, float]]] | None = None,
         sample_weight: np.ndarray | None = None,
         max_iter: int | None = None,
+        resampler: str | None = None,
     ) -> EngineResult:
         """Run a FLAML search. With none of the optional arguments this is the Phase 1 search."""
         # FLAML imports MLflow; silence MLflow's import-time "agent hint" banner.
@@ -437,6 +447,8 @@ class FLAMLEngine:
             options["sample_weight"] = self._checked_weights(sample_weight, len(y_train))
         if max_iter is not None:
             options["max_iter"] = int(max_iter)
+        if resampler is not None:
+            options["resampler"] = make_resampler(resampler, seed)
 
         log_path = Path(work_dir) / "flaml_search.log"
         automl = AutoML()
@@ -514,6 +526,7 @@ class FLAMLEngine:
         seed: int,
         n_jobs: int,
         sample_weight: np.ndarray | None = None,
+        resampler: str | None = None,
     ) -> Any:
         """Train one learner family with one fixed configuration on all the given rows.
 
@@ -528,6 +541,8 @@ class FLAMLEngine:
         options: dict[str, Any] = {}
         if sample_weight is not None:
             options["sample_weight"] = self._checked_weights(sample_weight, len(y_train))
+        if resampler is not None:  # FLAML resamples the given rows (with max_iter=1: once, before training)
+            options["resampler"] = make_resampler(resampler, seed)
         automl = AutoML()
         try:
             automl.fit(
@@ -964,6 +979,8 @@ class AutoMLRunner:
             search_space_limits=config.search_space_limits or None,
             sample_weight=sample_weight,
             max_iter=config.max_iter,
+            # only when set, so that engines written before the option need not know it
+            **({"resampler": config.resampler} if config.resampler else {}),
         )
         warnings.extend(engine_result.warnings)
 
@@ -1119,6 +1136,11 @@ class AutoMLRunner:
             raise ExperimentError(f"Invalid Data_Step: {exc}") from exc
         if config.class_weight not in CLASS_WEIGHT_OPTIONS:
             raise ExperimentError(f"Unknown class weight option '{config.class_weight}'. Use None or 'balanced'.")
+        if config.resampler is not None:
+            if config.resampler not in RESAMPLERS:
+                raise ExperimentError(f"Unknown resampler '{config.resampler}'. Known: {', '.join(RESAMPLERS)}.")
+            if config.class_weight is not None:
+                raise ExperimentError("A resampler cannot be combined with class weights (FLAML allows only one).")
         if config.max_iter is not None and config.max_iter < 1:
             raise ExperimentError("max_iter must be at least 1.")
 
@@ -1154,6 +1176,8 @@ class AutoMLRunner:
             warnings.extend(metric_warnings(task_type, metric, analyze_class_balance(y)))
         elif config.class_weight is not None:
             raise ExperimentError("Class weights apply to classification tasks only.")
+        elif config.resampler is not None:
+            raise ExperimentError("Resampling applies to classification tasks only.")
         return X, y, task_type, metric, warnings
 
     @staticmethod
@@ -1297,6 +1321,7 @@ class AutoMLRunner:
             "excluded_columns": ",".join(result.excluded_columns) or "none",
             "search_metric": result.search_metric,
             "class_weight": result.setup.get("class_weight") or "none",
+            "resampler": result.setup.get("resampler") or "none",
             "search_space_limits": json.dumps(result.setup.get("search_space_limits") or {}, sort_keys=True),
             "data_steps": json.dumps(result.setup.get("data_steps") or []),
             "setup_key": result.setup_key,

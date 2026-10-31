@@ -299,7 +299,8 @@ def test_diagnoses_and_verdicts_replay_from_the_records(tmp_path):
     # over the folds, so the t-test is used: keep); step 3 tries class weights (worse: discard); step 4
     # tries the smoother search metric (equal scores, not simpler: discard). Then nothing is left.
     shifts = {1: 0.0, 2: 0.03 + 0.01 * np.cos(np.arange(15)), 3: -0.02}
-    result, record, engine, assessor, settings = run_session(tmp_path, experiments=6, shifts=shifts)
+    # 7 Experiments: since optional task 29, SMOTE is a fifth answer after the smoother search metric
+    result, record, engine, assessor, settings = run_session(tmp_path, experiments=7, shifts=shifts)
     folder = settings.experiments_dir
     profile = DatasetProfile.from_dict(
         json.loads((folder / result.session_id / "train_profile.json").read_text(encoding="utf-8")))
@@ -330,9 +331,12 @@ def test_diagnoses_and_verdicts_replay_from_the_records(tmp_path):
         replayed = judge.compare(accepted, candidate, step["proposal"]["complexity"] == "simpler").to_dict()
         assert replayed == step["decision"] == load(step["experiment_id"], "decision.json")
         checked += 1
-    assert checked == 4 and verdicts(record)[1:] == [("completed", "keep_simpler"), ("completed", "keep"),
-                                                     ("completed", "discard"), ("completed", "discard")]
+    assert checked == 5 and verdicts(record)[1:] == [("completed", "keep_simpler"), ("completed", "keep"),
+                                                     ("completed", "discard"), ("completed", "discard"),
+                                                     ("completed", "discard")]
     assert record["steps"][4]["proposal"]["spec"]["strategy_id"] == "smoother_search_metric"
     assert engine.fits[4]["metric"] == "log_loss"  # the search optimised log loss; the Judge compared F1
+    assert record["steps"][5]["proposal"]["spec"]["strategy_id"] == "smote"
+    assert engine.fits[5]["resampler"] == "smote" and "resampler" not in engine.fits[4]  # passed only when set
     assert record["steps"][2]["decision"]["p_better"] is not None  # the t-test was used
     assert result.stop_reason is StopReason.NO_PROPOSALS  # every Proposal was tried

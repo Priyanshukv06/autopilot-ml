@@ -100,7 +100,9 @@ RULES: dict[DiagnosisKind, tuple[Candidate, ...]] = {
     DiagnosisKind.OVERFITTING: (_single("regularised_search_space"), _drop_high_cardinality_columns),
     DiagnosisKind.UNDERFITTING: (_single("more_search_time"),),
     DiagnosisKind.BUDGET_LIMITED: (_single("more_search_time"),),
-    DiagnosisKind.CLASS_IMBALANCE: (_single("class_weight_balanced"), _single("smoother_search_metric")),
+    # smote (optional task 29) comes last, so the earlier candidates keep their positions
+    DiagnosisKind.CLASS_IMBALANCE: (_single("class_weight_balanced"), _single("smoother_search_metric"),
+                                    _single("smote")),
     DiagnosisKind.UNRELIABLE_VALIDATION: (_single("smoother_search_metric"),),
     DiagnosisKind.WEAK_MODEL_FAMILIES: (_keep_strong_families,),
 }

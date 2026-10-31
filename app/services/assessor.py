@@ -140,8 +140,10 @@ class Assessor:
         scores. Since 31 October 2026; before, the whole setup key was used, so a Setup that only searched
         fewer learners and found the same model was refitted 15 times for the same scores."""
         steps = [spec.to_dict() for spec in as_specs(config.data_steps)]
-        return json.dumps([[str(c) for c in columns], steps, config.class_weight, estimator, to_jsonable(best_config)],
-                          sort_keys=True)
+        parts = [[str(c) for c in columns], steps, config.class_weight, estimator, to_jsonable(best_config)]
+        if config.resampler is not None:  # the refits resample each fold's training rows
+            parts.append(config.resampler)
+        return json.dumps(parts, sort_keys=True)
 
     def cached(self, X_train: pd.DataFrame, config: ExperimentConfig, result: ExperimentResult) -> Assessment | None:
         return self._cache.get(self.refit_key(X_train.columns, config, result.best_estimator, result.best_config))
@@ -223,6 +225,8 @@ class Assessor:
             pipeline.transform(X_fit) if pipeline is not None else X_fit, y_fit, task_type=self.task_type,
             estimator=result.best_estimator, config=result.best_config, seed=self.seed, n_jobs=self.n_jobs,
             sample_weight=weights,
+            # the fold's training rows only: the validation rows below are scored as they are (Requirement 26.1)
+            **({"resampler": config.resampler} if config.resampler else {}),
         )
         if pipeline is not None:  # scored, like the search's model, on the original columns
             model = PipelineModel(pipeline, model)

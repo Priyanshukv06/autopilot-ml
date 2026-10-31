@@ -6,7 +6,8 @@ Setup (an ``ExperimentConfig``), never changing the one it was given. Strategies
 
 The catalogue has the nine Strategies of design.md: drop_columns, class_weight_balanced and
 regularised_search_space (thin version, task 7), and frequency_encode, group_rare_categories,
-missing_indicator, restrict_model_families, more_search_time and smoother_search_metric (task 14).
+missing_indicator, restrict_model_families, more_search_time and smoother_search_metric (task 14);
+and the optional smote (task 29).
 """
 
 from __future__ import annotations
@@ -151,7 +152,8 @@ class ClassWeightBalanced:
 
     def applicable(self, config, profile, task_type, params) -> bool:
         _no_params(self.strategy_id, params)
-        return task_type.is_classification and config.class_weight != "balanced"
+        # FLAML does not allow sample weights together with a resampler
+        return task_type.is_classification and config.class_weight != "balanced" and config.resampler is None
 
     def apply(self, config, params) -> ExperimentConfig:
         _no_params(self.strategy_id, params)
@@ -159,6 +161,28 @@ class ClassWeightBalanced:
 
     def describe(self, params) -> str:
         return "Weight the training rows so that every class counts equally"
+
+
+class Smote:
+    """SMOTE oversampling of the smaller classes (optional Requirement 26), through FLAML's ``resampler``:
+    only training rows are resampled, in the search and in every refit of the Assessor."""
+
+    strategy_id = "smote"
+    title = "SMOTE oversampling"
+    kind: Kind = "data"
+    complexity: Complexity = "more_complex"
+    cost_class: CostClass = "normal"
+
+    def applicable(self, config, profile, task_type, params) -> bool:
+        _no_params(self.strategy_id, params)
+        return task_type.is_classification and config.class_weight is None and config.resampler is None
+
+    def apply(self, config, params) -> ExperimentConfig:
+        _no_params(self.strategy_id, params)
+        return _copy(config, resampler="smote")
+
+    def describe(self, params) -> str:
+        return "Add synthetic training rows of the smaller classes (SMOTE) until every class is as large as the largest"
 
 
 def merge_limits(current: dict[str, dict[str, dict[str, float]]],
@@ -345,6 +369,7 @@ CATALOGUE: dict[str, Strategy] = {
     for strategy in (
         DropColumns(), ClassWeightBalanced(), RegularisedSearchSpace(), FrequencyEncode(), GroupRareCategories(),
         MissingIndicator(), RestrictModelFamilies(), MoreSearchTime(), SmootherSearchMetric(),
+        Smote(),  # optional task 29
     )
 }
 

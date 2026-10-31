@@ -48,6 +48,7 @@ def test_the_catalogue():
         "restrict_model_families": ("model", "simpler", "cheap"),
         "more_search_time": ("budget", "same", "expensive"),
         "smoother_search_metric": ("search", "same", "normal"),
+        "smote": ("data", "more_complex", "normal"),  # optional task 29
     }
     assert all(s.title for s in CATALOGUE.values())
     with pytest.raises(ValueError, match="Unknown strategy"):

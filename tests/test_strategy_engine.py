@@ -38,6 +38,7 @@ def group(column):
 SMALLER = StrategySpec("regularised_search_space", {}).key()
 WEIGHTS = StrategySpec("class_weight_balanced", {}).key()
 SMOOTHER = StrategySpec("smoother_search_metric", {}).key()
+SMOTE = StrategySpec("smote", {}).key()  # optional task 29: the last answer to class imbalance
 
 
 @pytest.fixture(scope="module")
@@ -90,9 +91,10 @@ def test_class_imbalance_gets_class_weights_for_classification_only():
     imbalance = [diagnosis(K.CLASS_IMBALANCE, S.MODERATE, ["y"])]
     config = ExperimentConfig(target_column="y")
     binary = propose(imbalance, config, p, TaskType.BINARY, tried=set())
-    assert [pr.spec.key() for pr in binary] == [WEIGHTS, SMOOTHER] and binary[0].answers == (K.CLASS_IMBALANCE,)
+    assert [pr.spec.key() for pr in binary] == [WEIGHTS, SMOOTHER, SMOTE] and binary[0].answers == (K.CLASS_IMBALANCE,)
     assert propose(imbalance, config, p, TaskType.REGRESSION, tried=set()) == []
     weighted = ExperimentConfig(target_column="y", class_weight="balanced")
+    # class weights and SMOTE exclude each other (FLAML allows only one)
     assert [pr.spec.key() for pr in propose(imbalance, weighted, p, TaskType.BINARY, tried=set())] == [SMOOTHER]
 
 
@@ -101,7 +103,8 @@ def test_ranking_severity_before_table_order(titanic_profile):
     diagnoses = [diagnosis(K.HIGH_CARDINALITY, S.MODERATE, ["Cabin"]), diagnosis(K.CLASS_IMBALANCE, S.HIGH, ["Survived"])]
     proposals = propose(diagnoses, TITANIC_CONFIG, titanic_profile, TaskType.BINARY, tried=set())
     # The high Diagnosis's Proposals come first even though the smoother metric costs more than dropping Cabin.
-    assert [p.spec.key() for p in proposals] == [WEIGHTS, SMOOTHER, drop("Cabin"), encode("Cabin"), group("Cabin")]
+    assert [p.spec.key() for p in proposals] == [WEIGHTS, SMOOTHER, SMOTE, drop("Cabin"), encode("Cabin"),
+                                                 group("Cabin")]
 
 
 def test_rules_selector_orders_by_severity_cost_position_then_key():
@@ -214,5 +217,6 @@ def test_a_treated_column_is_not_encoded_again(mixed):
 def test_costs_order_proposals_of_the_same_severity(mixed):
     diagnoses = [diagnosis(K.UNDERFITTING, S.MODERATE), diagnosis(K.CLASS_IMBALANCE, S.MODERATE, ["y"]),
                  diagnosis(K.IDENTIFIER_COLUMN, S.MODERATE, ["row_id"])]
-    # cheap (drop row_id, class weights) before normal (smoother metric) before expensive (more search time)
-    assert keys(diagnoses, mixed) == [drop("row_id"), WEIGHTS, SMOOTHER, spec("more_search_time")]
+    # cheap (drop row_id, class weights) before normal (smoother metric, then SMOTE by table position) before
+    # expensive (more search time)
+    assert keys(diagnoses, mixed) == [drop("row_id"), WEIGHTS, SMOOTHER, SMOTE, spec("more_search_time")]

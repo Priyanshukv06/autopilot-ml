@@ -60,19 +60,29 @@ CLASS_WEIGHT_OPTIONS = (None, "balanced")
 #   during fit (dozens of times during permutation importance). The runner reports this once
 #   per column instead, see `unseen_category_warnings`.
 # - ConvergenceWarning from the short linear-model trials FLAML runs on purpose.
+# - scikit-learn's "`sklearn.utils.parallel.delayed` should be used with `sklearn.utils.parallel.Parallel`"
+#   (added 31 October 2026). scikit-learn shows it when a job finds the warning filters it was given
+#   empty; the reset described below can empty them while another thread hands out jobs. This is the
+#   likely cause, not a confirmed one (a test with threads did not reproduce it). The project sets no
+#   scikit-learn configuration, so the jobs compute the same; the warning only filled a smoke run's
+#   log with about 37,800 lines.
 # A warnings filter alone is not enough: scikit-learn's joblib wrapper calls
 # warnings.resetwarnings() inside worker threads, and since the filter list is shared by the
-# whole process this can wipe it in the middle of a search. Dropping these two in
-# showwarning() as well survives that reset.
+# whole process this can wipe it in the middle of a search. Dropping these in showwarning()
+# as well survives that reset.
 _UNSEEN_CATEGORY_MESSAGE = re.compile(r"Column '.*' contains values unseen at fit time")
+_PARALLEL_CONFIG_MESSAGE = re.compile(r"`sklearn\.utils\.parallel\.delayed` should be used with")
 py_warnings.filterwarnings("ignore", message=_UNSEEN_CATEGORY_MESSAGE.pattern, category=UserWarning)
+py_warnings.filterwarnings("ignore", message=_PARALLEL_CONFIG_MESSAGE.pattern, category=UserWarning)
 _default_showwarning = py_warnings.showwarning
 
 
 def _is_search_noise(message: Any, category: type) -> bool:
     if issubclass(category, ConvergenceWarning):
         return True
-    return issubclass(category, UserWarning) and bool(_UNSEEN_CATEGORY_MESSAGE.match(str(message)))
+    text = str(message)
+    return issubclass(category, UserWarning) and bool(_UNSEEN_CATEGORY_MESSAGE.match(text)
+                                                      or _PARALLEL_CONFIG_MESSAGE.match(text))
 
 
 def _showwarning_without_search_noise(message, category, filename, lineno, file=None, line=None):  # noqa: ANN001

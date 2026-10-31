@@ -187,6 +187,10 @@ def test_search_noise_is_recognised():
     assert _is_search_noise("The max_iter was reached", ConvergenceWarning)
     assert not _is_search_noise("Something else went wrong", UserWarning)
     assert not _is_search_noise("Column 'x' contains values unseen at fit time", DeprecationWarning)
+    # scikit-learn's false alarm when its warning filters were emptied by another thread (31 October 2026)
+    parallel = ("`sklearn.utils.parallel.delayed` should be used with `sklearn.utils.parallel.Parallel` to make it "
+                "possible to propagate the scikit-learn configuration of the current thread to the joblib workers.")
+    assert _is_search_noise(parallel, UserWarning) and not _is_search_noise(parallel, DeprecationWarning)
 
 
 def test_unseen_category_warnings():

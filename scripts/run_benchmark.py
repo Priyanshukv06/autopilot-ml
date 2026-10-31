@@ -10,8 +10,10 @@ From the project root:
 FILE is the frozen Experiment_Memory, built from development datasets only. The systems' records go to
 experiments/benchmark/ and models/benchmark/ (benchmark-smoke/ for the smoke setting), and one row per
 finished cell to results/benchmark/benchmark_cells.csv (results/benchmark/smoke/). Use --project-root with
-a temporary folder for a trial. While it runs, the script asks Windows not to sleep; that request ends
-with the process.
+a temporary folder for a trial. While it runs, the script asks Windows not to sleep and to keep the screen
+on; that request ends with the process. It waits while the laptop is on battery, and a cell that ends on
+battery is listed in excluded_cells.csv next to the rows, so it is not scored and runs again. Rows listed
+there are left out of status and analyse.
 """
 
 from __future__ import annotations
@@ -45,12 +47,20 @@ def run(args: argparse.Namespace) -> None:
     if problems:
         sys.exit("Not started:\n- " + "\n- ".join(problems))
     settings, rows_path = benchmark.folders(Path(args.project_root), smoke=args.smoke)
-    todo = benchmark.pending(grid, benchmark.read_cells(rows_path), args.retry_failed)
+    todo = benchmark.pending(grid, usable_rows(rows_path), args.retry_failed)
     print(f"{len(grid)} cells in the grid, {len(grid) - len(todo)} already done, {len(todo)} to run; rows go to "
           f"{rows_path}", flush=True)
     keep_awake()
     benchmark.run(grid, settings, rows_path, memory_path=memory, n_jobs=args.cores, retry_failed=args.retry_failed,
-                  limit=args.limit, report=report)
+                  limit=args.limit, report=report, power=benchmark.on_battery,
+                  on_wait=lambda: print("The laptop is on battery: waiting for mains power before the next cell",
+                                        flush=True))
+
+
+def usable_rows(rows_path: Path) -> list[dict]:
+    """The rows of the rows file without those listed in the exclusions file next to it."""
+    return benchmark.usable(benchmark.read_cells(rows_path),
+                            benchmark.read_exclusions(rows_path.with_name(benchmark.EXCLUSIONS_FILE)))
 
 
 def report(row: dict, number: int, total: int, seconds_left: float) -> None:
@@ -64,7 +74,7 @@ def report(row: dict, number: int, total: int, seconds_left: float) -> None:
 def status(args: argparse.Namespace) -> None:
     grid = cells(args)
     _, rows_path = benchmark.folders(Path(args.project_root), smoke=args.smoke)
-    rows = benchmark.read_cells(rows_path)
+    rows = usable_rows(rows_path)
     last = benchmark.latest(rows)
     in_grid = [last[c.cell_id] for c in grid if c.cell_id in last]
     failed = [r for r in in_grid if r["status"] != "completed"]
@@ -85,7 +95,7 @@ def analyse(args: argparse.Namespace) -> None:
     from research import benchmark_analysis
 
     _, rows_path = benchmark.folders(Path(args.project_root), smoke=args.smoke)
-    rows = benchmark.read_cells(rows_path)
+    rows = usable_rows(rows_path)
     if not rows:
         sys.exit(f"No rows in {rows_path} yet: run 'run' first.")
     result = benchmark_analysis.analyse(rows, args.budgets, args.ablation_budget)
@@ -99,12 +109,14 @@ def analyse(args: argparse.Namespace) -> None:
 
 
 def keep_awake() -> None:
-    """Ask Windows not to sleep while this process runs (SetThreadExecutionState; it ends with the process)."""
+    """Ask Windows not to sleep and to keep the screen on while this process runs (SetThreadExecutionState; it
+    ends with the process). On laptops with Modern Standby the screen turning off starts the standby, so asking
+    only for the system (as before 31 October 2026) did not keep the run going."""
     if os.name == "nt":
         import ctypes
 
-        es_continuous, es_system_required = 0x80000000, 0x00000001
-        ctypes.windll.kernel32.SetThreadExecutionState(es_continuous | es_system_required)
+        es_continuous, es_system_required, es_display_required = 0x80000000, 0x00000001, 0x00000002
+        ctypes.windll.kernel32.SetThreadExecutionState(es_continuous | es_system_required | es_display_required)
 
 
 def main() -> None:

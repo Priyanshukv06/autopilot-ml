@@ -56,6 +56,9 @@ SMOKE_DATASET = "titanic"
 SMOKE_SEED = 1
 MEMORY_SYSTEMS = tuple(name for name, options in AUTOPILOT_VARIANTS.items() if options.get("use_memory"))
 ROWS_FILE = "benchmark_cells.csv"
+EXCLUSIONS_FILE = "excluded_cells.csv"  # rows that must not be scored, with the reason (next to the rows file)
+EXCLUSION_COLUMNS = ("cell_id", "finished_at", "reason")
+POWER_POLL_SECONDS = 30
 
 COLUMNS = (
     "cell_id", "system", "dataset", "task_type", "metric", "budget_seconds", "seed", "status", "test_score",
@@ -202,6 +205,60 @@ def read_cells(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def read_exclusions(path: Path) -> dict[tuple[str, str], str]:
+    """(cell_id, finished_at) of each excluded row, with its reason. Rows are never edited; a row that must not
+    be scored (for example one measured while the laptop was on battery) is listed here instead."""
+    if not path.exists() or path.stat().st_size == 0:
+        return {}
+    frame = pd.read_csv(path, dtype=str).fillna("")
+    return {(r["cell_id"], r["finished_at"]): r["reason"] for r in frame.to_dict("records")}
+
+
+def add_exclusion(path: Path, row: dict[str, Any], reason: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    header = not path.exists() or path.stat().st_size == 0
+    line = {"cell_id": row["cell_id"], "finished_at": str(row["finished_at"]), "reason": reason}
+    text = pd.DataFrame([line], columns=list(EXCLUSION_COLUMNS)).to_csv(index=False, header=header,
+                                                                         lineterminator="\n")
+    with path.open("a", encoding="utf-8", newline="") as file:
+        file.write(text)
+
+
+def usable(rows: Iterable[dict[str, Any]], exclusions: dict[tuple[str, str], str]) -> list[dict[str, Any]]:
+    """The rows that are not excluded; an excluded cell counts as not run, so it runs again."""
+    return [r for r in rows if (r["cell_id"], str(r["finished_at"])) not in exclusions]
+
+
+def on_battery() -> bool | None:
+    """True on battery, False on mains power, None when unknown (not Windows, or no answer)."""
+    if os.name != "nt":
+        return None
+    import ctypes
+
+    class PowerStatus(ctypes.Structure):
+        _fields_ = [("ACLineStatus", ctypes.c_ubyte), ("BatteryFlag", ctypes.c_ubyte),
+                    ("BatteryLifePercent", ctypes.c_ubyte), ("SystemStatusFlag", ctypes.c_ubyte),
+                    ("BatteryLifeTime", ctypes.c_ulong), ("BatteryFullLifeTime", ctypes.c_ulong)]
+
+    status = PowerStatus()
+    if not ctypes.windll.kernel32.GetSystemPowerStatus(ctypes.byref(status)):
+        return None
+    return {0: True, 1: False}.get(status.ACLineStatus)
+
+
+def wait_for_power(power: Callable[[], bool | None] = on_battery, sleep: Callable[[float], None] = time.sleep,
+                   on_wait: Callable[[], None] | None = None, poll_seconds: float = POWER_POLL_SECONDS) -> float:
+    """Wait while the laptop runs on battery (Windows slows it down and puts it into standby there, which
+    would cut time-limited searches short); returns the seconds waited."""
+    waited = 0.0
+    while power() is True:
+        if waited == 0 and on_wait is not None:
+            on_wait()
+        sleep(poll_seconds)
+        waited += poll_seconds
+    return waited
+
+
 def check_rows_file(path: Path) -> None:
     """Refuse a rows file whose header is not ``COLUMNS`` or whose last line was cut off."""
     if not path.exists() or path.stat().st_size == 0:
@@ -234,18 +291,24 @@ def latest(rows: Iterable[dict[str, Any]]) -> dict[str, dict[str, Any]]:
 def run(cells: Sequence[Cell], settings: Settings, rows_path: Path, *, memory_path: Path | None = None,
         n_jobs: int = -1, make: Callable[[str], System] | None = None,
         load: Callable[[str], Dataset] = load_dataset, retry_failed: bool = False, limit: int = 0,
-        report: Callable[[dict[str, Any], int, int, float], None] | None = None) -> list[dict[str, Any]]:
-    """Run the cells that have no row yet, each written as one row when it finishes; returns the new rows.
+        report: Callable[[dict[str, Any], int, int, float], None] | None = None,
+        power: Callable[[], bool | None] | None = None, sleep: Callable[[float], None] = time.sleep,
+        on_wait: Callable[[], None] | None = None) -> list[dict[str, Any]]:
+    """Run the cells that have no usable row yet, each written as one row when it finishes; returns the new rows.
 
     ``report(row, number, total, seconds_left)`` is called after each cell; ``seconds_left`` is an estimate
-    from the wall times measured so far.
+    from the wall times measured so far. With ``power`` (for example ``on_battery``; the command line passes
+    it), the run waits before each cell while the laptop is on battery, and a cell that ends on battery is
+    written and also listed in the exclusions file, so it is not scored and runs again.
     """
     check_rows_file(rows_path)
-    rows = read_cells(rows_path)
+    exclusions_path = rows_path.with_name(EXCLUSIONS_FILE)
+    all_rows = read_cells(rows_path)
+    rows = usable(all_rows, read_exclusions(exclusions_path))
     memory_file = Path(memory_path) if memory_path else settings.experiments_dir / "memory" / "empty.jsonl"
     memory = ExperimentMemory(memory_file, read_only=True)
     memory_hash = memory.snapshot_hash()
-    earlier = {r["memory_hash"] for r in rows if r.get("memory_hash")} - {memory_hash}
+    earlier = {r["memory_hash"] for r in all_rows if r.get("memory_hash")} - {memory_hash}
     if earlier:
         raise ValueError(f"The rows in {rows_path} were made with another memory (SHA-256 {sorted(earlier)[0]}); "
                          f"this one is {memory_hash}. Use the same frozen memory, or a new folder.")
@@ -262,10 +325,16 @@ def run(cells: Sequence[Cell], settings: Settings, rows_path: Path, *, memory_pa
     for number, cell in enumerate(todo, start=1):
         if cell.dataset not in loaded:
             loaded[cell.dataset] = load(cell.dataset)
+        waited = wait_for_power(power, sleep, on_wait) if power is not None else 0.0
         row = run_cell(cell, loaded[cell.dataset], make(cell.system), settings, n_jobs=n_jobs, context=context)
         if memory.snapshot_hash() != memory_hash:  # checked before the row is written, so this cell runs again
             raise RuntimeError(f"The memory file {memory_file} changed during the run; it must stay frozen.")
+        ended_on_battery = power is not None and power() is True
+        row["details"] = json.dumps({**json.loads(row["details"]), "harness": {
+            "waited_for_power_seconds": waited, "on_battery_at_end": ended_on_battery}}, sort_keys=True, default=str)
         append_row(rows_path, row)
+        if ended_on_battery:
+            add_exclusion(exclusions_path, row, "the laptop was on battery at the end of the cell")
         written.append(row)
         if report is not None:
             report(row, number, len(todo), estimate_seconds(todo[number:], [*rows, *written]))
@@ -372,5 +441,6 @@ def _now() -> str:
     return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
 
 
-__all__ = ["ABLATIONS", "BUDGETS", "COLUMNS", "Cell", "Dataset", "MAIN_SYSTEMS", "SEEDS", "folders", "grid",
-           "latest", "load_dataset", "pending", "preflight", "read_cells", "run", "smoke_grid", "timing"]
+__all__ = ["ABLATIONS", "BUDGETS", "COLUMNS", "Cell", "Dataset", "EXCLUSIONS_FILE", "MAIN_SYSTEMS", "SEEDS",
+           "add_exclusion", "folders", "grid", "latest", "load_dataset", "on_battery", "pending", "preflight",
+           "read_cells", "read_exclusions", "run", "smoke_grid", "timing", "usable", "wait_for_power"]

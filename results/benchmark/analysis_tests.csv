@@ -1,0 +1,4 @@
+family,budget_seconds,systems,datasets,blocks,friedman_chi2,friedman_p,iman_davenport_f,iman_davenport_p,nemenyi_cd,cliques
+main,120,5,2,2,4.8888888888888955,0.2988893570768667,1.571428571428577,0.3360768175582979,4.312989977491623,autopilot_full = manual = flaml = autopilot_rules = autogluon
+main,300,5,2,2,5.1578947368421115,0.27147678698132305,1.814814814814821,0.2889588496865422,4.312989977491623,autopilot_full = manual = autopilot_rules = flaml = autogluon
+ablations,300,5,1,1,,,,,,

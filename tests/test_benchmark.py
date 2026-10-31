@@ -262,3 +262,33 @@ def test_a_real_cell_with_the_manual_system(where):
     assert all(row[f"test_{m}"] is not None for m in ("accuracy", "balanced_accuracy", "f1", "roc_auc", "log_loss"))
     assert all(row[f"test_{m}"] is None for m in ("mae", "mse", "rmse", "r2"))
     assert json.loads(row["system_settings"])["config"] == LIGHTGBM_DEFAULTS
+
+
+# --------------------------------------------------------------------------- power and excluded rows
+def test_the_run_waits_while_on_battery_and_excludes_a_cell_that_ends_on_battery(where):
+    answers = iter([True, True, False, False, False, True])  # wait twice, then: cell 1 ends on AC, cell 2 on battery
+    naps, waits, calls = [], [], []
+    rows = run(SMALL[:2], where, calls, power=lambda: next(answers), sleep=naps.append,
+               on_wait=lambda: waits.append(1))
+    assert calls == [c.cell_id for c in SMALL[:2]] and naps == [30, 30] and waits == [1]  # one message per wait
+    first, second = (json.loads(r["details"])["harness"] for r in rows)
+    assert first == {"waited_for_power_seconds": 60.0, "on_battery_at_end": False}
+    assert second == {"waited_for_power_seconds": 0.0, "on_battery_at_end": True}
+    exclusions = benchmark.read_exclusions(where[1].with_name(benchmark.EXCLUSIONS_FILE))
+    assert list(exclusions) == [(rows[1]["cell_id"], rows[1]["finished_at"])]
+    again = []
+    run(SMALL[:2], where, again, power=lambda: False)
+    assert again == [SMALL[1].cell_id]  # the excluded cell runs again; both rows stay in the file
+    assert len(benchmark.read_cells(where[1])) == 3 and benchmark.wait_for_power(lambda: None) == 0.0
+
+
+def test_excluded_rows_are_left_out(tmp_path):
+    rows = [{"cell_id": "a", "finished_at": "t1"}, {"cell_id": "a", "finished_at": "t2"},
+            {"cell_id": "b", "finished_at": "t1"}]
+    path = tmp_path / benchmark.EXCLUSIONS_FILE
+    assert benchmark.read_exclusions(path) == {} and benchmark.usable(rows, {}) == rows
+    benchmark.add_exclusion(path, rows[1], "on battery")
+    benchmark.add_exclusion(path, rows[2], "in standby, with a comma")
+    exclusions = benchmark.read_exclusions(path)
+    assert exclusions == {("a", "t2"): "on battery", ("b", "t1"): "in standby, with a comma"}
+    assert benchmark.usable(rows, exclusions) == [rows[0]]

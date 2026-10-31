@@ -1,0 +1,11 @@
+family,budget_seconds,system,average_rank
+main,120,autopilot_full,2.0
+main,120,manual,2.5
+main,120,flaml,2.5
+main,120,autopilot_rules,3.0
+main,120,autogluon,5.0
+main,300,autopilot_full,1.75
+main,300,manual,2.5
+main,300,autopilot_rules,2.5
+main,300,flaml,3.25
+main,300,autogluon,5.0

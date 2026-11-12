@@ -136,6 +136,12 @@ def test_an_autonomous_run_shows_its_steps_and_the_final_comparison(project):
     if judged:
         assert len(memory[0]) == len(judged)  # one memory record per Verdict, shown for this dataset
     assert (project.experiments_dir / record["session_id"] / "session.json").exists()
+    # SHAP of the final model, computed on request on Training_Part rows (optional task 32)
+    assert "#### What the final model looks at (SHAP)" in texts(at.markdown)
+    at.button(key="auto_shap").click().run()
+    assert not at.error and "explainer for" in texts(at.caption)
+    at.number_input(key="auto_shap_row").set_value(3).run()
+    assert not at.error and "Row label" in texts(at.caption)
 
 
 def test_a_failed_session_is_shown_as_an_error(project, monkeypatch):

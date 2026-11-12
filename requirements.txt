@@ -24,6 +24,10 @@ matplotlib==3.11.2
 # SMOTE for the optional smote Strategy (task 29, decision D3); adds sklearn-compat 0.1.6
 imbalanced-learn==0.14.2
 
+# SHAP explanations of a Session's final model (optional task 32); adds slicer 0.0.8, numba 0.68.1
+# and llvmlite 0.50.0
+shap==0.51.0
+
 # Configuration (.env loading)
 python-dotenv==1.2.4
 

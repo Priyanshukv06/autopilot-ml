@@ -34,6 +34,7 @@ from app.services.automl_runner import ExperimentConfig
 from app.services.autopilot import SELECTORS, AutopilotSession, SessionSettings
 from app.services.evaluator import METRICS, PRIMARY_METRICS, metric_display_name, metric_warnings
 from app.services.experiment_memory import ExperimentMemory, dataset_fingerprint
+from app.services.explainer import MAX_ROWS, TOP_COLUMNS, explain_session
 from app.services.judge import JudgeSettings
 from app.services.resource_manager import SessionBudget
 from app.services.task_detector import TaskType
@@ -42,6 +43,7 @@ logger = get_logger(__name__)
 
 ACTIVE_SESSION_KEY = "active_session"
 LAST_SESSION_KEY = "last_session"
+SHAP_KEY = "session_shap"  # + the session ID: the SHAP explanation of that Session's final model
 REFRESH_SECONDS = 1.0
 ALPHAS = (0.05, 0.10, 0.20)  # the values compared by the judge study
 REPEATS = (1, 3, 5)
@@ -230,7 +232,7 @@ def render_session_run(df: pd.DataFrame | None, plan: SessionSettings | None, se
             st.rerun()
     finished: FinishedSession | None = st.session_state.get(LAST_SESSION_KEY)
     if finished is not None:
-        _render_finished(finished, settings)
+        _render_finished(finished, settings, df)
 
 
 @st.fragment(run_every=REFRESH_SECONDS)
@@ -260,7 +262,7 @@ def _live_view(settings: Settings) -> None:
         _render_steps(record, settings)
 
 
-def _render_finished(finished: FinishedSession, settings: Settings) -> None:
+def _render_finished(finished: FinishedSession, settings: Settings, df: pd.DataFrame | None = None) -> None:
     record = finished.record
     if finished.error is not None:
         st.error(finished.error)
@@ -279,10 +281,51 @@ def _render_finished(finished: FinishedSession, settings: Settings) -> None:
     st.success(f"{record['session_id']} finished: {_count(len(record['steps']), 'Experiment', 'Experiments')} in "
                f"{record['total_seconds']:.0f} s. It stopped because {stop_reason_text(record)}.")
     _render_final_comparison(record, settings)
+    _render_shap(record, df, settings)
     st.markdown("#### How the Session got there")
     _render_steps(record, settings)
     st.caption(f"Record: {settings.experiments_dir / record['session_id'] / 'session.json'} · "
                f"budget {budget['total_seconds']:.0f} s, at most {budget['max_experiments']} Experiments")
+
+
+def _render_shap(record: dict[str, Any], df: pd.DataFrame | None, settings: Settings) -> None:
+    """SHAP summaries of the final model, on Training_Part rows (optional task 32), computed on request."""
+    st.markdown("#### What the final model looks at (SHAP)")
+    if df is None:
+        st.caption("Load the Session's dataset above to explain its final model.")
+        return
+    key = f"{SHAP_KEY}::{record['session_id']}"
+    explanation = st.session_state.get(key)
+    if explanation is None:
+        st.caption(f"SHAP splits each prediction of the final model into one contribution per input column. It "
+                   f"uses at most {MAX_ROWS} rows of the training part; the test part is not used.")
+        if not st.button("Explain the final model", key="auto_shap"):
+            return
+        with st.spinner("Computing SHAP values"):
+            try:
+                explanation = explain_session(record, df, settings)
+            except Exception as exc:  # shown on the page; the Session itself is not affected
+                logger.exception("SHAP failed for %s", record["session_id"])
+                st.error(f"SHAP could not be computed: {exc}")
+                return
+        st.session_state[key] = explanation
+    output = 0
+    if len(explanation.outputs) > 1:
+        output = st.selectbox("Class", range(len(explanation.outputs)), key="auto_shap_class",
+                              format_func=lambda i: explanation.outputs[i])
+    top = explanation.importance(output).head(TOP_COLUMNS).iloc[::-1]
+    figure = go.Figure(go.Bar(x=top["mean_abs_shap"], y=top["column"], orientation="h"))
+    figure.update_layout(height=max(250, 24 * len(top) + 80), margin=dict(t=40, b=10),
+                         title=f"Mean |SHAP value| over {len(explanation.row_labels)} training rows "
+                               f"({explanation.units} of {explanation.outputs[output]})")
+    st.plotly_chart(figure, width="stretch")
+    st.caption(f"{explanation.method.capitalize()} explainer for {explanation.estimator}, "
+               f"{explanation.seconds:.1f} s. The columns are the model's own inputs, after the Data_Steps.")
+    position = int(st.number_input("One training row (position among the explained rows)", min_value=0,
+                                   max_value=len(explanation.row_labels) - 1, value=0, key="auto_shap_row"))
+    st.dataframe(explanation.row(position, output).head(TOP_COLUMNS), hide_index=True, width="stretch")
+    st.caption(f"Row label {explanation.row_labels[position]}: the contributions add up to this row's prediction "
+               f"minus the average prediction, {explanation.base_values[output]:.3f} ({explanation.units}).")
 
 
 # --------------------------------------------------------------------- the Session view

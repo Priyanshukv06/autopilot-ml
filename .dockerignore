@@ -1,0 +1,17 @@
+# Keep results, caches and the git history out of the image (optional task 35)
+.git
+.gitignore
+.pytest_cache
+**/__pycache__
+**/*.pyc
+.env
+experiments/
+models/
+mlruns/
+mlflow.db
+data/raw/
+data/processed/
+results/
+docs/
+tests/
+*.log

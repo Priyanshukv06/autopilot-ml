@@ -28,6 +28,13 @@ imbalanced-learn==0.14.2
 # and llvmlite 0.50.0
 shap==0.51.0
 
+# Local HTTP API (optional task 35); fastapi and uvicorn were already installed with mlflow.
+# httpx2 is for FastAPI's test client (Starlette 1.7 deprecates plain httpx); adds httpcore2 2.16.0
+# and truststore 0.10.5
+fastapi==0.142.2
+uvicorn==0.54.0
+httpx2==2.16.0
+
 # Configuration (.env loading)
 python-dotenv==1.2.4
 

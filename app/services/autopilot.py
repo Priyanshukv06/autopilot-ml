@@ -245,7 +245,9 @@ class AutopilotSession:
             raise ExperimentError(str(exc)) from exc
         if group is not None:
             notes = [*notes, f"Rows are grouped by '{group}', which is left out of the features."]
-        profile = DatasetProfiler().profile(train_frame, base.target_column, base.dataset_name, task_type)
+        # with the single-column check of the Training_Part, for the possible_leakage warning (optional task 33)
+        profile = DatasetProfiler().profile(train_frame, base.target_column, base.dataset_name, task_type,
+                                            check_leakage=True)
 
         # 2. Records.
         session_id = self.tracker.allocate_session_id()

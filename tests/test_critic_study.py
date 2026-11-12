@@ -5,7 +5,7 @@ import pytest
 from sklearn.linear_model import LogisticRegression
 
 from app.services.automl_runner import EngineResult
-from app.services.critic import CriticThresholds
+from app.services.critic import OPTIONAL_THRESHOLDS, CriticThresholds
 from research import critic_study as cs
 
 
@@ -106,7 +106,8 @@ def test_the_thresholds_file_text_loads(tmp_path):
     path = tmp_path / "thresholds.toml"
     path.write_text(cs.thresholds_toml(cs.V0_START, "v-test", "a note\nover two lines"), encoding="utf-8")
     loaded = CriticThresholds.load(path)
-    assert loaded.version == "v-test" and loaded.values == cs.V0_START
+    # thresholds of rules added after the study keep their defaults (optional task 33)
+    assert loaded.version == "v-test" and loaded.values == {**cs.V0_START, **OPTIONAL_THRESHOLDS}
 
 
 def _tables(values):

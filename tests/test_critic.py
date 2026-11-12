@@ -11,6 +11,7 @@ import pytest
 from app.services.assessor import Assessment, FoldScore
 from app.services.automl_runner import ExperimentConfig
 from app.services.critic import (
+    OPTIONAL_THRESHOLDS,
     Critic,
     CriticThresholds,
     DiagnosisKind,
@@ -244,6 +245,8 @@ def test_default_thresholds_file_has_the_frozen_study_values():
         "redundant_features.moderate_correlation": 0.95, "redundant_features.high_correlation": 0.99,
         "unreliable_validation.moderate_std": 0.05, "unreliable_validation.high_std": 0.08,
         "weak_model_families.min_gap": 0.10, "weak_model_families.min_time_share": 0.05,
+        # not in the frozen file: the default of a later rule (optional task 33)
+        "possible_leakage.min_score": OPTIONAL_THRESHOLDS["possible_leakage.min_score"],
     }
 
 
@@ -496,13 +499,15 @@ def test_every_kind_in_table_order():
              for i in range(6)]
     search = summary(gain=0.03, share=0.8, best={"xgboost": 0.8, "sgd": 0.5}, seconds={"xgboost": 10.0, "sgd": 10.0})
     # Some kinds come more than once (age is also constant apart from its empty cells; x, row_id and twin
-    # are three correlated pairs; code and title are both high-cardinality), but always together, in the
-    # order of the table.
-    kinds = list(dict.fromkeys(d.kind for d in diagnose(profile_of(df), folds, search=search)))
+    # are three correlated pairs; code and title are both high-cardinality; the target is sorted, so x,
+    # row_id and twin each give it away), but always together, in the order of the table.
+    profile = DatasetProfiler().profile(df, "target", task_type=TaskType.BINARY, check_leakage=True)
+    kinds = list(dict.fromkeys(d.kind for d in diagnose(profile, folds, search=search)))
     assert kinds == [
         DiagnosisKind.OVERFITTING, DiagnosisKind.BUDGET_LIMITED, DiagnosisKind.WASTED_BUDGET,
         DiagnosisKind.CLASS_IMBALANCE, DiagnosisKind.MISSING_VALUES, DiagnosisKind.HIGH_CARDINALITY,
         DiagnosisKind.IDENTIFIER_COLUMN, DiagnosisKind.CONSTANT_COLUMN, DiagnosisKind.REDUNDANT_FEATURES,
         DiagnosisKind.UNRELIABLE_VALIDATION, DiagnosisKind.WEAK_MODEL_FAMILIES, DiagnosisKind.UNUSED_WORDS,
+        DiagnosisKind.POSSIBLE_LEAKAGE,
     ]
     assert set(DiagnosisKind) - set(kinds) == {DiagnosisKind.UNDERFITTING}  # it cannot come with overfitting

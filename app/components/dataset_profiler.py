@@ -9,7 +9,7 @@ import plotly.express as px
 import streamlit as st
 
 from app.components.dataset_uploader import LoadedDataset
-from app.services.profiler import DatasetProfile, DatasetProfiler
+from app.services.profiler import LEAKAGE_REPORT_SCORE, DatasetProfile, DatasetProfiler
 from app.services.task_detector import TaskDetectionError, TaskDetectionResult, TaskDetector, TaskType
 
 
@@ -28,7 +28,9 @@ def compute_profile(
     df: pd.DataFrame, dataset_name: str, target: str | None = None, task_value: str | None = None
 ) -> DatasetProfile:
     task_type = TaskType(task_value) if task_value else None
-    return DatasetProfiler().profile(df, target_column=target, dataset_name=dataset_name, task_type=task_type)
+    # with a target and a task, also the single-column check, so a possible leak is shown before any run
+    return DatasetProfiler().profile(df, target_column=target, dataset_name=dataset_name, task_type=task_type,
+                                     check_leakage=task_type is not None)
 
 
 @st.cache_data(show_spinner=False)
@@ -90,7 +92,11 @@ def render_dataset_profile(dataset: LoadedDataset) -> DatasetProfile:
                 "inferred_task": "task if selected",
             },
         )
-        st.caption("Automatic target detection is not implemented yet: choose the target column below.")
+        suggestions = TaskDetector().suggest_targets(df)
+        if suggestions:
+            st.markdown("Likely targets: " + "; ".join(s.text() for s in suggestions) + ".")
+        st.caption("Suggestions from simple signals (the name, the position, the values); check them and choose "
+                   "the target column below.")
     return profile
 
 
@@ -137,6 +143,12 @@ def render_target_selection(dataset: LoadedDataset, profile: DatasetProfile) -> 
 
     target_profile = compute_profile(df, dataset.name, target, task_type.value)
     _render_target_distribution(df[target], target_profile, task_type)
+    metric = (target_profile.single_column_metric or "score").replace("_", " ")
+    for column, score in target_profile.single_column_scores.items():
+        if score >= LEAKAGE_REPORT_SCORE:  # possible leakage (optional task 33): a warning, nothing is changed
+            st.warning(f"'{column}' alone predicts '{target}' almost perfectly ({metric} {score:.3f} in "
+                       "cross-validation on all labelled rows). If its value is only known after the outcome, "
+                       "exclude it below.", icon="⚠️")
 
     options = [c for c in columns if c != target]
     default_excluded = [c for c in profile.suggested_exclusions() if c in options]

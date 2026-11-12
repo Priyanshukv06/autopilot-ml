@@ -9,6 +9,7 @@ experiment-memory module will use to compare datasets.
 from __future__ import annotations
 
 import re
+import warnings
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
@@ -22,6 +23,13 @@ from app.services.transforms import frequent_tokens
 _ID_NAME_PATTERN = re.compile(r"(^id$|[_\s-]id$|Id$|ID$)")
 NEAR_CONSTANT_SHARE = 0.95  # reported in the profile; the Critic applies its own threshold
 CORRELATION_REPORT_LEVEL = 0.90  # pairs reported in the profile; the Critic applies its own thresholds
+# Single-column check (optional task 33, design choices set before any run, not tuned): a depth-6 tree
+# (min 5 rows per leaf) for a numeric column, and for regression also an isotonic (monotone) fit, the better
+# of the two counting, because a tree's steps keep a copy of a continuous target below R2 0.99 (0.987 on
+# 300 rows in a test); the most common target of each value (the mean for regression) for any other
+# column; 5 folds; at most 5,000 rows (a seeded sample).
+LEAKAGE_FOLDS, LEAKAGE_MAX_ROWS, LEAKAGE_SEED = 5, 5000, 0
+LEAKAGE_REPORT_SCORE = 0.99  # a profile warning from this score; the Critic applies its own threshold
 
 
 @dataclass
@@ -112,6 +120,11 @@ class DatasetProfile:
     # Added in optional task 30: text feature columns whose values share frequent words, with those words
     # (transforms.frequent_tokens, the words token_features would keep on these rows).
     frequent_words: dict[str, list[str]] = field(default_factory=dict)
+    # Added in optional task 33, only when asked for (check_leakage): how well each feature column alone
+    # predicts the target, in 5-fold cross-validation on these rows (single_column_metric: balanced accuracy
+    # for classification, R2 for regression).
+    single_column_scores: dict[str, float] = field(default_factory=dict)
+    single_column_metric: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """JSON-serialisable representation (used for MLflow artifacts)."""
@@ -175,6 +188,69 @@ class DatasetProfile:
         return meta
 
 
+def single_column_scores(df: pd.DataFrame, target_column: str, task_type: TaskType) -> tuple[dict[str, float], str]:
+    """For each feature column, the cross-validated score of a small model that sees only that column
+    (balanced accuracy for classification, R2 for regression); see LEAKAGE_* above. Columns that cannot be
+    scored (dates) are left out."""
+    from sklearn.isotonic import IsotonicRegression
+    from sklearn.metrics import balanced_accuracy_score, r2_score
+    from sklearn.model_selection import KFold, StratifiedKFold
+    from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
+
+    classification = task_type.is_classification
+    metric = "balanced_accuracy" if classification else "r2"
+    labelled = df.loc[df[target_column].notna()]
+    if len(labelled) > LEAKAGE_MAX_ROWS:
+        labelled = labelled.sample(n=LEAKAGE_MAX_ROWS, random_state=LEAKAGE_SEED)
+    y = labelled[target_column]
+    n_splits = min(LEAKAGE_FOLDS, len(y), int(y.value_counts().min()) if classification else len(y))
+    if n_splits < 2:
+        return {}, metric
+    splitter = (StratifiedKFold if classification else KFold)(n_splits, shuffle=True, random_state=LEAKAGE_SEED)
+    folds = list(splitter.split(np.zeros((len(y), 1)), y if classification else None))
+    target = y.to_numpy() if classification else y.to_numpy(dtype=float)
+    scores: dict[str, float] = {}
+    for column in labelled.columns:
+        values = labelled[column]
+        if column == target_column or is_datetime64_any_dtype(values):
+            continue
+        predicted = np.empty(len(y), dtype=object if classification else float)
+        monotone = np.full(len(y), np.nan)  # regression only: an isotonic fit, for monotone copies of the target
+        numeric = is_numeric_dtype(values) and not is_bool_dtype(values)
+        for fit, other in folds:
+            if numeric:
+                tree = (DecisionTreeClassifier if classification else DecisionTreeRegressor)(
+                    max_depth=6, min_samples_leaf=5, random_state=LEAKAGE_SEED)
+                column_values = values.to_numpy(dtype=float).reshape(-1, 1)
+                predicted[other] = tree.fit(column_values[fit], target[fit]).predict(column_values[other])
+                present = ~np.isnan(column_values[fit, 0])
+                if not classification and present.sum() >= 2:
+                    iso = IsotonicRegression(increasing="auto", out_of_bounds="clip")
+                    with warnings.catch_warnings():  # "auto" warns when the direction is unclear (a weak or
+                        warnings.simplefilter("ignore")  # constant column); such a column scores low anyway
+                        iso.fit(column_values[fit, 0][present], target[fit][present])
+                    rows = column_values[other, 0]
+                    monotone[other] = np.where(np.isnan(rows), target[fit].mean(), iso.predict(np.nan_to_num(rows)))
+            else:
+                keys = values.astype(object).where(values.notna(), "__empty__").astype(str).to_numpy()
+                fit_target = pd.Series(target[fit], index=keys[fit])
+                if classification:
+                    table = pd.crosstab(fit_target.index, fit_target.to_numpy()).idxmax(axis=1).to_dict()
+                    fallback = fit_target.value_counts().index[0]
+                else:
+                    table, fallback = fit_target.groupby(level=0).mean().to_dict(), float(fit_target.mean())
+                # a dict lookup keeps the labels' own type (a pandas map with unseen values turned 1 into 1.0)
+                predicted[other] = [table.get(key, fallback) for key in keys[other]]
+        if classification:
+            score = balanced_accuracy_score(target.astype(str), predicted.astype(str))
+        else:
+            score = r2_score(target, predicted.astype(float))
+            if np.isfinite(monotone).all():
+                score = max(score, r2_score(target, monotone))
+        scores[str(column)] = float(score)
+    return scores, metric
+
+
 class DatasetProfiler:
     """Compute a structured profile of a tabular dataset."""
 
@@ -194,7 +270,10 @@ class DatasetProfiler:
         target_column: str | None = None,
         dataset_name: str = "dataset",
         task_type: TaskType | None = None,
+        check_leakage: bool = False,
     ) -> DatasetProfile:
+        """``check_leakage`` (needs the target and the task type): also score each feature column alone
+        against the target (``single_column_scores``); it costs a few small model fits per column."""
         if not isinstance(df, pd.DataFrame):
             raise TypeError("profile() expects a pandas DataFrame.")
         if df.shape[1] == 0:
@@ -283,6 +362,15 @@ class DatasetProfiler:
         )
         if target_column is not None:
             self._profile_target(profile, df[target_column], task_type)
+        if check_leakage and target_column is not None and task_type is not None:
+            scores, metric = single_column_scores(df, target_column, task_type)
+            profile.single_column_scores, profile.single_column_metric = scores, metric
+            for column, score in scores.items():
+                if score >= LEAKAGE_REPORT_SCORE:
+                    profile.warnings.append(
+                        f"'{column}' alone predicts the target almost perfectly ({metric.replace('_', ' ')} "
+                        f"{score:.3f} in {LEAKAGE_FOLDS}-fold cross-validation); check that its value is known "
+                        "before the outcome.")
         return profile
 
     # ----------------------------------------------------------------- helpers

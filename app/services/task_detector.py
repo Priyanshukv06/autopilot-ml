@@ -4,13 +4,15 @@ Supported in the baseline: binary classification, multiclass classification and
 regression. The user can always override the detected task; ``validate`` checks
 that an override is actually feasible for the chosen target.
 
-Fully automatic *target* detection is intentionally not implemented yet.
-``suggest_target`` is a transparent placeholder heuristic (keyword match, else the
-last column) and is the hook where a learned target detector can plug in later.
+Target suggestion (optional task 33, Requirement 30.1): ``suggest_targets`` ranks the columns
+that can be a target by a few transparent signals and gives the reasons; ``suggest_target`` takes
+the first of them (before task 33: a target-like name, else the last column, which is still the
+rule when no column can be a target). The user always confirms or changes the choice.
 """
 
 from __future__ import annotations
 
+import re
 from dataclasses import asdict, dataclass
 from enum import Enum
 
@@ -69,6 +71,21 @@ class TargetCandidate:
 
 # Generic (domain-agnostic) names that often denote the label column.
 _TARGET_NAME_HINTS = ("target", "label", "class", "y", "outcome", "response")
+# Points of each signal of suggest_targets (design choices of task 33, not tuned):
+_NAME_POINTS, _NAME_WORD_POINTS, _LAST_POINTS, _FLAG_POINTS, _COMPLETE_POINTS = 3.0, 2.0, 1.0, 1.0, 0.5
+
+
+@dataclass
+class TargetSuggestion:
+    """A column that may be the target, with the signals that point to it."""
+
+    column: str
+    score: float
+    task: str  # the task it would give
+    reasons: list[str]
+
+    def text(self) -> str:
+        return f"'{self.column}' ({'; '.join(self.reasons)})"
 
 
 class TaskDetector:
@@ -214,14 +231,50 @@ class TaskDetector:
             )
         return candidates
 
-    def suggest_target(self, df: pd.DataFrame) -> str | None:
-        """Placeholder heuristic for the default target selection.
+    def suggest_targets(self, df: pd.DataFrame, limit: int = 3) -> list[TargetSuggestion]:
+        """The columns most likely to be the target, best first, each with its reasons.
 
-        Picks the first column whose name matches a generic label keyword, otherwise
-        the last column. The user always confirms or changes this choice.
+        Only columns that can be a target count (``target_candidates``). Signals: a generic target name
+        (target, label, class, y, outcome, response) 3 points, or such a word inside the name 2; the last
+        column 1; a 0/1 or true/false column 1; no empty cells 0.5. Ties go to the later column.
         """
+        eligible = [c for c in self.target_candidates(df) if c.eligible]
+        position = {column: i for i, column in enumerate(df.columns)}
+        suggestions = []
+        for candidate in eligible:
+            column, reasons, score = candidate.column, [], 0.0
+            name = str(column).strip().lower()
+            words = set(re.split(r"[^0-9a-z]+", re.sub(r"([a-z])([A-Z])", r"\1_\2", str(column)).lower()))
+            if name in _TARGET_NAME_HINTS:
+                score += _NAME_POINTS
+                reasons.append("named like a target")
+            elif words & set(_TARGET_NAME_HINTS):
+                score += _NAME_WORD_POINTS
+                reasons.append(f"its name contains '{sorted(words & set(_TARGET_NAME_HINTS))[0]}'")
+            if position[column] == len(df.columns) - 1:
+                score += _LAST_POINTS
+                reasons.append("the last column")
+            values = set(df[column].dropna().unique().tolist())
+            if values in ({0, 1}, {True, False}):
+                score += _FLAG_POINTS
+                reasons.append("a 0/1 column")
+            if candidate.missing_ratio == 0:
+                score += _COMPLETE_POINTS
+                reasons.append("no empty cells")
+            reasons.append(f"gives {candidate.inferred_task} with {candidate.n_unique} values")
+            suggestions.append(TargetSuggestion(str(column), score, str(candidate.inferred_task), reasons))
+        suggestions.sort(key=lambda s: (-s.score, -position[s.column]))
+        return suggestions[:limit]
+
+    def suggest_target(self, df: pd.DataFrame) -> str | None:
+        """The default target selection: the best of ``suggest_targets``; if no column can be a target, the
+        first column with a generic target name, otherwise the last column. The user always confirms or
+        changes this choice."""
         if len(df.columns) == 0:
             return None
+        suggestions = self.suggest_targets(df, limit=1)
+        if suggestions:
+            return suggestions[0].column
         for column in df.columns:
             if str(column).strip().lower() in _TARGET_NAME_HINTS:
                 return column

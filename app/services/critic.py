@@ -50,6 +50,7 @@ class DiagnosisKind(str, Enum):
     UNRELIABLE_VALIDATION = "unreliable_validation"
     WEAK_MODEL_FAMILIES = "weak_model_families"
     UNUSED_WORDS = "unused_words"  # optional task 30
+    POSSIBLE_LEAKAGE = "possible_leakage"  # optional task 33: a warning only, no Strategy answers it
 
 
 class Severity(str, Enum):
@@ -111,6 +112,11 @@ REQUIRED_THRESHOLDS = (
     "weak_model_families.min_gap",
     "weak_model_families.min_time_share",
 )
+# Thresholds of rules added after the file was frozen as v1-critic-study (26 October 2026). A file may set
+# them; otherwise these values, set before any run and not tuned, are used, and the file stays valid.
+OPTIONAL_THRESHOLDS: dict[str, float] = {
+    "possible_leakage.min_score": 0.99,  # optional task 33: single-column balanced accuracy or R2
+}
 # Pairs (less severe, more severe) that must be in this order: (a, b) means a <= b.
 _ORDERED = (
     ("overfitting.moderate_gap", "overfitting.high_gap"),
@@ -159,11 +165,14 @@ class CriticThresholds:
                     raise ThresholdsError(f"{source}: '{section}.{name}' must be a number.")
                 values[f"{section}.{name}"] = float(value)
         missing = [key for key in REQUIRED_THRESHOLDS if key not in values]
-        unknown = sorted(set(values) - set(REQUIRED_THRESHOLDS))
+        unknown = sorted(set(values) - set(REQUIRED_THRESHOLDS) - set(OPTIONAL_THRESHOLDS))
         if missing:
             raise ThresholdsError(f"{source}: missing thresholds {missing}.")
         if unknown:
             raise ThresholdsError(f"{source}: unknown thresholds {unknown} (a typing mistake?).")
+        values = {**OPTIONAL_THRESHOLDS, **values}
+        if not 0 < values["possible_leakage.min_score"] <= 1:
+            raise ThresholdsError(f"{source}: 'possible_leakage.min_score' must be above 0 and at most 1.")
         for low, high in _ORDERED:
             if values[low] > values[high]:
                 raise ThresholdsError(f"{source}: '{low}' ({values[low]:g}) must not be above '{high}' "
@@ -233,6 +242,8 @@ class Critic:
         left_out = set(restorable) & set(config.excluded_columns)
         found.extend(self._unused_words(profile, column, column in used) for column in sorted(set(used) | left_out)
                      if column in profile.categorical_features and column not in treated)
+        # optional task 33, last: a warning for the user, which no rule of the Strategy_Engine answers
+        found.extend(self._possible_leakage(profile, column) for column in used)
         return [d for d in found if d is not None]
 
     # ------------------------------------------------------------------ rules
@@ -388,6 +399,22 @@ class Critic:
         return self._make(DiagnosisKind.UNUSED_WORDS, Severity.LOW if used else Severity.MODERATE, (column,),
                           {"words": ",".join(words), "n_words": len(words), "column_used": int(used)},
                           f"The values of '{column}' share {len(words)} frequent words ({shown}); {how}.")
+
+    def _possible_leakage(self, profile: DatasetProfile, column: str) -> Diagnosis | None:
+        """One column alone predicts the target almost perfectly on the Training_Part (the profile's
+        single-column check). Only a warning: the column may be fine (a strong, honest signal), or known only
+        after the outcome, which only the user can tell."""
+        score = profile.single_column_scores.get(column)
+        threshold = self.thresholds["possible_leakage.min_score"]
+        if score is None or score < threshold:
+            return None
+        metric = profile.single_column_metric or "score"
+        return self._make(DiagnosisKind.POSSIBLE_LEAKAGE, Severity.HIGH, (column,),
+                          {"score": float(score), "metric": metric, "min_score": float(threshold)},
+                          f"'{column}' alone predicts the target almost perfectly ({metric.replace('_', ' ')} "
+                          f"{score:.3f} in cross-validation on the training rows). If its value is only known after "
+                          "the outcome, the model will fail on new data. Check this column; nothing is changed "
+                          "automatically.")
 
     def _constant_column(self, profile: DatasetProfile, column: str) -> Diagnosis | None:
         distinct = int(profile.unique_counts.get(column, 0))

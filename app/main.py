@@ -63,6 +63,8 @@ def render_sidebar(settings: Settings) -> str:
             "- ✅ Experiment memory\n"
             "- ✅ Learned strategy choice from the memory (Thompson sampling, UCB1)\n"
             "- ✅ Optional strategies: SMOTE, target encoding, word features\n"
+            "- ✅ Group-aware splits and folds\n"
+            "- ✅ SHAP explanation of the final model\n"
             "- ✅ Autonomous mode in this dashboard"
         )
         st.markdown("**Research tools (command line, `scripts/`)**")
@@ -71,8 +73,7 @@ def render_sidebar(settings: Settings) -> str:
             "- ✅ Critic, Judge and judge agreement studies"
         )
         st.markdown("**Planned, not implemented**")
-        st.markdown("- 🕒 Optional extras: group folds, SHAP, target suggestion and leakage check, local "
-                    "summaries, an API and Docker")
+        st.markdown("- 🕒 Optional extras: target suggestion and leakage check, local summaries, an API and Docker")
         st.divider()
         st.caption("Runs fully locally: no paid APIs, no cloud services.")
         st.caption(f"MLflow store: `{settings.mlflow_tracking_uri}`")

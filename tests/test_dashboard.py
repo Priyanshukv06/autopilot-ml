@@ -94,7 +94,10 @@ def test_the_sidebar_marks_the_built_modules(project):
     assert "✅ Learned strategy choice" in sidebar
     planned = sidebar.split("Planned, not implemented", 1)[1]
     assert "Autonomous mode" not in planned and "Learned" not in planned and "Benchmark" not in planned
-    assert "✅ Benchmark against FLAML alone" in sidebar and "SMOTE" in planned  # since 31 October 2026
+    assert "✅ Benchmark against FLAML alone" in sidebar  # since 31 October 2026
+    # since 12 November 2026 (optional tasks 29 and 30)
+    assert "✅ Optional strategies: SMOTE, target encoding, word features" in sidebar
+    assert "SMOTE" not in planned and "target encoding" not in planned and "SHAP" in planned
     assert at.radio(key="mode").value == "Single experiment"  # the default mode is unchanged
 
 

@@ -57,10 +57,12 @@ def render_sidebar(settings: Settings) -> str:
         )
         st.markdown("**Autonomous layer (Autonomous run mode, or `scripts/run_autopilot.py`)**")
         st.markdown(
-            "- ✅ Experiment planner and session loop\n- ✅ Critic (12 diagnoses, thresholds from the critic study)\n"
-            "- ✅ Strategy engine (9 strategies)\n- ✅ Judge (corrected t-test)\n- ✅ Resource manager\n"
+            "- ✅ Experiment planner and session loop\n"
+            "- ✅ Critic (12 diagnoses with thresholds from the critic study, plus unused words)\n"
+            "- ✅ Strategy engine (12 strategies)\n- ✅ Judge (corrected t-test)\n- ✅ Resource manager\n"
             "- ✅ Experiment memory\n"
             "- ✅ Learned strategy choice from the memory (Thompson sampling, UCB1)\n"
+            "- ✅ Optional strategies: SMOTE, target encoding, word features\n"
             "- ✅ Autonomous mode in this dashboard"
         )
         st.markdown("**Research tools (command line, `scripts/`)**")
@@ -69,7 +71,8 @@ def render_sidebar(settings: Settings) -> str:
             "- ✅ Critic, Judge and judge agreement studies"
         )
         st.markdown("**Planned, not implemented**")
-        st.markdown("- 🕒 Optional extras: SMOTE, target encoding, SHAP, an API")
+        st.markdown("- 🕒 Optional extras: group folds, SHAP, target suggestion and leakage check, local "
+                    "summaries, an API and Docker")
         st.divider()
         st.caption("Runs fully locally: no paid APIs, no cloud services.")
         st.caption(f"MLflow store: `{settings.mlflow_tracking_uri}`")

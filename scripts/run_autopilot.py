@@ -52,6 +52,9 @@ def main() -> int:
     parser.add_argument("--no-critic", action="store_true", help="ablation: random valid changes, no Diagnoses")
     parser.add_argument("--no-resource-manager", action="store_true",
                         help="ablation: equal search budgets; only the time and Experiment limits stop")
+    parser.add_argument("--group-column", default=None,
+                        help="keep rows with the same value of this column together in the test part and in every "
+                        "fold (the column is not used as a feature)")
     parser.add_argument("--test-size", type=float, default=0.2)
     parser.add_argument("--no-mlflow", action="store_true", help="do not log to MLflow")
     parser.add_argument("--project-root", default=str(ROOT), help="folder for experiments/, models/ and mlruns/")
@@ -70,7 +73,7 @@ def main() -> int:
             ),
             budget=SessionBudget(total_seconds=args.seconds, max_experiments=args.max_experiments, n_jobs=args.cores),
             selector=args.selector, use_memory=args.use_memory, use_critic=not args.no_critic,
-            use_resource_manager=not args.no_resource_manager,
+            use_resource_manager=not args.no_resource_manager, group_column=args.group_column,
         )
         result = AutopilotSession(settings=settings, enable_mlflow=not args.no_mlflow).run(
             df, session, progress=lambda stage, step, message: print(f"[{stage}] {message}", flush=True))

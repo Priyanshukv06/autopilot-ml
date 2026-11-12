@@ -83,6 +83,9 @@ class SessionSettings:
     # the Resource_Manager, every search gets an equal share and only the time and Experiment limits stop.
     use_critic: bool = True
     use_resource_manager: bool = True
+    # Optional task 31 (Requirement 28): rows with the same value of this column stay together, in the outer
+    # split and in every Session_Fold; the column itself is never a feature.
+    group_column: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -96,6 +99,7 @@ class SessionSettings:
             "use_memory": self.use_memory,
             "use_critic": self.use_critic,
             "use_resource_manager": self.use_resource_manager,
+            "group_column": self.group_column,
         }
 
 
@@ -219,16 +223,28 @@ class AutopilotSession:
         # 1. Data, the outer split and the Session_Folds. Errors here mean nothing is written.
         notify("preparing", 0, "Checking the data and making the splits")
         base = replace(copy.deepcopy(session.base), n_jobs=session.budget.n_jobs)
+        group = session.group_column
+        if group is not None:  # the grouping column is never a feature, so it becomes one of the user's exclusions
+            if group not in dataframe.columns:
+                raise ExperimentError(f"Grouping column '{group}' not found in the dataset.")
+            if group == base.target_column:
+                raise ExperimentError("The grouping column cannot be the target column.")
+            if group not in base.excluded_columns:
+                base = replace(base, excluded_columns=[*base.excluded_columns, group])
         _, y, task_type, metric, notes = self.runner.prepare(dataframe, base)
         base = replace(base, task_type=task_type, primary_metric=metric)
         try:
-            split, split_notes = make_outer_split(y, task_type, base.test_size, base.random_seed)
+            groups = dataframe.loc[y.index, group] if group is not None else None
+            split, split_notes = make_outer_split(y, task_type, base.test_size, base.random_seed, groups=groups)
             labelled = dataframe.loc[y.index]
             train_frame, y_train = labelled.iloc[split.train_positions], y.iloc[split.train_positions]
-            folds, fold_notes = make_session_folds(y_train, task_type, session.n_splits, session.n_repeats,
-                                                   base.random_seed + 1)
+            folds, fold_notes = make_session_folds(
+                y_train, task_type, session.n_splits, session.n_repeats, base.random_seed + 1,
+                groups=None if groups is None else groups.iloc[split.train_positions])
         except SplitError as exc:
             raise ExperimentError(str(exc)) from exc
+        if group is not None:
+            notes = [*notes, f"Rows are grouped by '{group}', which is left out of the features."]
         profile = DatasetProfiler().profile(train_frame, base.target_column, base.dataset_name, task_type)
 
         # 2. Records.
@@ -572,6 +588,7 @@ class _State:
                 "outer": split.fingerprint(), "folds": folds.fingerprint(), "n_train": split.n_train,
                 "n_test": split.n_test, "outer_seed": split.seed, "folds_seed": folds.seed,
                 "outer_stratified": split.stratified, "folds_stratified": folds.stratified, "n_folds": len(folds),
+                "grouped": split.grouped and folds.grouped,  # optional task 31
             },
             "first_setup_exclusions": first_exclusions,
             "notes": list(dict.fromkeys(notes)),
@@ -609,7 +626,8 @@ class _State:
                   "n_jobs": budget.n_jobs, "seed": base.random_seed, "selector": self.session.selector,
                   "use_memory": self.session.use_memory, "use_critic": self.session.use_critic,
                   "use_resource_manager": self.session.use_resource_manager,
-                  "judge_alpha": self.session.judge.alpha, "split_fingerprint": self.record["splits"]["outer"]}
+                  "judge_alpha": self.session.judge.alpha, "split_fingerprint": self.record["splits"]["outer"],
+                  "group_column": self.session.group_column or "none"}
         try:
             self.record["mlflow_run_id"] = self.owner.tracker.start_session_run(
                 self.session_id, params, {"dataset": base.dataset_name})

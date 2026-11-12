@@ -120,6 +120,13 @@ def render_session_settings(settings: Settings, selection: TargetSelection, data
             "Use the experiment memory", value=False, key="auto_use_memory",
             help="Let the Strategy choice read the memory records of other datasets.",
         )
+        no_group = "(none)"
+        group = st.selectbox(
+            "Group column", [no_group, *[c for c in dataset.df.columns if c != selection.target]], key="auto_group",
+            help="For data where new rows come from new groups (for example several rows per patient or per "
+            "store): rows with the same value stay together, in the test part and in every fold, and the "
+            "column is not used as a feature.",
+        )
     for warning in metric_warnings(task, metric, selection.profile.class_balance):
         st.warning(warning)
 
@@ -135,7 +142,7 @@ def render_session_settings(settings: Settings, selection: TargetSelection, data
     )
     return SessionSettings(base=base, budget=budget, n_repeats=int(n_repeats),
                            judge=replace(JudgeSettings(), alpha=float(alpha)), selector=selector,
-                           use_memory=bool(use_memory))
+                           use_memory=bool(use_memory), group_column=None if group == no_group else str(group))
 
 
 # --------------------------------------------------------------------- section 4

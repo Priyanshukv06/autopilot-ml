@@ -7,8 +7,9 @@ Everything here has been checked. The numbers come from our own runs, mostly EXP
 - To see the diagrams, open this file in Kiro and press Ctrl+Shift+V (Markdown preview). The diagrams are drawn by Mermaid; the charts are PNG files in the `images` folder next to this file.
 - The technical reference for the same code is `architecture.md`. The notes for the final report are in `report-notes.md`.
 - Phase 3 so far: choosing changes from the memory and the switches that turn single parts of the loop off are in section 9.3. The comparison systems and the benchmark harness are research tools outside the app; they are described in `architecture.md` and in the report notes (section 4.10). The benchmark was stopped early; its results and those of the judge agreement study are in the report notes (sections 9.16 to 9.18), not here.
+- Optional extensions (tasks 29 to 35, built from 1 to 12 November 2026): the new Strategies and Diagnoses are in the tables of section 9.3, together with SMOTE, group-aware splits and the new dashboard options; target suggestion, the leakage check, SHAP, the plain-language summaries, the HTTP API and the Docker image are in section 9.8. The benchmark ran before them.
 
-Last updated: 31 October 2026 (changes made after reading the Phase 3 results: sections 9.3 and 9.7)
+Last updated: 12 November 2026 (the optional extensions: sections 1, 3.2, 3.3, 9.3, 9.7, 9.8 and Appendices A and B; before that, 31 October 2026, changes made after reading the Phase 3 results: sections 9.3 and 9.7)
 
 ## Contents
 
@@ -29,7 +30,7 @@ Last updated: 31 October 2026 (changes made after reading the Phase 3 results: s
 
 ## 1. The big picture
 
-You give the app a table (a CSV file) and choose the column to predict. The app then:
+You give the app a table (a CSV file) and choose the column to predict (the app suggests likely ones, with its reasons). The app then:
 
 1. describes the table: its columns, missing values and problem columns,
 2. works out what kind of question it is: one of two answers, one of several classes, or a number,
@@ -202,7 +203,7 @@ Two rules keep the parts independent: FLAML is used in exactly one class (`FLAML
 | Mostly missing | At least 40% empty | `Cabin` (77% empty) |
 | Class imbalance | The biggest class divided by the smallest: under 1.5 none, 1.5 to 3 mild, 3 to 9 moderate, 9 or more severe | 549 died, 342 survived: 1.61, mild |
 
-Identifier-like and constant columns are pre-selected for exclusion, because a column that is different in every row cannot teach the model anything general. The profiler also computes "meta-features": a few numbers that describe the whole dataset (its size, the share of missing values, the imbalance and so on). Nothing uses them yet; the planned memory will use them to find similar datasets.
+Identifier-like and constant columns are pre-selected for exclusion, because a column that is different in every row cannot teach the model anything general. The profiler also computes "meta-features": a few numbers that describe the whole dataset (its size, the share of missing values, the imbalance and so on). The experiment memory of the autonomous layer uses them to find similar datasets (section 9.3). Since November 2026 it also lists the frequent words of each text column (for the word features of section 9.3) and, when asked, scores each column alone as a predictor of the target (the leakage check of section 9.8).
 
 **Task detector** (`app/services/task_detector.py`). Looks at the target column:
 
@@ -213,7 +214,9 @@ Identifier-like and constant columns are pre-selected for exclusion, because a c
 
 You can override its choice. Overrides that cannot work are refused with a clear message, for example "Multiclass classification needs at least 3 classes".
 
-**AutoML runner** (`app/services/automl_runner.py`). Runs one experiment from start to finish (section 4). It contains `FLAMLEngine`, the only place that talks to FLAML. FLAML sits behind a small interface, so another engine, such as AutoGluon for the planned comparison, can be added without changing anything else.
+It also suggests which column is the target: up to three likely columns, each with its reasons, and the first is the default choice (section 9.8). You confirm it or choose another.
+
+**AutoML runner** (`app/services/automl_runner.py`). Runs one experiment from start to finish (section 4). It contains `FLAMLEngine`, the only place that talks to FLAML. FLAML sits behind a small interface, so another engine can be added without changing anything else. (The benchmark of Phase 3 runs AutoGluon as a separate comparison system instead, in its own environment.)
 
 **Evaluator** (`app/services/evaluator.py`). Scores any model: every metric on the test part and on the training part, the trivial baseline, the confusion matrix (a table of right and wrong answers per class) and permutation importance. It only needs the model's predictions, so it does not depend on FLAML.
 
@@ -223,8 +226,8 @@ You can override its choice. Overrides that cannot work are refused with a clear
 
 | Section | What you see |
 |---|---|
-| 1. Dataset | Upload or pick a sample; cards with rows, columns, missing values and duplicates; tabs for the columns, a preview, data-quality warnings and target candidates |
-| 2. Target | Choose the target; the detected problem with its reason; override; a chart of the classes; the columns to exclude |
+| 1. Dataset | Upload or pick a sample; cards with rows, columns, missing values and duplicates; tabs for the columns, a preview, data-quality warnings and target candidates (with the likely targets and their reasons) |
+| 2. Target | Choose the target; the detected problem with its reason; override; a chart of the classes; a warning when one column alone predicts the target almost perfectly; the columns to exclude |
 | 3. Experiment configuration | Time budget, primary metric, random seed, test split |
 | 4. Run AutoML | The Run Experiment button and a progress bar |
 | 5. Results | Best model, test score, validation score, training time; notes; every test metric against the baseline; train vs test; the leaderboard; a chart of all trials |
@@ -664,7 +667,7 @@ The baseline works, and its numbers are honest. These are the limits of one expe
 
 ## 9. The autonomous layer (Phase 2)
 
-Phase 2 puts a loop around the single experiment of sections 1 to 8. One run of the loop is a **Session**. It does what we did by hand between EXP-001 and EXP-002: look at the result, find out what is wrong, change one thing, run again, and keep the change only if it really helps. Every part below is built and tested; the numbers that set its thresholds come from two studies on synthetic data (section 9.6).
+Phase 2 puts a loop around the single experiment of sections 1 to 8. One run of the loop is a **Session**. It does what we did by hand between EXP-001 and EXP-002: look at the result, find out what is wrong, change one thing, run again, and keep the change only if it really helps. Every part below is built and tested; the numbers that set its thresholds come from two studies on synthetic data (section 9.6). The parts added by the optional tasks of November 2026 were not part of those studies (sections 9.3 and 9.8).
 
 ### 9.1 The loop in one picture
 
@@ -706,11 +709,13 @@ The first Setup skips the Judge: after its Assessment it becomes the Accepted Se
 
 **Splits** (`app/services/splits.py`). The training and test parts are made exactly as in Phase 1, with the user's seed, so a Session and a single experiment with the same seed use the same rows. The 15 folds are made from the training part only, with seed + 1, stratified for classification.
 
+Some data has several rows per group, for example per patient, per store or per family, and new rows will come from new groups. A model scored on rows of groups it has already seen then looks better than it will be. For such data you can name a grouping column (optional task 31). Whole groups then go to the test part (so the test share counts groups, not rows, and the test part is not stratified), and in each of the 3 repeats the groups of the training part are dealt into 5 folds, keeping the class balance where possible, so a group is never split between the training and validation rows of a fold. The grouping column is never a feature, and the choice is recorded in `session.json`. Without a grouping column nothing changes.
+
 **Planner** (`app/services/experiment_planner.py`). The first Setup is the user's settings with the identifier-like and constant columns of the training part left out. Each later candidate is a copy of the Accepted Setup with one Strategy applied. Its search starts from the best configuration of each learner family found so far (a warm start), and it gets the search time the Resource manager gives it.
 
 **Assessor** (`app/services/assessor.py`). FLAML's own validation score is the number it optimised, from its own folds, so it is a little optimistic and cannot be compared fairly between two searches. The Assessor takes the winning configuration of a search and trains it again on the training rows of each of the 15 folds, then scores it on that fold's validation rows. When a later Setup would refit exactly the same model (same columns, data changes, class weights, learner and settings), its fold scores are reused instead of refitted, and the record says which Experiment they come from. Data changes (below) are learned again inside each fold, from that fold's training rows only. It records every metric on the fold's training and validation rows, the recall of each class, the share of validation rows with a category the fold's training rows never had, and the trivial baseline's score. Two Setups are therefore compared on exactly the same rows. A Setup whose configuration was assessed before is not refitted again.
 
-**Critic** (`app/services/critic.py`, thresholds in `critic_thresholds.toml`). Twelve rules read the training-part profile, the Assessment and how the search spent its time. "m" is the primary metric (or F1, accuracy, ROC-AUC or R2 when the primary metric is a loss), and all values are means over the 15 folds. Thresholds are version `v1-critic-study`:
+**Critic** (`app/services/critic.py`, thresholds in `critic_thresholds.toml`). Fourteen rules read the training-part profile, the Assessment and how the search spent its time. "m" is the primary metric (or F1, accuracy, ROC-AUC or R2 when the primary metric is a loss), and all values are means over the 15 folds. Thresholds are version `v1-critic-study`:
 
 | Diagnosis | Fires when | Severity |
 |---|---|---|
@@ -726,8 +731,12 @@ The first Setup skips the Judge: after its Assessment it becomes the Accepted Se
 | redundant_features | two used numeric columns have a correlation of at least 0.95 | moderate; high from 0.99 |
 | unreliable_validation | the validation score varies over the folds with a standard deviation of at least 0.05 | moderate; high from 0.08 |
 | weak_model_families | a learner family is at least 0.10 behind the best family and used at least 5% of the search time | low |
+| unused_words | a text column has frequent words (found in at least 2% of the rows and in at least two different values, but not in every row) and no encoding (frequency, grouping, target encoding or word features) has changed it | low if the model uses the column (it sees each value only as a whole); moderate if the first Setup left the column out as identifier-like |
+| possible_leakage | a used column alone predicts the target almost perfectly: a score of at least 0.99 in 5-fold cross-validation on the training part (balanced accuracy, or R2 for regression) | high; a warning only |
 
-**Strategies and the Strategy engine** (`app/services/strategies.py`, `app/services/strategy_engine.py`). Nine Strategies, each a small change to a copy of the Setup:
+The last two rows came with the optional tasks 30 and 33 (November 2026) and were not part of the critic study (section 9.6). unused_words uses the word rule of the word features below and reads no threshold from the file. The 0.99 of possible_leakage was set before any run and not tuned. A column the user excluded is never diagnosed by unused_words, so it is never brought back.
+
+**Strategies and the Strategy engine** (`app/services/strategies.py`, `app/services/strategy_engine.py`). Twelve Strategies, each a small change to a copy of the Setup (the last three came with the optional tasks 29 and 30):
 
 | Strategy | What it changes | Answers |
 |---|---|---|
@@ -740,10 +749,19 @@ The first Setup skips the Judge: after its Assessment it becomes the Accepted Se
 | restrict_model_families | searches only the families that were competitive | weak_model_families |
 | more_search_time | the same Setup with up to twice the search time | underfitting, budget_limited |
 | smoother_search_metric | lets FLAML optimise log loss while the primary metric stays the same | unreliable_validation, class_imbalance |
+| smote | adds synthetic rows of the smaller classes to the training rows only, until every class is as large as the largest (SMOTE) | class_imbalance (after class weights and the smoother metric) |
+| target_encode | replaces a text column by the smoothed mean target of its value, cross-fitted on the training rows | high_cardinality (after dropping, frequency encoding and grouping) |
+| token_features | replaces a text column by one 0/1 column for each of its frequent words (at most 20) | unused_words |
 
-The engine turns the Diagnoses into Proposals with a fixed rule table and ranks them: the most severe Diagnosis answered first, then the cheaper change, then the order of the table. A change already tried in the Session, one that does not apply (for example class weights in regression) and one that conflicts with the Accepted Setup are left out. wasted_budget has no Strategy: the Resource manager shortens the next search instead.
+The engine turns the Diagnoses into Proposals with a fixed rule table and ranks them: the most severe Diagnosis answered first, then the cheaper change, then the order of the table. A change already tried in the Session, one that does not apply (for example class weights in regression) and one that conflicts with the Accepted Setup are left out. smote and class weights exclude each other, because FLAML does not take a resampler together with row weights. wasted_budget has no Strategy: the Resource manager shortens the next search instead. possible_leakage has none either, because only the user knows whether the column is known before the outcome.
 
-**Data changes** (`app/services/transforms.py`). Frequency encoding, grouping rare values and missing indicators are learned from training rows only (from each fold's training rows during an Assessment) and saved together with the model, so a saved model still takes the original columns.
+**Data changes** (`app/services/transforms.py`). Frequency encoding, grouping rare values, missing indicators, target encoding and word features are learned from training rows only (from each fold's training rows during an Assessment) and saved together with the model, so a saved model still takes the original columns.
+
+Target encoding is the only data change that reads the target. Each value of the column becomes (sum of the targets of its rows + 10 x the overall mean) / (number of its rows + 10), with the target as 1 for the positive class (binary), one 0/1 column per class (multiclass) or the value itself (regression), so a rare value gets almost the overall mean. On the training rows themselves the encoding is cross-fitted: the rows are split into 5 parts and each part is encoded from the other 4, so no row's encoding uses its own label and the model cannot learn its own answer. Other rows (validation, test and new rows) use the encodings learned from all training rows. The 10 and the 5 parts are design choices, not tuned.
+
+Word features split each value into runs of letters and runs of digits, in lower case ("Braund, Mr. Owen Harris" gives braund, mr, owen, harris). They keep the words found in at least 2% of the training rows and in at least two different values, but not in every row, at most the 20 most frequent, and replace the column by one 0/1 column per kept word. For a column the first Setup left out as identifier-like, such as Titanic's `Name`, the Strategy brings it back with only its words. On Titanic's training part (seed-42 split) the words of `Name` begin with mr, miss, mrs, william, john, master, and `Cabin` gives the deck letters c, b, d, e. There is no Titanic-specific code: the same rule runs on every text column.
+
+**Resampling** (`app/services/resampling.py`). The smote Strategy gives FLAML a resampler. FLAML applies a fresh copy of it to the training rows of each of its search folds and to the rows of the final model, never to validation rows, and the Assessor does the same in every refit, so only a fold's training rows are resampled and its validation rows are scored as they are. FLAML has already turned text columns into category columns at that point, which plain SMOTE refuses, so `FoldSafeSmote` uses SMOTE for numeric columns only, SMOTE-NC for mixed columns and SMOTE-N for text columns only. The original rows come back first and unchanged, followed by the new ones.
 
 **Judge** (`app/services/judge.py`). For each of the 15 folds, d = candidate score minus Accepted score, signed so that positive is better. The folds share most of their training rows, so their scores are not independent; the corrected resampled t-test (Nadeau and Bengio, 2003) allows for this by using (1/15 + 1/4) times the variance of d instead of 1/15 of it. Then:
 
@@ -759,7 +777,7 @@ The engine turns the Diagnoses into Proposals with a fixed rule table and ranks 
 
 **Records** (`app/services/experiment_tracker.py`, `app/services/autopilot.py`). `session.json` is rewritten after every step, so a crash keeps the finished steps. Each Experiment of a Session keeps its `summary.json` and also `assessment.json`, `diagnoses.json` and `decision.json`, so every Diagnosis and Verdict can be worked out again from the files. In MLflow each Session is a parent run with its Experiments as child runs.
 
-**Dashboard and command line** (`app/components/autopilot_viewer.py`, `scripts/run_autopilot.py`). In the sidebar choose **Autonomous run**: set the time, the maximum number of Experiments and the CPU cores, press Start, and watch the steps, the score chart and the Diagnoses; Stop ends the Session after the current step. At the end the first and final model are shown side by side on the test part. The same Session runs from the command line with `scripts/run_autopilot.py`.
+**Dashboard and command line** (`app/components/autopilot_viewer.py`, `scripts/run_autopilot.py`). In the sidebar choose **Autonomous run**: set the time, the maximum number of Experiments and the CPU cores, press Start, and watch the steps, the score chart and the Diagnoses; Stop ends the Session after the current step. At the end the first and final model are shown side by side on the test part. The same Session runs from the command line with `scripts/run_autopilot.py`. Since the optional tasks, the advanced settings have a group column option (`--group-column` on the command line), and a finished Session has two buttons: "Explain the final model" (SHAP) and "Write a summary" (a local language model). Both are described in section 9.8.
 
 ### 9.4 One Session, step by step
 
@@ -789,8 +807,24 @@ Inside a Session, experiments run with `evaluate_test=False`: no test score, tes
 | Both scores the Judge compares come from configurations FLAML chose on the same training part | Both are a little optimistic; pairing removes much of this, not all. Searching again on 5 inner splits gave the same verdict for only 8 of 20 real decisions (report notes, section 9.18) |
 | FLAML picks learner families using measured times | Two runs with the same seed can take different paths and end with different models |
 | The unreliable-validation Diagnosis is weak in the critic study | Its Proposal is cheap and still has to pass the Judge |
+| The newest Strategies (smote, target_encode, token_features) and Diagnoses (unused_words, possible_leakage) were not part of the studies or the benchmark | They were only checked with short runs, so whether they help is not measured |
+| possible_leakage looks at one column at a time and only warns | A column that gives the answer away only together with other columns is not found, and a flagged column is fine if its value is known before the outcome; only the user can tell |
 
 The Phase 2 measurement against FLAML alone is in `report-notes.md`, section 9.14.
+
+### 9.8 Parts around the loop (optional tasks, November 2026)
+
+**Target suggestion** (`TaskDetector.suggest_targets`, task 33). Among the columns that can be a target (not constant, not identifier-like, not text with very many values), a column gets points for a generic target name such as target, label, class, y, outcome or response (3), or such a word inside its name (2), for being the last column (1), for holding only 0 and 1 or true and false (1), and for having no empty cells (0.5); ties go to the later column. The best three are shown with their reasons in the target candidates tab, and the first is the default choice in the Target section. You always confirm or change it. The points are design choices, not measured. On 15 of the 16 registered datasets the registered target came first; on penguins it came third, after `sex` (the last column) and `island`.
+
+**Leakage check** (`single_column_scores` in `app/services/profiler.py`, task 33). Target leakage is a column that gives the answer away, for example one filled in after the outcome: a model built on it looks excellent and fails on new data. The check scores each feature column alone in 5-fold cross-validation (at most 5,000 rows): a numeric column with a small decision tree (and, for regression, also a monotone fit, the better of the two counting), any other column by the most common target of each value (the mean for regression). The score is balanced accuracy, so a constant guess gets 1 / classes whatever the class balance, or R2 for regression. A score of at least 0.99 gives a warning in the Target section before any run, and in a Session a used column with such a score on the training part gets the possible_leakage Diagnosis. Nothing is changed automatically. Run on the training part of the seed-42 split of all 16 registered datasets (12 November 2026, `scripts/check_single_columns.py`, `results/leakage_check.csv`), no column reached 0.99, so there was no false alarm; the highest scores were 0.905 (energy_efficiency, R2) and 0.900 (breast_cancer, balanced accuracy).
+
+**SHAP explanations of the final model** (`app/services/explainer.py`, task 32). SHAP (Lundberg and Lee, 2017) splits one prediction into one share per input column; the shares add up to the prediction minus the average prediction. The explainer rebuilds the Session's training part from the dataset and the recorded settings and refuses the data if the rebuilt split's fingerprint differs from the record, so the test part is never used. It explains at most 200 rows, passed along the final model's own path (its data changes, then FLAML's preparation), so the columns it shows are the learner's own inputs, for example `Name__tok_mr` after word features. Tree learners (LightGBM, XGBoost, random forest, extra trees) get shap's exact tree method: on Titanic, penguins and a 1,500-row sample of California housing it took at most 1.9 s for 200 rows (12 November 2026, seed 1, 4 cores; the slowest was the first call, which includes loading shap). Other learners get a slower permutation estimate on 50 rows against 25 background rows. The dashboard shows the mean size of the shares of the top 15 columns and the shares for one chosen row; `scripts/explain_session.py` writes `experiments/SES-###/shap_summary.json`.
+
+**Summaries in plain words** (`app/services/narrator.py`, task 34). The language model explains; it never decides. Facts are taken from the Session record only (the data and target, the budget, the first Setup's Diagnoses, each step's change and its outcome in words, the changes kept, the stop reason, the first and final test scores; no data rows) and sent with fixed instructions to `qwen2.5:7b-instruct`, running on this machine through Ollama, at temperature 0 with a fixed seed. Any address other than this machine is refused. The numbers in the text that are not in the facts are listed next to it. The text is saved in `experiments/SES-###/summary_generated.json`, apart from the record, with a label saying that it is generated text that no person checked and no decision used, and no module of the loop reads it (a test checks this). In the first live check (12 November 2026) the model misread a verdict code, so outcomes are now given in words; the second summary described the kept change correctly and had no number outside the facts, but still added judgements of its own.
+
+**Local HTTP API** (`app/api.py`, `scripts/run_api.py`, task 35). The same Session code over HTTP, with FastAPI: `GET /health`, `GET /sessions`, `GET /sessions/{id}` (the whole `session.json`), `POST /sessions` (starts one Session in the background and returns its ID; one at a time) and `POST /sessions/{id}/stop`; the endpoints are documented at `/docs`. The service has no login, so it listens on 127.0.0.1 by default, a dataset must be a CSV file inside the project's `data/` folder (checked before anything runs), session IDs must look like `SES-001`, so no path can be passed as an ID, and the request fields have ranges (for example 10 s to 24 h of budget).
+
+**Docker image** (`Dockerfile`, `scripts/docker_entry.sh`, task 35). Python 3.11 slim with the code, the bundled samples and the pinned packages, but no results. It runs the API on port 8000 and the dashboard on 8501 as a non-root user, and keeps `experiments/`, `models/` and `mlruns/` in volumes. Publish its ports on 127.0.0.1 only. The local summaries are not available inside it, and its records have no commit hash, because the image holds no git history. Built and checked on 12 November 2026 (2.12 GB).
 
 ---
 
@@ -801,6 +835,8 @@ The Phase 2 measurement against FLAML alone is in `report-notes.md`, section 9.1
 | Read the CSV | `app/components/dataset_uploader.py` | `read_csv_bytes`, `render_dataset_uploader` |
 | Profile | `app/services/profiler.py` | `DatasetProfiler.profile`, `analyze_class_balance`, `DatasetProfile.meta_features` |
 | Detect the task | `app/services/task_detector.py` | `TaskDetector.detect`, `TaskDetector.validate` |
+| Suggest the target | `app/services/task_detector.py` | `TaskDetector.suggest_targets`, `suggest_target` |
+| Leakage check | `app/services/profiler.py` | `single_column_scores` |
 | Dashboard sections | `app/components/` | `render_dataset_profile`, `render_target_selection`, `render_experiment_config`, `render_run_section`, `render_results`, `render_explainability`, `render_experiment_history` |
 | Background worker | `app/components/experiment_viewer.py` | `_start_run`, `_wait_for_run` |
 | Run an experiment | `app/services/automl_runner.py` | `AutoMLRunner.run`, `run_experiment`, `_prepare`, `_split`, `_execute` |
@@ -811,17 +847,21 @@ The Phase 2 measurement against FLAML alone is in `report-notes.md`, section 9.1
 | Track | `app/services/experiment_tracker.py` | `allocate_experiment_id`, `log_run`, `save_record`, `history_frame` |
 | Settings | `app/core/config.py` | `Settings`, `get_settings` |
 | Session loop and final evaluation | `app/services/autopilot.py` | `AutopilotSession.run`, `SessionSettings`, `_final_evaluation` |
-| Training and test parts, folds | `app/services/splits.py` | `make_outer_split`, `make_session_folds` |
+| Training and test parts, folds | `app/services/splits.py` | `make_outer_split`, `make_session_folds`, `group_codes` |
 | First and candidate Setups | `app/services/experiment_planner.py` | `Planner.first_setup`, `Planner.candidate` |
 | Assessment | `app/services/assessor.py` | `Assessor.assess` |
 | How a search spent its time | `app/services/search_summary.py` | `summarize_search` |
 | Diagnoses | `app/services/critic.py` | `Critic.diagnose`, `CriticThresholds.load` |
 | Strategies and their ranking | `app/services/strategies.py`, `app/services/strategy_engine.py` | `CATALOGUE`, `propose`, `RulesSelector.rank` |
-| Data changes | `app/services/transforms.py` | `DataPipeline`, `PipelineModel` |
+| Data changes | `app/services/transforms.py` | `DataPipeline`, `PipelineModel`, `frequent_tokens` |
+| SMOTE | `app/services/resampling.py` | `FoldSafeSmote`, `make_resampler` |
 | Verdicts | `app/services/judge.py` | `Judge.compare`, `corrected_resampled_t` |
 | Budgets and stop rules | `app/services/resource_manager.py` | `ResourceManager.first_budget`, `next_budget`, `check_stop` |
 | Memory | `app/services/experiment_memory.py` | `ExperimentMemory.add`, `similar`, `strategy_stats` |
-| Autonomous mode in the dashboard | `app/components/autopilot_viewer.py` | `render_session_settings`, `render_session_run`, `render_memory_records` |
+| Autonomous mode in the dashboard | `app/components/autopilot_viewer.py` | `render_session_settings`, `render_session_run`, `render_memory_records`, `_render_shap`, `_render_summary` |
+| SHAP of the final model | `app/services/explainer.py` | `explain_session`, `explain`, `ShapExplanation` |
+| Summary in plain words | `app/services/narrator.py` | `session_facts`, `narrate`, `unsupported_numbers`, `save` |
+| HTTP API | `app/api.py` | `create_app`, `SessionRequest`, `dataset_path` |
 
 ## Appendix B. Commands
 
@@ -842,6 +882,27 @@ python scripts/compare_seeds.py --dataset data/sample/titanic.csv --target Survi
 
 # charts of one experiment's search (written to docs/imp/images)
 python scripts/plot_search_history.py --experiment EXP-001
+
+# one Session with whole groups kept together (here: passengers sharing a ticket)
+python scripts/run_autopilot.py --dataset data/sample/titanic.csv --target Survived --seconds 300 --group-column Ticket
+
+# SHAP of a finished Session's final model (the CSV file the Session ran on)
+python scripts/explain_session.py SES-001 --dataset data/sample/titanic.csv
+
+# plain-language summary of a finished Session (needs Ollama running, with: ollama pull qwen2.5:7b-instruct)
+python scripts/summarise_session.py SES-001
+
+# leakage check and target suggestion on every registered dataset (written to results/leakage_check.csv)
+python scripts/check_single_columns.py
+
+# local HTTP API, then open http://127.0.0.1:8000/docs
+python scripts/run_api.py
+
+# Docker image with the dashboard and the API (publish the ports on 127.0.0.1 only)
+docker build -t autopilot-ml:0.1.0 .
+docker run --rm -p 127.0.0.1:8501:8501 -p 127.0.0.1:8000:8000 \
+    -v autopilot-experiments:/app/experiments -v autopilot-models:/app/models -v autopilot-mlruns:/app/mlruns \
+    autopilot-ml:0.1.0
 ```
 
 ## Appendix C. Sources

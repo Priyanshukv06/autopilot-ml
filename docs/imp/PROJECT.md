@@ -2,7 +2,7 @@
 
 Main project document, B.Tech Computer Science major project.
 
-Current status (31 October 2026): the Phase 1 baseline (profiling, task detection, FLAML search, evaluation, MLflow tracking, dashboard) and the Phase 2 rule-based autonomous layer (Session loop, planner, assessor, critic, strategy engine, judge, resource manager, experiment memory, and the autonomous mode of the dashboard) are implemented and tested. Phase 3 is in progress: the development and evaluation datasets are fixed (task 20), and the learned strategy choice from the memory (task 21), the ablation switches (task 22), the comparison systems (task 23: a manual LightGBM baseline, FLAML alone and AutoGluon) a resumable benchmark harness (task 24), its statistics (task 25), its analysis and frozen experiment memory (task 26) and the judge agreement study (task 27) are built and tested (8.8). The benchmark was stopped early (23 usable runs on 2 evaluation datasets with 1 seed) and the judge agreement study ran on 20 decisions; their results (`report-notes.md`, sections 9.16 to 9.18) are observations, not tested claims. The only measurements so far are the component studies and the Phase 2 comparison with FLAML alone on the four sample datasets (`report-notes.md`, chapter 9); this document makes no other performance claims.
+Current status (12 November 2026): the Phase 1 baseline (profiling, task detection, FLAML search, evaluation, MLflow tracking, dashboard) and the Phase 2 rule-based autonomous layer (Session loop, planner, assessor, critic, strategy engine, judge, resource manager, experiment memory, and the autonomous mode of the dashboard) are implemented and tested. Phase 3 is done, with shortened runs: the development and evaluation datasets are fixed (task 20), and the learned strategy choice from the memory (task 21), the ablation switches (task 22), the comparison systems (task 23: a manual LightGBM baseline, FLAML alone and AutoGluon) a resumable benchmark harness (task 24), its statistics (task 25), its analysis and frozen experiment memory (task 26) and the judge agreement study (task 27) are built and tested (8.8). The benchmark was stopped early (23 usable runs on 2 evaluation datasets with 1 seed) and the judge agreement study ran on 20 decisions; their results (`report-notes.md`, sections 9.16 to 9.18) are observations, not tested claims. The optional tasks 29 to 35 were built and tested from 1 to 12 November 2026 (8.9; 586 tests): SMOTE, cross-fitted target encoding and word features as new Strategies (12 in all), two new kinds of Diagnoses (14 in all), group-aware splits, SHAP explanations of a Session's final model, target suggestion with a single-column leakage warning, plain-language summaries by a local language model (labelled, never used for decisions), a local HTTP API and a Docker image. They came after the benchmark, so none of its results include them. A second, full benchmark run with the final code is planned and has not been run. The only measurements so far are the component studies and the Phase 2 comparison with FLAML alone on the four sample datasets (`report-notes.md`, chapter 9); this document makes no other performance claims.
 
 ## Abstract
 
@@ -47,7 +47,7 @@ The baseline handles the first goal with a single AutoML run. The research syste
 - **Evolutionary pipeline search**: TPOT (Olson et al., 2016) evolves whole pipelines with genetic programming.
 - **Stacked ensembles**: AutoGluon-Tabular (Erickson et al., 2020) relies on strong defaults and multi-layer stacking rather than long searches.
 - **Cost-aware search**: FLAML (Wang et al., 2021) with CFO (Wu et al., 2021) and BlendSearch (Wang et al., 2021) accounts for the cost of each trial, which makes it fast on small hardware.
-- **LLM-assisted data science**: for example CAAFE for feature engineering (Hollmann et al., 2023) and MLAgentBench for language agents running ML experiments (Huang et al., 2024). These are related work only. Our system does not use LLMs.
+- **LLM-assisted data science**: for example CAAFE for feature engineering (Hollmann et al., 2023) and MLAgentBench for language agents running ML experiments (Huang et al., 2024). These are related work only. Our system makes no decision with an LLM; the only one it uses is an optional local model that writes a labelled plain-language summary of a finished Session (8.9).
 
 ## 5. Limitations of conventional AutoML
 
@@ -62,12 +62,12 @@ The baseline handles the first goal with a single AutoML run. The research syste
 
 AutoPilot-ML puts an experiment loop around the AutoML engine:
 
-1. Dataset intelligence: profile the data and detect the task (implemented).
+1. Dataset intelligence: profile the data and detect the task (implemented; since optional task 33 also target suggestions with reasons and a single-column leakage check).
 2. Experiment planning: build the first Setup and each candidate Setup from the profile, the chosen change and the remaining budget (implemented in Phase 2; choosing the change from the memory implemented in Phase 3, task 21).
 3. AutoML core: run the engine. FLAML is the engine (implemented); AutoGluon runs only as a comparison system in the benchmark, in its own environment (Phase 3, task 23).
 4. Evaluation: metrics, errors and resource usage on a held-out split (implemented), and, inside a Session, Assessments on fixed folds of the training part (implemented in Phase 2).
-5. Critic: structured diagnosis of each experiment (implemented in Phase 2: 12 kinds, thresholds tuned by a study).
-6. Strategy engine: candidate improvements ranked by a rule table (implemented in Phase 2: 9 Strategies, ranked by severity and cost), or by expected gain per unit of cost learned from the memory (implemented in Phase 3, task 21: Thompson sampling and UCB1; its effect is not measured yet).
+5. Critic: structured diagnosis of each experiment (implemented in Phase 2: 12 kinds, thresholds tuned by a study; 14 kinds since the optional tasks 30 and 33).
+6. Strategy engine: candidate improvements ranked by a rule table (implemented in Phase 2: 9 Strategies, ranked by severity and cost; 12 since the optional tasks 29 and 30), or by expected gain per unit of cost learned from the memory (implemented in Phase 3, task 21: Thompson sampling and UCB1; its effect is not measured yet).
 7. Judge: keeps a change only if the fold differences support it (implemented in Phase 2).
 8. Experiment memory: what was tried, on what kind of data, at what cost, with what effect (implemented in Phase 2; read by the learned strategy choice since task 21 when switched on).
 9. Resource manager: share time, experiments and CPU across the loop and decide when to stop (implemented in Phase 2).
@@ -104,7 +104,7 @@ AutoPilot-ML puts an experiment loop around the AutoML engine:
                     Strategy Engine               (implemented, Phase 2: rules)
               ┌────────────┼────────────┐
               ▼            ▼            ▼
-          Features       Model         Data       (implemented, Phase 2: 9 Strategies)
+          Features       Model         Data       (implemented: 12 Strategies)
               └────────────┼────────────┘
                            ▼
                 Next Experiment + Judge           (implemented, Phase 2)
@@ -119,14 +119,14 @@ In the code there are three layers: the Streamlit UI (`app/main.py`, `app/compon
 
 ### 8.1 Dataset profiler (implemented, `app/services/profiler.py`)
 
-Takes a pandas DataFrame and, optionally, the target and task, and returns a `DatasetProfile`. The profile contains rows, columns, types, numerical/categorical/datetime feature lists, missing values and ratios, duplicate rows and unique counts. It flags constant, identifier-like, high-cardinality and mostly-missing columns. For the target it gives the class distribution and a `ClassBalance` (majority and minority share, imbalance ratio, severity), or summary statistics for regression. It also writes readable warnings and a small set of numeric meta-features. Severity uses the ratio of majority to minority class: below 1.5 is none, 1.5 to 3 mild, 3 to 9 moderate, 9 and above severe. The profiler has no Streamlit dependency, and its output is saved with every experiment.
+Takes a pandas DataFrame and, optionally, the target and task, and returns a `DatasetProfile`. The profile contains rows, columns, types, numerical/categorical/datetime feature lists, missing values and ratios, duplicate rows and unique counts. It flags constant, identifier-like, high-cardinality and mostly-missing columns. For the target it gives the class distribution and a `ClassBalance` (majority and minority share, imbalance ratio, severity), or summary statistics for regression. It also writes readable warnings and a small set of numeric meta-features. Severity uses the ratio of majority to minority class: below 1.5 is none, 1.5 to 3 mild, 3 to 9 moderate, 9 and above severe. The profiler has no Streamlit dependency, and its output is saved with every experiment. Since the optional tasks it also lists the frequent words of each text column (task 30) and, when asked, scores each feature column alone as a predictor of the target (task 33, the leakage check of 8.9).
 
 ### 8.2 Task detector (implemented, `app/services/task_detector.py`)
 
 - A text or boolean target with 2 classes is binary; with more classes it is multiclass.
 - A numeric target with 2 distinct values is binary. An integer target with at most 20 distinct values is treated as multiclass, with medium or low confidence and a note that it may really be a count or an ordinal value. Anything else is regression.
 - `validate()` rejects overrides that cannot work (regression on text, binary with a number of classes other than 2, multiclass with fewer than 3) and warns about missing targets and classes with fewer than two rows.
-- `target_candidates()` describes how suitable every column is as a target. `suggest_target()` is a deliberately simple placeholder (a generic name such as "target" or "label", otherwise the last column). Proper automatic target detection is future work.
+- `target_candidates()` describes how suitable every column is as a target. `suggest_targets()` (optional task 33) gives points to the columns that can be a target for simple signals (a generic target name or such a word in the name, being the last column, holding only 0 and 1 or true and false, having no empty cells) and returns the best three with their reasons; `suggest_target()` returns the first as the default choice. The user always confirms or changes it. The points are design choices, not measured; on 15 of the 16 registered datasets the registered target was the first suggestion (on penguins it came third).
 
 ### 8.3 AutoML runner and FLAML engine (implemented, `app/services/automl_runner.py`)
 
@@ -156,21 +156,21 @@ Gives each experiment an ID (EXP-001, EXP-002, ...), creating its folder atomica
 
 ### 8.6 Dashboard (implemented, `app/main.py`, `app/components/`)
 
-There are seven sections: Dataset, Target, Experiment Configuration, Run AutoML, Results, Explainability and Experiment History. The experiment runs in a background thread so the page stays responsive. The progress bar is estimated from elapsed time against the budget, because FLAML does not report progress during the search. Since Phase 2 the sidebar has a mode switch; the autonomous mode is described in 8.7.
+There are seven sections: Dataset, Target, Experiment Configuration, Run AutoML, Results, Explainability and Experiment History. The experiment runs in a background thread so the page stays responsive. The progress bar is estimated from elapsed time against the budget, because FLAML does not report progress during the search. Since Phase 2 the sidebar has a mode switch; the autonomous mode is described in 8.7. Since optional task 33 the target candidates tab lists the suggested targets with their reasons, and the Target section warns when one column alone predicts the target almost perfectly.
 
 ### 8.7 Autonomous layer (implemented in Phase 2)
 
-A Session runs the loop on one dataset within a total time, a maximum number of Experiments and a number of CPU cores. It makes the training and test parts once (the same split as Phase 1) and 3 x 5 fixed folds of the training part; no decision ever reads the test part. The parts, all in `app/services/`:
+A Session runs the loop on one dataset within a total time, a maximum number of Experiments and a number of CPU cores. It makes the training and test parts once (the same split as Phase 1) and 3 x 5 fixed folds of the training part; no decision ever reads the test part. With a grouping column (optional task 31), both keep each group on one side. The parts, all in `app/services/`:
 
 - Planner (`experiment_planner.py`): the first Setup (the user's settings with identifier-like and constant columns left out) and each candidate (a Strategy applied to a copy of the Accepted_Setup, warm-started from its best configurations).
 - Assessor (`assessor.py`): refits a Setup's best configuration on all 15 folds, with any data changes learned inside each fold, and records the fold scores.
-- Critic (`critic.py`, thresholds in `critic_thresholds.toml`): 12 kinds of Diagnoses with severity and evidence; thresholds tuned by the critic study.
-- Strategy catalogue and engine (`strategies.py`, `strategy_engine.py`, data changes in `transforms.py`): 9 Strategies and a rule table that ranks the Proposals by severity, cost and table order; each change is tried once per Session.
+- Critic (`critic.py`, thresholds in `critic_thresholds.toml`): 14 kinds of Diagnoses with severity and evidence; thresholds tuned by the critic study. The kinds unused_words and possible_leakage came with the optional tasks 30 and 33 and were not part of that study; possible_leakage is a warning that no Strategy answers.
+- Strategy catalogue and engine (`strategies.py`, `strategy_engine.py`, data changes in `transforms.py`, SMOTE in `resampling.py`): 12 Strategies (9 from Phase 2, and smote, target_encode and token_features from the optional tasks 29 and 30) and a rule table that ranks the Proposals by severity, cost and table order; each change is tried once per Session.
 - Judge (`judge.py`): corrected resampled t-test on the paired fold differences; keep, keep_simpler (simpler and not worse by more than 0.005) or discard; alpha 0.20, from the judge study.
 - Resource manager (`resource_manager.py`): 35% of the time for the first Experiment, later budgets from the measured time left, stop rules (Stop pressed, error, time, Experiments, no Proposals, three discards in a row).
 - Experiment memory (`experiment_memory.py`): one record per Verdict in `experiments/memory/memory.jsonl`; nearest past datasets and per-Strategy statistics, read by the learned selectors since Phase 3 (task 21) when the memory is switched on.
 - Records: `experiments/SES-###/session.json` after every step, step files per Experiment, and an MLflow parent run per Session.
-- Dashboard autonomous mode (`app/components/autopilot_viewer.py`) and command line (`scripts/run_autopilot.py`).
+- Dashboard autonomous mode (`app/components/autopilot_viewer.py`) and command line (`scripts/run_autopilot.py`). Since the optional tasks the dashboard also has a group column option, and after a Session, on request, the SHAP explanation of the final model and a plain-language summary (8.9).
 
 The plain-language explanation is in [how-it-works.md](how-it-works.md), section 9, and the class-level view in [architecture.md](architecture.md).
 
@@ -188,20 +188,33 @@ The plain-language explanation is in [how-it-works.md](how-it-works.md), section
 - Runs: the benchmark stopped after 33 of its 390 cells, when the laptop went into standby on battery; 23 cells are usable (`report-notes.md`, section 9.16). The judge agreement study ran on 20 decisions: 8 verdicts agreed (Cohen's kappa 0.05) and the strict check cost 2.4 times as much (section 9.18).
 - Changes after reading the results (31 October 2026): a mean difference within the refit tolerance is no gain for the Judge; identical refits reuse their fold scores; a learned selector moves a change only with records from at least 2 datasets, and kept steps that changed nothing no longer count as successes. Their effect on scores is not measured.
 
+### 8.9 Optional extensions (tasks 29 to 35, implemented 1 to 12 November 2026)
+
+- SMOTE (`resampling.py`, Strategy `smote`, task 29): FLAML applies the resampler to the training rows of each of its search folds and of the final model, never to validation rows, and the Assessor does the same in every refit. `FoldSafeSmote` uses SMOTE, SMOTE-NC or SMOTE-N to fit the columns FLAML hands it, and oversamples every smaller class to the size of the largest. It is the third answer to class imbalance, after class weights and the smoother search metric, and it does not apply together with class weights (FLAML does not allow both).
+- Target encoding and word features (`transforms.py`, Strategies `target_encode` and `token_features`, Diagnosis `unused_words`, task 30): target encoding replaces a text column by the smoothed mean target of its value, cross-fitted over 5 parts of the training rows so that no row's encoding uses its own label; it is the fourth answer to high cardinality. Word features replace a text column by one 0/1 column for each of its frequent words (at most 20). unused_words names a text column with frequent words that no encoding changes, and can bring back a column the first Setup left out as identifier-like, such as Titanic's `Name`, using only its words. Columns the user excluded are never brought back.
+- Group-aware splits (`splits.py`, `SessionSettings.group_column`, task 31): whole groups go to the test part, each group stays inside one fold, and the grouping column is not a feature. It is set with `--group-column` or the dashboard's group column option and recorded in `session.json`; without it nothing changes.
+- SHAP explanations (`explainer.py`, task 32): the final model of a finished Session, explained on at most 200 rows of its rebuilt training part (the test part is never used); tree SHAP for the tree learners, a permutation estimate otherwise. In the dashboard and with `scripts/explain_session.py`.
+- Target suggestion and leakage check (`task_detector.py`, `profiler.py`, Diagnosis `possible_leakage`, task 33): the suggestions of 8.2; each feature column scored alone in 5-fold cross-validation on the training part, and a used column scoring at least 0.99 (balanced accuracy, or R2 for regression) gets a high possible_leakage Diagnosis, which is only a warning. The 0.99 was set before any run, not tuned. On the training part of the seed-42 split of all 16 registered datasets no column reached it (`scripts/check_single_columns.py`, `results/leakage_check.csv`).
+- Plain-language summaries (`narrator.py`, task 34): facts from the Session record only are sent to a model on this machine through Ollama (`qwen2.5:7b-instruct`, temperature 0, seed 0). The text is saved apart from the record as generated text, with the numbers that are not in the facts listed, and no module of the loop reads it. In the dashboard and with `scripts/summarise_session.py`.
+- Local HTTP API and Docker image (`app/api.py`, `scripts/run_api.py`, `Dockerfile`, task 35): endpoints to check the service, list and read Sessions, start one Session at a time and stop it; it listens on 127.0.0.1 by default and accepts only CSV files inside `data/`. The image (2.12 GB, built and checked on 12 November 2026) runs the API and the dashboard, keeps the results in volumes and should be run with its ports published on 127.0.0.1 only; the local summaries are not available inside it.
+- Checks: the parts were checked with short runs, most of them throwaway runs in a temporary folder (`report-notes.md`, section 5.5); they show that the parts work together, not that they improve scores. The benchmark ran before these tasks, so none of its results include them.
+- Planned: a second, full benchmark run with the final code. `scripts/build_memory.py` and `scripts/run_benchmark.py` take `--label v2`, so that run writes to its own folders and cannot touch the first run's rows or its frozen memory. It has not been run.
+
 ## 9. Current implementation
 
-- Environment: conda environment `automl` with Python 3.11. Versions are pinned in `requirements.txt`.
+- Environment: conda environment `automl` with Python 3.11. Versions are pinned in `requirements.txt`. Since task 35 also a Docker image (Python 3.11 slim, 8.9).
 - Data: CSV only, with four public sample datasets included.
 - Tasks: binary, multiclass, regression.
 - Engine: FLAML 2.7.0 with its default learners (LightGBM, XGBoost, random forest, extra trees, linear models and others).
 - Evaluation: independent test split, FLAML's internal validation score and a trivial baseline.
-- Explainability: permutation importance, the model's own importance, confusion matrix, ROC curve, residual plots.
+- Explainability: permutation importance, the model's own importance, confusion matrix, ROC curve, residual plots; SHAP for a Session's final model (8.9).
 - Tracking: local MLflow (SQLite) plus JSON records.
 - Autonomous layer (Phase 2): see 8.7.
 - Phase 3: see 8.8.
-- Tests: 47 pytest tests at the end of Phase 1; 468 after Phase 2 and 541 on 31 October 2026, including short real FLAML runs, whole Sessions with a fake clock, the dashboard through Streamlit's AppTest, smoke tests of the studies, the benchmark harness with stand-in systems, and the statistics against reference values (`report-notes.md`, section 8.6).
-- Not run: the rest of the benchmark grid (357 of 390 cells; the user decided on 31 October 2026 not to run it), so hypotheses H1 to H4 are not tested.
-- Not implemented: SHAP, automatic target detection, feature engineering beyond the 9 Strategies, resampling.
+- Optional extensions (tasks 29 to 35): see 8.9.
+- Tests: 47 pytest tests at the end of Phase 1; 468 after Phase 2, 541 on 31 October 2026 and 586 on 12 November 2026 after the optional tasks (276.1 s), including short real FLAML runs, whole Sessions with a fake clock, the dashboard through Streamlit's AppTest, smoke tests of the studies, the benchmark harness with stand-in systems, and the statistics against reference values (`report-notes.md`, section 8.6).
+- Not run: the rest of the benchmark grid (357 of 390 cells; the user decided on 31 October 2026 not to run it), so hypotheses H1 to H4 are not tested. A second, full run with the final code is planned (`--label v2`, 8.9) and has not been run.
+- Not implemented: threshold tuning, feature interactions and other feature engineering beyond the 12 Strategies; choosing the target without the user (it is suggested, and the user confirms it).
 
 ## 10. Proposed modules (written for the Phase 1 review)
 
@@ -248,7 +261,7 @@ To use the memory on a new dataset, the meta-features are standardised and the k
 
 ## 13. Strategy engine (rule version built in Phase 2; learned ranking built in Phase 3, task 21)
 
-The rule table as planned for the Phase 1 review is below. The built version (Phase 2) implements the rows for overfitting (smaller trees), underfitting and a still-improving search (more search time), class imbalance (class weights), heavy missingness (indicators or dropping), high cardinality (frequency encoding, grouping rare values, or dropping), identifier and constant columns (drop), redundant features (drop one of the pair), weak model families (fewer families) and an unreliable validation score (a smoother search metric). SMOTE, target encoding, threshold tuning and feature interactions are not built. A first rule table, from diagnosis to candidate strategies:
+The rule table as planned for the Phase 1 review is below. The built version (Phase 2) implements the rows for overfitting (smaller trees), underfitting and a still-improving search (more search time), class imbalance (class weights), heavy missingness (indicators or dropping), high cardinality (frequency encoding, grouping rare values, or dropping), identifier and constant columns (drop), redundant features (drop one of the pair), weak model families (fewer families) and an unreliable validation score (a smoother search metric). The optional tasks added SMOTE (the third answer to class imbalance, task 29), target encoding (the fourth answer to high cardinality, task 30) and word features for text columns whose frequent words are unused (task 30). Threshold tuning and feature interactions are not built. A first rule table, from diagnosis to candidate strategies:
 
 - Overfitting (large train vs validation/test gap): a search space biased towards regularisation, fewer or shallower trees, feature selection.
 - Underfitting (low train and test scores): more budget, more expressive model families, feature interactions.
@@ -347,9 +360,11 @@ As built (task 22): A1 is `autopilot_rules` (the same Session, see section 19), 
 ## 23. Limitations
 
 - Only tabular, single-table CSV input. No text, images or time series.
-- The user picks the target. There is no automatic leakage check yet.
+- The user picks the target, helped by suggestions with reasons. The leakage check scores one column at a time and only warns; only the user can tell whether a flagged column is known before the outcome.
 - Results depend on FLAML's learners and search, and we do not change FLAML itself.
-- The baseline does no feature engineering or resampling.
+- The baseline (a single experiment) does no feature engineering or resampling; in a Session these come only from the 12 Strategies.
+- The plain-language summaries are generated text: in the checks of 12 November 2026 one misread a verdict and another added judgements of its own. They are labelled, never used for decisions, and need Ollama on the same machine.
+- The HTTP API has no login; it listens on 127.0.0.1 by default and runs one Session at a time.
 - Because budgets are measured in wall-clock time, runs are only approximately reproducible.
 
 ## 24. Timeline
@@ -366,11 +381,13 @@ In weeks from the start of the project (to be adjusted to the semester):
 
 ## 25. Future scope
 
-- Automatic target detection, leakage checks and data validation rules
-- SHAP explanations, and an optional local LLM (through Ollama) to explain diagnoses in plain language
-- More engines: AutoGluon as a baseline first, possibly also as a selectable engine
-- FastAPI service, Docker image, PostgreSQL-backed tracking
+- The second, full benchmark run with the final code (`--label v2`), so that H1 to H4 can be tested
+- Data validation rules
+- More engines: AutoGluon as a selectable engine (today it runs only as a comparison system in the benchmark)
+- PostgreSQL-backed tracking
 - Time-series and text features, once the tabular loop is shown to work
+
+Built since this list was first written (8.8 and 8.9): AutoGluon as a comparison system, target suggestion and a single-column leakage check, SHAP explanations of a Session's final model, the optional local language-model summaries (through Ollama), a FastAPI service and a Docker image.
 
 ## 26. References
 

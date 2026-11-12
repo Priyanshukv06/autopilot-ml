@@ -40,18 +40,30 @@ Status (27 October 2026): done. All milestones are built and tested (468 tests).
 
 Tasks 20 to 28: development and evaluation datasets (fixed in advance and kept apart), learned strategy choice (Thompson sampling and UCB1 over past outcomes from similar datasets), ablation switches, comparison systems (manual baseline, FLAML alone, AutoGluon), a resumable benchmark (5 seeds; budgets of 2 and 5 minutes, since the 10-minute budget was dropped on 27 October 2026 to fit the laptop), the statistics (Friedman and Nemenyi, Wilcoxon with Holm's correction, effect sizes, time-to-target), the judge agreement study, and the final documents.
 
-Status (31 October 2026): tasks 20 to 28 are done (541 tests). The benchmark stopped after 33 of its 390 cells, when the laptop went into standby on battery; 23 cells are usable, and the user decided not to run the rest. The judge agreement study ran on 20 decisions instead of 57. Three flaws found in the records were fixed afterwards (report notes, chapter 10). Next, if wanted: the full benchmark on mains power, and the optional tasks below.
+Status (31 October 2026): tasks 20 to 28 are done (541 tests). The benchmark stopped after 33 of its 390 cells, when the laptop went into standby on battery; 23 cells are usable, and the user decided not to run the rest. The judge agreement study ran on 20 decisions instead of 57. Three flaws found in the records were fixed afterwards (report notes, chapter 10). Next, if wanted: the full benchmark on mains power, and the optional tasks below (built by 12 November 2026).
 
-## Optional (after Phase 3)
+## Optional (after Phase 3, done)
 
-Tasks 29 to 35: SMOTE through FLAML's resampler, target encoding and token features, group-aware folds, SHAP, target suggestion and a leakage check, local language-model summaries (never used for decisions), an API and a Docker image.
+Tasks 29 to 35, each one commit with its tests:
+
+- [x] Task 29: SMOTE through FLAML's resampler, as the `smote` Strategy (training rows only)
+- [x] Task 30: cross-fitted target encoding and word features, as Data_Steps and Strategies (`target_encode`, `token_features`), and the Critic's `unused_words` Diagnosis, which can bring back Titanic's `Name` using only its words
+- [x] Task 31: group-aware outer split and Session_Folds (`SessionSettings.group_column`, `--group-column`, a dashboard option)
+- [x] Task 32: SHAP explanations of a Session's final model on training-part rows (a dashboard section, `scripts/explain_session.py`)
+- [x] Task 33: target suggestion with reasons, and the single-column leakage check with the warning-only `possible_leakage` Diagnosis (`scripts/check_single_columns.py`)
+- [x] Task 34: plain-language Session summaries by a local language model through Ollama, labelled as generated text and never used for decisions
+- [x] Task 35: a local HTTP API (FastAPI, on 127.0.0.1) and a Docker image
+
+Status (12 November 2026): done (586 tests passed in 276.1 s). The catalogue now has 12 Strategies and the Critic 14 kinds of Diagnoses. Each part was checked with short runs (report notes, section 5.5); the benchmark ran before them, so none of its results include them.
+
+Next: a second, full benchmark run with the final code. `scripts/build_memory.py` and `scripts/run_benchmark.py` take `--label v2`, so that run writes to its own folders and cannot touch the first run's rows or its frozen memory. It has not been run yet.
 
 ## Decisions
 
 Confirmed on 26 October 2026 (details in `design.md`):
 
 - D2: the Judge refits fixed configurations on the Session's folds and uses the corrected resampled t-test. The judge study (task 17) set alpha to 0.20 (0.10 before). The default stays 3 repeats of 5 folds (15 folds): 5 repeats accepted the same changes at five thirds of the cost.
-- D3: small public OpenML datasets are downloaded once; `imbalanced-learn` is added only for the optional SMOTE task.
+- D3: small public OpenML datasets are downloaded once; `imbalanced-learn` is added only for the optional SMOTE task (done in task 29: `imbalanced-learn==0.14.2`).
 - D4: AutoGluon gets its own conda environment if it does not install next to our pinned libraries. Checked at the start of task 23: it would replace pandas 3.0.6 by 2.3.3, so it runs from the environment `autogluon` as a separate process.
 - D5: not needed. Priyanshu Verma builds all tasks; Salil Kushwah is credited in the final report.
 

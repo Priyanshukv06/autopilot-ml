@@ -2,6 +2,8 @@
 
 Status (31 October 2026): this page sets out what we planned to measure and how. Everything below is built (Phase 3, tasks 20 to 27). The benchmark stopped after 23 usable cells on 2 evaluation datasets with 1 seed, so the hypotheses could not be tested; what was measured is in the report notes, sections 9.15 to 9.18, and the planned grid can still be run in full with `scripts/run_benchmark.py`.
 
+Update (12 November 2026): the optional tasks 29 to 35 have added three Strategies (smote, target_encode, token_features; 12 in all) and two kinds of Diagnoses (unused_words and possible_leakage; 14 in all) to the system, besides parts that make no decisions (SHAP, local summaries, an API, a Docker image). The first benchmark and its frozen memory came before them, so none of their results include them. A second, full run with the final code is planned: `--label v2` in `scripts/build_memory.py` and `scripts/run_benchmark.py` sends it to its own folders, so it cannot touch the first run's rows or frozen memory. It has not been run yet.
+
 ## The main question
 
 > Can an autonomous experimentation layer improve the efficiency and effectiveness of conventional AutoML by learning from previous experiments, diagnosing model weaknesses, selecting appropriate improvement strategies, and allocating computational resources adaptively?
@@ -30,7 +32,7 @@ Each hypothesis is tested with paired comparisons over datasets and seeds. If a 
 2. **Multi-armed bandits (Phase 3):** each strategy is an arm, and the reward is the change in the primary metric divided by the compute seconds. We will try UCB1 and Thompson sampling, possibly using the dataset meta-features as context.
 3. **Memory (Phase 3):** find the nearest past datasets by meta-features and try first the strategies that gave the best reward there.
 4. **Bayesian optimisation of strategy settings (optional):** for example Optuna over the SMOTE ratio or a feature-selection threshold, only if the simpler methods leave a measurable gap.
-5. **Local LLM (optional, later):** only to explain decisions. It is evaluated separately and is not part of the main claims.
+5. **Local LLM (optional, built in task 34):** only to explain a finished Session in plain words (`qwen2.5:7b-instruct` through Ollama, on the same machine). Its text is labelled as generated, no decision reads it, and it is not part of the main claims. It was checked in two live runs on 12 November 2026, not evaluated systematically.
 
 ## The resource-aware objective
 
@@ -84,6 +86,7 @@ Before the parts are trusted inside the loop, each one is measured on its own. D
 - **Critic study:** precision and recall of each diagnosis on synthetic datasets with planted problems, plus clean datasets for false alarms. For overfitting and unreliable validation, the ground truth comes from a large fresh sample (20,000 rows) drawn from the same generator. Thresholds are tuned on one set of seeds and reported on another.
 - **Judge study:** the false-keep rate and the power of the Judge, on pairs of setups whose true difference is measured on the fresh sample, for several values of alpha and of the number of fold repeats. Defaults are chosen on one set of seeds and reported on another.
 - **Judge agreement study (Phase 3):** how often the cheap Judge (refits on the Session's 15 folds) gives the same verdict as a strict comparison that re-runs full FLAML searches on several inner splits, with Cohen's kappa and the cost of each method.
+- **Leakage check (optional task 33):** the single-column check on the training part of the seed-42 split of all 16 datasets, for false alarms: no column reached the threshold of 0.99 (12 November 2026, `results/leakage_check.csv`). The new kinds unused_words and possible_leakage and the new Strategies were not part of the critic study or the judge study.
 
 ## Things that could make the results misleading
 

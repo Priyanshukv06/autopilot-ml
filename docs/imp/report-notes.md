@@ -96,12 +96,12 @@ The baseline solves part 1 with one AutoML run. The research system works on bot
 | No. | Objective | Status |
 |---|---|---|
 | O1 | Baseline: profiling, task detection, FLAML training, held-out evaluation, explanations, experiment tracking, dashboard | Done (Phase 1) |
-| O2 | Critic: automatic, structured diagnosis of each experiment, with evidence | Done (Phase 2: 12 kinds, measured by the critic study) |
-| O3 | Strategy engine: map diagnoses to candidate changes and rank them (rules, then bandits, then memory) | Rules done (Phase 2: 9 Strategies); bandits on memory records built (Phase 3, task 21: Thompson sampling and UCB1); their effect is being measured by the benchmark (running since 28 October 2026) |
+| O2 | Critic: automatic, structured diagnosis of each experiment, with evidence | Done (Phase 2: 12 kinds, measured by the critic study; the optional tasks added unused_words and the warning-only possible_leakage, not measured by a study) |
+| O3 | Strategy engine: map diagnoses to candidate changes and rank them (rules, then bandits, then memory) | Rules done (Phase 2: 9 Strategies; 12 with the optional smote, target_encode and token_features); bandits on memory records built (Phase 3, task 21: Thompson sampling and UCB1); their effect is not measured yet: the first benchmark run was stopped after 33 cells (section 9.16), and a second, full run with the final code is planned |
 | O4 | Planner and autonomous loop, with a fair comparison of every change over several splits | Done (Phase 2: Assessor on 15 folds and the Judge, measured by the judge study) |
-| O5 | Experiment memory: reuse what worked on similar datasets | Recording done (Phase 2); reuse built (Phase 3, task 21: the learned selectors read the nearest datasets' records); the frozen memory built on 27 October 2026 (97 records, section 9.15); its effect is being measured by the benchmark |
+| O5 | Experiment memory: reuse what worked on similar datasets | Recording done (Phase 2); reuse built (Phase 3, task 21: the learned selectors read the nearest datasets' records); the frozen memory built on 27 October 2026 (97 records, section 9.15); its effect is not measured yet (the first benchmark run was stopped; a second run, with a memory rebuilt by the final code, is planned) |
 | O6 | Resource manager: share the time and CPU budget and decide when to stop (utility = improvement / cost) | Done (Phase 2: budgets, stop rules and the utility of each step recorded); stopping on expected utility needs the memory (Phase 3) |
-| O7 | Evaluation against a manual baseline, FLAML and AutoGluon, with ablations, on public datasets and several seeds | Built (tasks 20 to 26); running since 28 October 2026 (390 cells: 6 OpenML evaluation datasets, budgets of 120 and 300 s, 5 seeds) |
+| O7 | Evaluation against a manual baseline, FLAML and AutoGluon, with ablations, on public datasets and several seeds | Built (tasks 20 to 26). The first run (started 28 October 2026; 390 cells: 6 OpenML evaluation datasets, budgets of 120 and 300 s, 5 seeds) was stopped after 33 cells, 23 usable (section 9.16); the second, full run with the final code is planned (`--label v2`) |
 
 - Scope: CSV, single-table tabular data; binary, multiclass and regression; laptop CPU; fully offline.
 - Out of scope: text, images, time series, clustering; LLMs as decision makers; cloud or paid services.
@@ -591,7 +591,7 @@ Built on 27 October 2026 (task 21). Tests: section 8.6.
 |---|---|
 | `use_memory` off (default) | The selectors see no memory, so `thompson` and `ucb1` keep the rule order |
 | `selector="random"` | The Proposals of the rule table in a random order (no strategy choice) |
-| `use_critic` off | No Diagnoses. For each of the 9 Strategies one change with random valid parameters (a random used column to drop, a random text column to encode or group, a random numeric column with empty cells for an indicator, all tried learner families but one), kept if it applies and was not tried, in a random order |
+| `use_critic` off | No Diagnoses. For each of the 9 Strategies one change with random valid parameters (a random used column to drop, a random text column to encode or group, a random numeric column with empty cells for an indicator, all tried learner families but one), kept if it applies and was not tried, in a random order. Since the optional tasks, for each of the 12 (also a random text column for target encoding and a random text column with frequent words for word features) |
 | `use_resource_manager` off | Every search gets total time / maximum Experiments (at least 5 s); nothing is kept back for Assessments, no shorter search after a wasted budget and no longer one for more search time; only the time and Experiment limits stop the Session (and Stop, an error or no change left; no "three discards in a row" rule) |
 
 The random choices use the Session's generator, seeded with the Session seed, so an ablation run can be repeated. Built on 27 October 2026 (task 22). Tests: section 8.6.
@@ -989,6 +989,8 @@ After Phase 3 (31 October 2026, code of commit 812eec4), counted the same way: 1
 | `scripts/run_benchmark.py`, `build_memory.py`, `run_study.py` | 142, 84, 217 | the command lines of the benchmark, the memory build and the three studies |
 | `app/services/strategy_engine.py` | 406 | the rule table and the four selectors (200 lines after Phase 2) |
 
+After the optional tasks 29 to 35 (12 November 2026, the code of the documentation commit of that day), counted the same way (`git ls-files "*.py"`, every line): 20,235 lines in 97 Python files (8,938 in 33 files of `app/`, 3,294 in 13 of `research/`, 1,183 in 12 of `scripts/`, 6,820 in 39 of `tests/`, of which 38 test files). The new modules: `app/services/narrator.py` 203 lines, `app/services/explainer.py` 197, `app/api.py` 180 and `app/services/resampling.py` 101; `transforms.py` grew to 400 lines, `profiler.py` to 470, `critic.py` to 504 and `strategies.py` to 430.
+
 ### 8.2 Main interfaces
 
 ```python
@@ -1034,7 +1036,7 @@ Since task 18 (26 October 2026) the sidebar has a mode switch. "Single experimen
 4. Autonomous run: Start; while the Session runs, a progress bar of the time used, the current activity, Stop, and the view below, redrawn every second; afterwards the stop reason, the time and Experiments used, and the first and final model side by side on the test part (test score and its change, learner, changes kept, all test metrics next to the trivial baseline) under the caption "Not used for decisions". The view: a timeline table (step, Experiment, Diagnoses answered, Strategy, change, mean difference and its standard deviation, p(better), p(worse), Verdict, validation score, seconds), a chart of the Accepted_Setup's validation score per step with the candidates marked by Verdict, and the Diagnosis cards with their evidence for every accepted Setup.
 5. Experiment memory for this dataset: the memory records of the current dataset and target (Strategy, settings, Diagnoses answered, Verdict, mean difference and spread, folds, cost).
 
-The sidebar lists the implemented modules and the planned ones. Since 26 October 2026 (after task 11.2) it listed the first version of the autonomous layer as built; since task 18 it lists the planner and session loop, the Critic (12 diagnoses, thresholds from the critic study), the Strategy_Engine (9 strategies), the Judge, the Resource_Manager and the Experiment_Memory (written and shown, not used for decisions yet) as built, and since its tests (task 18.1) also the autonomous mode in the dashboard. Since task 21.1 the learned strategy choice is listed as built and the memory without "not used for decisions yet"; planned: the benchmark against FLAML alone, AutoGluon and a manual baseline.
+The sidebar lists the implemented modules and the planned ones. Since 26 October 2026 (after task 11.2) it listed the first version of the autonomous layer as built; since task 18 it lists the planner and session loop, the Critic (12 diagnoses, thresholds from the critic study), the Strategy_Engine (9 strategies), the Judge, the Resource_Manager and the Experiment_Memory (written and shown, not used for decisions yet) as built, and since its tests (task 18.1) also the autonomous mode in the dashboard. Since task 21.1 the learned strategy choice is listed as built and the memory without "not used for decisions yet"; planned: the benchmark against FLAML alone, AutoGluon and a manual baseline. Since 31 October 2026 the benchmark is listed as a built research tool, and since 12 November 2026 (optional tasks 29 to 35) the sidebar lists the Critic as 12 diagnoses with thresholds from the critic study plus unused words and a leakage warning, the Strategy engine with 12 strategies, the optional strategies (SMOTE, target encoding, word features), group-aware splits, SHAP, target suggestion with the leakage warning, the local summaries, and the API with the Docker image; the only planned item is the second, full benchmark run.
 
 ### 8.4 Files written by one experiment
 
@@ -1537,18 +1539,16 @@ Scope for improvement found in the results (31 October 2026; ranked by how direc
 | 7 | Check LightGBM's library defaults as a cheap candidate (one refit on the folds) | The defaults beat FLAML's search on titanic (smoke run) and pc4, not on cylinder-bands | Small to medium |
 | 8 | Fairer AutoGluon reference: a stronger preset at the same budget | `medium_quality` stopped after 31 to 74 s of 120 or 300 s | Small (harness setting), but longer runs |
 
+Built after this list was first written (optional tasks 29 to 35, 1 to 12 November 2026; section 5.5): target suggestion and a warning-only leakage check; word features (for example titles from Titanic's `Name`) and cross-fitted target encoding of high-cardinality columns; SMOTE; SHAP explanations of the final model, for the whole model and for one row; group-aware splits and folds; plain-language summaries by a local language model through Ollama, which no decision uses; a local REST API (FastAPI) and a Docker image. None of them has been measured in the benchmark yet.
+
 Future scope (beyond the planned phases):
 
-- Automatic target detection and data-leakage checks
-- Feature engineering, for example passenger title from `Name` and family size on Titanic
-- Encoding high-cardinality columns instead of only dropping them
-- SHAP explanations for the whole model and for single predictions
-- Group-aware validation as an option for related rows
+- Run the benchmark grid in full on mains power with the final code (390 cells, about a day; `--label v2`), so that H1 to H4 can be tested, and a judge agreement study with strict searches as large as the Sessions'
+- Measure each optional Strategy in the benchmark (how often it is proposed, kept and helpful)
+- Feature engineering beyond single columns, for example family size from two Titanic columns
 - Warm starts after "smaller trees": move the Accepted_Setup's best configurations into the limited search space instead of leaving them out, and measure whether that helps (section 4.7)
-- Run the benchmark grid in full on mains power (390 cells, about a day), so that H1 to H4 can be tested, and a judge agreement study with strict searches as large as the Sessions'
 - The improvements 4 to 8 of the table above
-- An optional local language model (for example through Ollama) to explain diagnoses in plain language; decisions stay measurable and do not depend on it
-- A REST API (FastAPI), a Docker image and a database backend for several users
+- A database backend and a login for several users of the API
 - Time-series and text features, once the tabular loop is shown to work
 
 ---
@@ -1682,7 +1682,8 @@ Future scope (beyond the planned phases):
 | 2026-11-12 | Optional task 33: target suggestion with reasons and the single-column leakage check (Algorithms 27 and 28): `suggest_targets`, `single_column_scores` on the Training_Part, the warning-only `possible_leakage` Diagnosis with an optional threshold (0.99), dashboard warnings, `scripts/check_single_columns.py` run on all 16 datasets (no false alarm; `results/leakage_check.csv`); 5 tests in `tests/test_leakage.py`; 578 tests | 38182ad |
 | 2026-11-12 | Optional task 34: plain-language Session summaries by a local language model through Ollama (Algorithm 29): `app/services/narrator.py` (facts from the record only, this machine only, labelled, unsupported numbers listed, saved apart), a dashboard section and `scripts/summarise_session.py`; two live runs with `qwen2.5:7b-instruct`, the first of which misread a verdict code, so outcomes are now given in words; 5 tests in `tests/test_narrator.py` and a dashboard test step; 583 tests | cf6c3a9 |
 | 2026-11-12 | Optional task 35: the local HTTP API (`app/api.py`, `scripts/run_api.py`; fastapi, uvicorn and httpx2 pinned) and the Docker image (`Dockerfile`, `scripts/docker_entry.sh`, `.dockerignore`, `.gitattributes`); a live API Session with real FLAML; the image built (2.12 GB) and checked with a short Session inside it; 3 tests in `tests/test_api.py`; 586 tests | 5650aa1 |
-| 2026-11-12 | A run label for the benchmark and the memory build (`--label v2`): a later run writes to `experiments/benchmark-v2*/`, `models/benchmark-v2*/` and `results/benchmark-v2/`, so it can never touch the first run's rows or its frozen memory; tests for both folder layouts | see the commit of this date |
+| 2026-11-12 | A run label for the benchmark and the memory build (`--label v2`): a later run writes to `experiments/benchmark-v2*/`, `models/benchmark-v2*/` and `results/benchmark-v2/`, so it can never touch the first run's rows or its frozen memory; tests for both folder layouts | 3d66e8c |
+| 2026-11-12 | Documents brought in line with optional tasks 29 to 35: README, PROJECT.md, how-it-works, architecture, roadmap, research direction, the services package docstring and two stale module docstrings, the dashboard sidebar (only the second benchmark run is planned), and in these notes the objectives table, the future scope and the sidebar description | see the commit of this date |
 
 ---
 

@@ -1,8 +1,9 @@
 """AutoML orchestration: split -> engine search -> evaluation -> explainability -> tracking.
 
 The rest of the application talks to ``AutoMLRunner`` and ``ExperimentResult`` only.
-FLAML specifics are contained in ``FLAMLEngine``; another engine (e.g. AutoGluon for
-the planned baseline comparison) can be added by implementing ``AutoMLEngine``.
+FLAML specifics are contained in ``FLAMLEngine``; another engine can be added by
+implementing ``AutoMLEngine`` (the benchmark runs AutoGluon in its own environment,
+``research/systems.py``).
 """
 
 from __future__ import annotations

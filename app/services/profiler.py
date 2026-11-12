@@ -1,9 +1,9 @@
 """Dataset profiling, independent of any UI.
 
 ``DatasetProfiler.profile`` turns a DataFrame into a structured, JSON-serialisable
-``DatasetProfile``. The profile is shown in the UI, logged as an MLflow artifact
-and its ``meta_features()`` are the dataset descriptors that the planned
-experiment-memory module will use to compare datasets.
+``DatasetProfile``. The profile is shown in the UI, logged as an MLflow artifact,
+read by the Critic, and its ``meta_features()`` are the dataset descriptors that the
+Experiment_Memory uses to find similar datasets.
 """
 
 from __future__ import annotations

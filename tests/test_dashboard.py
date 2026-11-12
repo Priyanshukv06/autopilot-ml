@@ -17,6 +17,7 @@ import app.core.config as config_module
 from app.components import autopilot_viewer, experiment_viewer
 from app.core.config import build_settings
 from app.services.automl_runner import AutoMLRunner, FLAMLEngine
+from app.services import narrator
 from app.services.autopilot import AutopilotSession
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -113,7 +114,10 @@ def test_the_single_experiment_mode_works_as_before(project):
     assert "3 · Session settings" not in [h.value for h in at.header]
 
 
-def test_an_autonomous_run_shows_its_steps_and_the_final_comparison(project):
+def test_an_autonomous_run_shows_its_steps_and_the_final_comparison(project, monkeypatch):
+    # a stand-in for the local language model (optional task 34): no Ollama in the tests
+    monkeypatch.setattr(autopilot_viewer, "narrate", lambda record: narrator.narrate(
+        record, post=lambda url, payload, timeout: {"response": "A plain summary with a made-up 0.999."}))
     at = open_app("Autonomous run")
     assert "3 · Session settings" in [h.value for h in at.header]
     start_session(at, max_experiments=3)
@@ -143,6 +147,11 @@ def test_an_autonomous_run_shows_its_steps_and_the_final_comparison(project):
     assert not at.error and "explainer for" in texts(at.caption)
     at.number_input(key="auto_shap_row").set_value(3).run()
     assert not at.error and "Row label" in texts(at.caption)
+    # the plain-language summary, labelled as generated text, saved apart, with its unsupported number
+    at.button(key="auto_summary").click().run()
+    assert not at.error and "Generated text, written by a local language model" in texts(at.caption)
+    assert "A plain summary with a made-up 0.999." in texts(at.markdown) and "0.999" in texts(at.warning)
+    assert (project.experiments_dir / record["session_id"] / "summary_generated.json").exists()
 
 
 def test_a_failed_session_is_shown_as_an_error(project, monkeypatch):

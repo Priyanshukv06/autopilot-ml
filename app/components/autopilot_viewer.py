@@ -35,6 +35,7 @@ from app.services.autopilot import SELECTORS, AutopilotSession, SessionSettings
 from app.services.evaluator import METRICS, PRIMARY_METRICS, metric_display_name, metric_warnings
 from app.services.experiment_memory import ExperimentMemory, dataset_fingerprint
 from app.services.explainer import MAX_ROWS, TOP_COLUMNS, explain_session
+from app.services.narrator import DEFAULT_MODEL, SUMMARY_FILE, NarrationError, narrate, save
 from app.services.judge import JudgeSettings
 from app.services.resource_manager import SessionBudget
 from app.services.task_detector import TaskType
@@ -281,11 +282,39 @@ def _render_finished(finished: FinishedSession, settings: Settings, df: pd.DataF
     st.success(f"{record['session_id']} finished: {_count(len(record['steps']), 'Experiment', 'Experiments')} in "
                f"{record['total_seconds']:.0f} s. It stopped because {stop_reason_text(record)}.")
     _render_final_comparison(record, settings)
+    _render_summary(record, settings)
     _render_shap(record, df, settings)
     st.markdown("#### How the Session got there")
     _render_steps(record, settings)
     st.caption(f"Record: {settings.experiments_dir / record['session_id'] / 'session.json'} · "
                f"budget {budget['total_seconds']:.0f} s, at most {budget['max_experiments']} Experiments")
+
+
+def _render_summary(record: dict[str, Any], settings: Settings) -> None:
+    """A plain-language summary by a local language model, on request (optional task 34). It is generated
+    text, saved in its own file, and nothing in the Session reads it."""
+    st.markdown("#### Summary in plain words (local language model)")
+    folder = settings.experiments_dir / record["session_id"]
+    saved = _read_json(folder / SUMMARY_FILE)
+    if saved is None:
+        st.caption(f"Written on this machine by {DEFAULT_MODEL} through Ollama, from the Session record only. It "
+                   "needs Ollama running; it takes up to a few minutes.")
+        if not st.button("Write a summary", key="auto_summary"):
+            return
+        with st.spinner(f"Asking {DEFAULT_MODEL} on this machine"):
+            try:
+                narration = narrate(record)
+            except NarrationError as exc:
+                st.error(str(exc))
+                return
+        save(narration, folder)
+        saved = narration.to_dict()
+    with st.container(border=True):
+        st.markdown(saved["text"])
+    st.caption(saved["label"])
+    if saved.get("unsupported_numbers"):
+        st.warning("Numbers in this text that are not in the Session record: "
+                   + ", ".join(saved["unsupported_numbers"]) + ". Trust the tables above, not the text.")
 
 
 def _render_shap(record: dict[str, Any], df: pd.DataFrame | None, settings: Settings) -> None:

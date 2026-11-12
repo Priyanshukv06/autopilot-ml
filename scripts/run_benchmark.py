@@ -46,7 +46,7 @@ def run(args: argparse.Namespace) -> None:
     problems = benchmark.preflight(grid, memory, require_memory=not args.smoke, evaluation_only=not args.smoke)
     if problems:
         sys.exit("Not started:\n- " + "\n- ".join(problems))
-    settings, rows_path = benchmark.folders(Path(args.project_root), smoke=args.smoke)
+    settings, rows_path = benchmark.folders(Path(args.project_root), smoke=args.smoke, label=args.label)
     todo = benchmark.pending(grid, usable_rows(rows_path), args.retry_failed)
     print(f"{len(grid)} cells in the grid, {len(grid) - len(todo)} already done, {len(todo)} to run; rows go to "
           f"{rows_path}", flush=True)
@@ -73,7 +73,7 @@ def report(row: dict, number: int, total: int, seconds_left: float) -> None:
 
 def status(args: argparse.Namespace) -> None:
     grid = cells(args)
-    _, rows_path = benchmark.folders(Path(args.project_root), smoke=args.smoke)
+    _, rows_path = benchmark.folders(Path(args.project_root), smoke=args.smoke, label=args.label)
     rows = usable_rows(rows_path)
     last = benchmark.latest(rows)
     in_grid = [last[c.cell_id] for c in grid if c.cell_id in last]
@@ -94,7 +94,7 @@ def status(args: argparse.Namespace) -> None:
 def analyse(args: argparse.Namespace) -> None:
     from research import benchmark_analysis
 
-    _, rows_path = benchmark.folders(Path(args.project_root), smoke=args.smoke)
+    _, rows_path = benchmark.folders(Path(args.project_root), smoke=args.smoke, label=args.label)
     rows = usable_rows(rows_path)
     if not rows:
         sys.exit(f"No rows in {rows_path} yet: run 'run' first.")
@@ -134,6 +134,7 @@ def main() -> None:
     parser.add_argument("--limit", type=int, default=0, help="run at most this many new cells")
     parser.add_argument("--retry-failed", action="store_true", help="run cells whose last row failed again")
     parser.add_argument("--project-root", default=str(ROOT), help="folder for the records and results/")
+    parser.add_argument("--label", default="", help="a later run, e.g. v2: benchmark-v2/ and results/benchmark-v2/")
     args = parser.parse_args()
     {"run": run, "status": status, "analyse": analyse}[args.action](args)
 

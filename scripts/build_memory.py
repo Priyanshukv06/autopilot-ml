@@ -75,8 +75,9 @@ def main() -> None:
     parser.add_argument("--cores", type=int, default=-1)
     parser.add_argument("--limit", type=int, default=0, help="run at most this many new Sessions")
     parser.add_argument("--project-root", default=str(ROOT), help="folder for the records and results/")
+    parser.add_argument("--label", default="", help="a later run, e.g. v2: benchmark-v2-memory/, results/benchmark-v2/")
     args = parser.parse_args()
-    where = memory_build.folders(Path(args.project_root))
+    where = memory_build.folders(Path(args.project_root), args.label)
     {"run": run, "status": status, "freeze": freeze}[args.action](args, where)
 
 

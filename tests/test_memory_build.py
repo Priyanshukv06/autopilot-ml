@@ -39,6 +39,10 @@ def test_the_build_settings_and_its_sessions():
     system = memory_build.make(memory_build.folders(".")["memory"])
     assert isinstance(system, AutopilotSystem) and system.options == {"selector": "random", "use_memory": False}
     assert system.read_only is False and system.describe()["memory_read_only"] is False
+    # a later build gets its own folders and frozen file (12 November 2026)
+    first, second = memory_build.folders("."), memory_build.folders(".", "v2")
+    assert second["settings"].experiments_dir.name == "benchmark-v2-memory"
+    assert second["frozen"].parent.name == "benchmark-v2" and second["frozen"] != first["frozen"]
 
 
 def test_each_session_runs_once_and_the_rows_show_the_growing_memory(tmp_path):

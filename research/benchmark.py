@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
@@ -115,16 +116,29 @@ def smoke_grid(datasets: Iterable[str] = (SMOKE_DATASET,), budgets: Iterable[int
     return [Cell(name, dataset, min(budgets), SMOKE_SEED) for dataset in dict.fromkeys(datasets) for name in names]
 
 
-def folders(project_root: Path, smoke: bool = False) -> tuple[Settings, Path]:
+LABEL = re.compile(r"[a-z0-9][a-z0-9-]{0,30}")
+
+
+def run_name(label: str = "") -> str:
+    """``benchmark``, or ``benchmark-<label>`` for a later run (for example ``v2``), so a new run never writes
+    into the folders of an earlier one."""
+    if label and not LABEL.fullmatch(label):
+        raise ValueError(f"A run label is lower-case letters, digits and '-', at most 31 characters: {label!r}")
+    return f"benchmark-{label}" if label else "benchmark"
+
+
+def folders(project_root: Path, smoke: bool = False, label: str = "") -> tuple[Settings, Path]:
     """The settings the systems write their records with, and the CSV file of finished cells.
 
     Records go to ``experiments/benchmark/`` and ``models/benchmark/`` (``benchmark-smoke`` for the smoke
     setting), apart from the dashboard's history; rows go to ``results/benchmark/`` (``results/benchmark/smoke/``).
+    With a ``label`` (12 November 2026), every ``benchmark`` in these names becomes ``benchmark-<label>``.
     """
-    name = "benchmark-smoke" if smoke else "benchmark"
+    run = run_name(label)
+    name = f"{run}-smoke" if smoke else run
     base = build_settings(Path(project_root))
     settings = replace(base, experiments_dir=base.experiments_dir / name, models_dir=base.models_dir / name)
-    results = base.project_root / "results" / "benchmark"
+    results = base.project_root / "results" / run
     return settings, (results / "smoke" if smoke else results) / ROWS_FILE
 
 
@@ -443,4 +457,4 @@ def _now() -> str:
 
 __all__ = ["ABLATIONS", "BUDGETS", "COLUMNS", "Cell", "Dataset", "EXCLUSIONS_FILE", "MAIN_SYSTEMS", "SEEDS",
            "add_exclusion", "folders", "grid", "latest", "load_dataset", "on_battery", "pending", "preflight",
-           "read_cells", "read_exclusions", "run", "smoke_grid", "timing", "usable", "wait_for_power"]
+           "read_cells", "read_exclusions", "run", "run_name", "smoke_grid", "timing", "usable", "wait_for_power"]

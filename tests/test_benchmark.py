@@ -87,6 +87,15 @@ def test_the_smoke_setting_runs_its_cells_in_its_own_folders(tmp_path):
     full_settings, full_rows = benchmark.folders(tmp_path)
     assert full_settings.experiments_dir == root / "experiments" / "benchmark"
     assert full_rows == root / "results" / "benchmark" / "benchmark_cells.csv"
+    # a later run gets its own folders (12 November 2026), so it never writes into the first run's
+    labelled, labelled_rows = benchmark.folders(tmp_path, label="v2")
+    assert labelled.experiments_dir == root / "experiments" / "benchmark-v2"
+    assert labelled.models_dir == root / "models" / "benchmark-v2"
+    assert labelled_rows == root / "results" / "benchmark-v2" / "benchmark_cells.csv"
+    assert benchmark.folders(tmp_path, smoke=True, label="v2")[1] == root / "results" / "benchmark-v2" / "smoke" / \
+        "benchmark_cells.csv"
+    with pytest.raises(ValueError, match="run label"):
+        benchmark.folders(tmp_path, label="../x")
 
     calls = []
     cells = benchmark.smoke_grid(datasets=["toy_a"], budgets=[40, 20])

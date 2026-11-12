@@ -37,13 +37,15 @@ SEEDS = (1, 2, 3)
 SECONDS = 300
 
 
-def folders(project_root: Path) -> dict[str, Any]:
+def folders(project_root: Path, label: str = "") -> dict[str, Any]:
     """Where the build writes: the Sessions' records (``experiments/benchmark-memory/``, models in
-    ``models/benchmark-memory/``), the growing memory inside them, the rows, and the frozen copy."""
+    ``models/benchmark-memory/``), the growing memory inside them, the rows, and the frozen copy. With a
+    ``label`` (12 November 2026), ``benchmark`` becomes ``benchmark-<label>`` in these names."""
+    run = benchmark.run_name(label)
     base = build_settings(Path(project_root))
-    settings = replace(base, experiments_dir=base.experiments_dir / "benchmark-memory",
-                       models_dir=base.models_dir / "benchmark-memory")
-    results = base.project_root / "results" / "benchmark"
+    settings = replace(base, experiments_dir=base.experiments_dir / f"{run}-memory",
+                       models_dir=base.models_dir / f"{run}-memory")
+    results = base.project_root / "results" / run
     return {"settings": settings, "memory": settings.experiments_dir / "memory" / "memory.jsonl",
             "rows": results / "memory_sessions.csv", "frozen": results / "frozen_memory.jsonl",
             "summary": results / "frozen_memory_summary.csv"}

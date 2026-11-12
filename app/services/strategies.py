@@ -7,7 +7,7 @@ Setup (an ``ExperimentConfig``), never changing the one it was given. Strategies
 The catalogue has the nine Strategies of design.md: drop_columns, class_weight_balanced and
 regularised_search_space (thin version, task 7), and frequency_encode, group_rare_categories,
 missing_indicator, restrict_model_families, more_search_time and smoother_search_metric (task 14);
-and the optional smote (task 29).
+and the optional smote (task 29), target_encode and token_features (task 30).
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from typing import Any, Literal, Protocol
 from app.services.automl_runner import ExperimentConfig, to_jsonable
 from app.services.profiler import DatasetProfile
 from app.services.task_detector import TaskType
-from app.services.transforms import DataStepSpec, as_specs
+from app.services.transforms import ENCODING_KINDS, DataStepSpec, as_specs
 
 Kind = Literal["data", "model", "search", "budget"]
 Complexity = Literal["simpler", "same", "more_complex"]
@@ -220,7 +220,7 @@ class RegularisedSearchSpace:
                 "depth-limited XGBoost, at most 64 leaves for the forests, and larger minimum leaf sizes")
 
 
-_ENCODINGS = ("frequency_encode", "group_rare_categories")
+_ENCODINGS = ENCODING_KINDS  # a column gets at most one of them (two until task 30)
 
 
 class _ColumnStep:
@@ -287,6 +287,54 @@ class MissingIndicator(_ColumnStep):
 
     def describe(self, params) -> str:
         return f"Add a 0/1 column that marks the empty cells of '{_one_column(self.strategy_id, params)}'"
+
+
+class TargetEncode(_ColumnStep):
+    """Optional task 30: a text column becomes the smoothed mean target of its value, cross-fitted on the
+    training rows (Requirement 27.1)."""
+
+    strategy_id = "target_encode"
+    title = "Target encoding"
+    complexity: Complexity = "same"
+    step_kind = "target_encode"
+
+    def _column_fits(self, column, config, profile) -> bool:
+        return column in profile.categorical_features and column not in treated_columns(config, _ENCODINGS)
+
+    def describe(self, params) -> str:
+        return (f"Replace '{_one_column(self.strategy_id, params)}' by the average target of each value in the "
+                "training rows, cross-fitted so that no row's value uses its own label")
+
+
+class TokenFeatures(_ColumnStep):
+    """Optional task 30: a text column whose values share frequent words is replaced by one 0/1 column per
+    word (Requirement 27.2). It may also bring back a column that the first Setup left out as identifier-like
+    (Titanic's Name): the values themselves stay unused, only their words are used."""
+
+    strategy_id = "token_features"
+    title = "Word features"
+    complexity: Complexity = "more_complex"
+    step_kind = "token_features"
+
+    def _column_fits(self, column, config, profile) -> bool:
+        return (column in profile.categorical_features and bool(profile.frequent_words.get(column))
+                and column not in treated_columns(config, _ENCODINGS))
+
+    def applicable(self, config, profile, task_type, params) -> bool:
+        column = _one_column(self.strategy_id, params)
+        if not self._column_fits(column, config, profile):
+            return False
+        left_out = column in config.excluded_columns and column in profile.id_like_columns
+        return column in used_columns(config, profile) or left_out
+
+    def apply(self, config, params) -> ExperimentConfig:
+        column = _one_column(self.strategy_id, params)
+        steps = [*as_specs(config.data_steps), DataStepSpec(self.step_kind, (column,))]
+        return _copy(config, excluded_columns=[c for c in config.excluded_columns if c != column], data_steps=steps)
+
+    def describe(self, params) -> str:
+        return (f"Replace '{_one_column(self.strategy_id, params)}' by 0/1 columns for its frequent words in the "
+                "training rows (the values themselves are not used)")
 
 
 class RestrictModelFamilies:
@@ -370,6 +418,7 @@ CATALOGUE: dict[str, Strategy] = {
         DropColumns(), ClassWeightBalanced(), RegularisedSearchSpace(), FrequencyEncode(), GroupRareCategories(),
         MissingIndicator(), RestrictModelFamilies(), MoreSearchTime(), SmootherSearchMetric(),
         Smote(),  # optional task 29
+        TargetEncode(), TokenFeatures(),  # optional task 30
     )
 }
 

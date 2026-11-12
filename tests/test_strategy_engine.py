@@ -35,6 +35,10 @@ def group(column):
     return StrategySpec("group_rare_categories", {"columns": [column]}).key()
 
 
+def target(column):  # optional task 30: the last answer to high cardinality
+    return StrategySpec("target_encode", {"columns": [column]}).key()
+
+
 SMALLER = StrategySpec("regularised_search_space", {}).key()
 WEIGHTS = StrategySpec("class_weight_balanced", {}).key()
 SMOOTHER = StrategySpec("smoother_search_metric", {}).key()
@@ -56,11 +60,12 @@ def titanic_diagnoses():
 def test_titanic_proposals_in_rule_order(titanic_profile, titanic_diagnoses):
     proposals = propose(titanic_diagnoses, TITANIC_CONFIG, titanic_profile, TaskType.BINARY, tried=set())
     # High first (everything for Ticket), then moderate (Cabin, then smaller trees); in each group, the
-    # high-cardinality row's order: drop, frequency encoding, grouping.
+    # high-cardinality row's order: drop, frequency encoding, grouping, target encoding.
     assert [p.spec.key() for p in proposals] == [
-        drop("Ticket"), encode("Ticket"), group("Ticket"), drop("Cabin"), encode("Cabin"), group("Cabin"), SMALLER,
+        drop("Ticket"), encode("Ticket"), group("Ticket"), target("Ticket"), drop("Cabin"), encode("Cabin"),
+        group("Cabin"), target("Cabin"), SMALLER,
     ]
-    ticket, cabin, smaller = proposals[0], proposals[3], proposals[6]
+    ticket, cabin, smaller = proposals[0], proposals[4], proposals[8]
     # Dropping Ticket answers both Diagnoses that ask for it, with the higher severity.
     assert ticket.answers == (K.OVERFITTING, K.HIGH_CARDINALITY) and ticket.severity is S.HIGH
     assert ticket.rule_position == (2, 0) and ticket.cost_class == "cheap" and ticket.complexity == "simpler"
@@ -72,8 +77,8 @@ def test_titanic_proposals_in_rule_order(titanic_profile, titanic_diagnoses):
 def test_tried_changes_are_not_proposed_again(titanic_profile, titanic_diagnoses):
     proposals = propose(titanic_diagnoses, TITANIC_CONFIG, titanic_profile, TaskType.BINARY,
                         tried={drop("Ticket"), SMALLER})
-    assert [p.spec.key() for p in proposals] == [encode("Ticket"), group("Ticket"), drop("Cabin"), encode("Cabin"),
-                                                 group("Cabin")]
+    assert [p.spec.key() for p in proposals] == [encode("Ticket"), group("Ticket"), target("Ticket"), drop("Cabin"),
+                                                 encode("Cabin"), group("Cabin"), target("Cabin")]
 
 
 def test_changes_that_conflict_with_the_accepted_setup_are_left_out(titanic_profile, titanic_diagnoses):
@@ -82,7 +87,7 @@ def test_changes_that_conflict_with_the_accepted_setup_are_left_out(titanic_prof
         ExperimentConfig(target_column="Survived", excluded_columns=["PassengerId", "Name", "Ticket"]), {}
     )
     proposals = propose(titanic_diagnoses, accepted, titanic_profile, TaskType.BINARY, tried=set())
-    assert [p.spec.key() for p in proposals] == [drop("Cabin"), encode("Cabin"), group("Cabin")]
+    assert [p.spec.key() for p in proposals] == [drop("Cabin"), encode("Cabin"), group("Cabin"), target("Cabin")]
 
 
 def test_class_imbalance_gets_class_weights_for_classification_only():
@@ -104,7 +109,7 @@ def test_ranking_severity_before_table_order(titanic_profile):
     proposals = propose(diagnoses, TITANIC_CONFIG, titanic_profile, TaskType.BINARY, tried=set())
     # The high Diagnosis's Proposals come first even though the smoother metric costs more than dropping Cabin.
     assert [p.spec.key() for p in proposals] == [WEIGHTS, SMOOTHER, SMOTE, drop("Cabin"), encode("Cabin"),
-                                                 group("Cabin")]
+                                                 group("Cabin"), target("Cabin")]
 
 
 def test_rules_selector_orders_by_severity_cost_position_then_key():
@@ -131,7 +136,8 @@ def test_nothing_to_propose_gives_an_empty_list(titanic_profile):
     assert propose([diagnosis(K.WASTED_BUDGET, S.HIGH)], TITANIC_CONFIG, titanic_profile, TaskType.BINARY,
                    tried=set()) == []
     # Every Proposal already tried: nothing left.
-    every = [drop("Ticket"), encode("Ticket"), group("Ticket"), drop("Cabin"), encode("Cabin"), group("Cabin"), SMALLER]
+    every = [drop("Ticket"), encode("Ticket"), group("Ticket"), target("Ticket"), drop("Cabin"), encode("Cabin"),
+             group("Cabin"), target("Cabin"), SMALLER]
     assert propose([diagnosis(K.OVERFITTING, S.MODERATE), diagnosis(K.HIGH_CARDINALITY, S.HIGH, ["Ticket"]),
                     diagnosis(K.HIGH_CARDINALITY, S.MODERATE, ["Cabin"])], TITANIC_CONFIG, titanic_profile,
                    TaskType.BINARY, tried=set(every)) == []

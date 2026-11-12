@@ -6,7 +6,8 @@ the Diagnoses of a finished Session can be recomputed from its records. All thre
 ``critic_thresholds.toml``, and every Diagnosis records that file's version label.
 
 All twelve kinds of Requirement 5.2 (the thin version of task 6 had overfitting, class_imbalance
-and high_cardinality; task 13 added the others).
+and high_cardinality; task 13 added the others), and unused_words (optional task 30), whose only
+setting is the word share of the token_features Data_Step, so it reads no threshold from the file.
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ import tomllib
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 import numpy as np
 
@@ -26,7 +27,7 @@ from app.services.evaluator import METRICS
 from app.services.profiler import DatasetProfile
 from app.services.search_summary import SearchSummary
 from app.services.task_detector import TaskType
-from app.services.transforms import as_specs
+from app.services.transforms import ENCODING_KINDS, as_specs
 
 DEFAULT_THRESHOLDS_PATH = Path(__file__).with_name("critic_thresholds.toml")
 
@@ -48,6 +49,7 @@ class DiagnosisKind(str, Enum):
     REDUNDANT_FEATURES = "redundant_features"
     UNRELIABLE_VALIDATION = "unreliable_validation"
     WEAK_MODEL_FAMILIES = "weak_model_families"
+    UNUSED_WORDS = "unused_words"  # optional task 30
 
 
 class Severity(str, Enum):
@@ -193,19 +195,22 @@ class Critic:
         search: SearchSummary | None,
         task_type: TaskType,
         primary_metric: str,
+        restorable: Sequence[str] = (),
     ) -> list[Diagnosis]:
         """Diagnoses in a fixed order: by rule (the order of design.md's table), then by column name.
 
         ``profile`` must describe the Training_Part only, and ``assessment`` must be complete.
-        ``search`` is read by the budget rules of the full version.
+        ``search`` is read by the budget rules of the full version. ``restorable``: columns that the first
+        Setup left out by itself (identifier-like and constant columns, never the user's own exclusions);
+        the unused_words rule also looks at those of them that are still left out.
         """
         if assessment.failed or not assessment.folds:
             raise ValueError("The Critic needs a completed Assessment.")
         used = self._used_columns(profile, config)
         metric = diagnostic_metric(task_type, primary_metric)
         search_metric = config.search_metric or primary_metric
-        treated = {c for step in as_specs(config.data_steps)
-                   if step.kind in ("frequency_encode", "group_rare_categories") for c in step.columns}
+        # columns already changed by an encoding (since task 30 also target_encode and token_features)
+        treated = {c for step in as_specs(config.data_steps) if step.kind in ENCODING_KINDS for c in step.columns}
         found: list[Diagnosis | None] = [
             self._overfitting(assessment, metric),
             self._underfitting(assessment, metric),
@@ -217,12 +222,17 @@ class Critic:
         found.extend(self._missing_values(profile, column) for column in used)
         found.extend(self._high_cardinality(profile, assessment, column) for column in used
                      if column in profile.categorical_features and column not in treated)
-        found.extend(self._identifier_column(profile, column) for column in used)
+        # a column whose words replace its values is no longer an identifier
+        found.extend(self._identifier_column(profile, column) for column in used if column not in treated)
         found.extend(self._constant_column(profile, column) for column in used)
         found.extend(self._redundant_features(pair) for pair in profile.correlated_pairs
                      if all(c in used for c in pair["columns"]))
         found.append(self._unreliable_validation(assessment, metric))
         found.append(self._weak_model_families(search, search_metric))
+        # optional task 30, last, so the earlier Diagnoses keep their order
+        left_out = set(restorable) & set(config.excluded_columns)
+        found.extend(self._unused_words(profile, column, column in used) for column in sorted(set(used) | left_out)
+                     if column in profile.categorical_features and column not in treated)
         return [d for d in found if d is not None]
 
     # ------------------------------------------------------------------ rules
@@ -364,6 +374,20 @@ class Critic:
                           {"distinct_values": distinct, "rows": int(profile.rows)},
                           f"'{column}' looks like an identifier ({distinct} different values in {profile.rows} training "
                           "rows); a model can only memorise it, it cannot learn from it.")
+
+    def _unused_words(self, profile: DatasetProfile, column: str, used: bool) -> Diagnosis | None:
+        """A text column whose values share frequent words (the profile's ``frequent_words``). The model sees
+        each value only as a whole (low), or nothing of it when the first Setup left it out (moderate). A
+        rule without thresholds: the word share is that of the token_features Data_Step."""
+        words = list(profile.frequent_words.get(column) or [])
+        if not words:
+            return None
+        shown = ", ".join(words[:5]) + (", ..." if len(words) > 5 else "")
+        how = ("the model sees each value only as a whole" if used else
+               "the column is left out as identifier-like, so the model sees none of them")
+        return self._make(DiagnosisKind.UNUSED_WORDS, Severity.LOW if used else Severity.MODERATE, (column,),
+                          {"words": ",".join(words), "n_words": len(words), "column_used": int(used)},
+                          f"The values of '{column}' share {len(words)} frequent words ({shown}); {how}.")
 
     def _constant_column(self, profile: DatasetProfile, column: str) -> Diagnosis | None:
         distinct = int(profile.unique_counts.get(column, 0))

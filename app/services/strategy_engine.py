@@ -43,6 +43,7 @@ TABLE_ORDER: tuple[DiagnosisKind, ...] = (
     DiagnosisKind.UNRELIABLE_VALIDATION,
     DiagnosisKind.WEAK_MODEL_FAMILIES,
     DiagnosisKind.WASTED_BUDGET,
+    DiagnosisKind.UNUSED_WORDS,  # optional task 30, last, so the earlier rows keep their positions
 )
 SEVERITY_ORDER = {Severity.HIGH: 0, Severity.MODERATE: 1, Severity.LOW: 2}
 COST_ORDER = {"cheap": 0, "normal": 1, "expensive": 2}
@@ -93,8 +94,9 @@ def _single(strategy_id: str) -> Candidate:
 RULES: dict[DiagnosisKind, tuple[Candidate, ...]] = {
     DiagnosisKind.IDENTIFIER_COLUMN: (_each_column("drop_columns"),),
     DiagnosisKind.CONSTANT_COLUMN: (_each_column("drop_columns"),),
+    # target_encode (optional task 30) comes last, so the earlier candidates keep their positions
     DiagnosisKind.HIGH_CARDINALITY: (_each_column("drop_columns"), _each_column("frequency_encode"),
-                                     _each_column("group_rare_categories")),
+                                     _each_column("group_rare_categories"), _each_column("target_encode")),
     DiagnosisKind.MISSING_VALUES: (_drop_if_high, _each_column("missing_indicator")),
     DiagnosisKind.REDUNDANT_FEATURES: (_drop_later_column,),
     DiagnosisKind.OVERFITTING: (_single("regularised_search_space"), _drop_high_cardinality_columns),
@@ -105,6 +107,7 @@ RULES: dict[DiagnosisKind, tuple[Candidate, ...]] = {
                                     _single("smote")),
     DiagnosisKind.UNRELIABLE_VALIDATION: (_single("smoother_search_metric"),),
     DiagnosisKind.WEAK_MODEL_FAMILIES: (_keep_strong_families,),
+    DiagnosisKind.UNUSED_WORDS: (_each_column("token_features"),),  # optional task 30
 }
 
 
@@ -363,6 +366,7 @@ def random_proposals(
     numeric = set(profile.numerical_features)
     text = [c for c in feature_columns if c not in numeric]
     with_missing = [c for c in feature_columns if c in numeric and profile.missing_ratio.get(c, 0.0) > 0]
+    with_words = [c for c in text if profile.frequent_words.get(c)]
 
     def pick(columns: list[str]) -> list[str]:
         return [columns[int(rng.integers(len(columns)))]] if columns else []
@@ -372,8 +376,11 @@ def random_proposals(
         if strategy_id == "drop_columns":
             columns = pick(list(feature_columns))
             params: dict[str, Any] | None = {"columns": columns} if columns else None
-        elif strategy_id in ("frequency_encode", "group_rare_categories"):
+        elif strategy_id in ("frequency_encode", "group_rare_categories", "target_encode"):
             columns = pick(text)
+            params = {"columns": columns} if columns else None
+        elif strategy_id == "token_features":
+            columns = pick(with_words)
             params = {"columns": columns} if columns else None
         elif strategy_id == "missing_indicator":
             columns = pick(with_missing)

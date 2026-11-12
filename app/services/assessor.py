@@ -218,21 +218,25 @@ class Assessor:
         weights = compute_sample_weight("balanced", y_fit) if config.class_weight == "balanced" else None
 
         start = time.perf_counter()
-        # The Setup's Data_Steps are fitted again on this fold's training rows only (Requirement 3.3).
+        # The Setup's Data_Steps are fitted again on this fold's training rows only (Requirement 3.3); target
+        # encodings of these rows are cross-fitted within them (Requirement 27.1).
         steps = as_specs(config.data_steps)
-        pipeline = DataPipeline(steps).fit(X_fit) if steps else None
-        model = self.engine.fit_config(
-            pipeline.transform(X_fit) if pipeline is not None else X_fit, y_fit, task_type=self.task_type,
+        pipeline = DataPipeline(steps, task_type=self.task_type) if steps else None
+        X_used = pipeline.fit_transform(X_fit, y_fit) if pipeline is not None else X_fit
+        fitted = self.engine.fit_config(
+            X_used, y_fit, task_type=self.task_type,
             estimator=result.best_estimator, config=result.best_config, seed=self.seed, n_jobs=self.n_jobs,
             sample_weight=weights,
             # the fold's training rows only: the validation rows below are scored as they are (Requirement 26.1)
             **({"resampler": config.resampler} if config.resampler else {}),
         )
-        if pipeline is not None:  # scored, like the search's model, on the original columns
-            model = PipelineModel(pipeline, model)
+        # scored, like the search's model, on the original columns
+        model = PipelineModel(pipeline, fitted) if pipeline is not None else fitted
         fit_seconds = time.perf_counter() - start
 
-        train_eval = evaluator.evaluate(model, X_fit, y_fit)
+        # the training rows as the model was trained on them (the same as through the pipeline, except that
+        # target encodings stay cross-fitted)
+        train_eval = evaluator.evaluate(fitted, X_used, y_fit)
         valid_eval = evaluator.evaluate(model, X_valid, y_valid)
         baseline = evaluator.baseline_metrics(y_fit, y_valid)
         recall = None

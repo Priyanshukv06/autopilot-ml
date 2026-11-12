@@ -16,9 +16,12 @@ def changes(record):
 # --------------------------------------------------------------------------- no Critic
 def test_without_the_critic_the_changes_are_random_valid_ones_that_answer_nothing(tmp_path):
     shifts = {1: 0.0, 2: 0.0, 3: 0.0}
-    plain = run_session(tmp_path / "plain", experiments=4, shifts=shifts)[1]
-    result, record, engine, *_ = run_session(tmp_path / "off", experiments=4, shifts=shifts, use_critic=False)
-    again = run_session(tmp_path / "again", experiments=4, shifts=shifts, use_critic=False)[1]
+    # Searches end after at most 50 s, so a random more_search_time cannot use up the whole budget (since
+    # task 30 the seed's order starts with it).
+    plain = run_session(tmp_path / "plain", experiments=4, shifts=shifts, search_cap=50)[1]
+    result, record, engine, *_ = run_session(tmp_path / "off", experiments=4, shifts=shifts, use_critic=False,
+                                             search_cap=50)
+    again = run_session(tmp_path / "again", experiments=4, shifts=shifts, use_critic=False, search_cap=50)[1]
     assert record["settings"]["use_critic"] is False and result.status == "completed"
     assert all(step["diagnoses"] == [] for step in record["steps"])  # the Critic never ran
     for step in record["steps"][1:]:

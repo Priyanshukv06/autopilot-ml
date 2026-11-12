@@ -17,6 +17,7 @@ import pandas as pd
 from pandas.api.types import is_bool_dtype, is_datetime64_any_dtype, is_float_dtype, is_numeric_dtype
 
 from app.services.task_detector import TaskType
+from app.services.transforms import frequent_tokens
 
 _ID_NAME_PATTERN = re.compile(r"(^id$|[_\s-]id$|Id$|ID$)")
 NEAR_CONSTANT_SHARE = 0.95  # reported in the profile; the Critic applies its own threshold
@@ -108,6 +109,9 @@ class DatasetProfile:
     # Numeric feature pairs with |Pearson r| >= CORRELATION_REPORT_LEVEL, each {"columns": [a, b], "correlation": r}
     # with a before b in the data; the target is left out.
     correlated_pairs: list[dict[str, Any]] = field(default_factory=list)
+    # Added in optional task 30: text feature columns whose values share frequent words, with those words
+    # (transforms.frequent_tokens, the words token_features would keep on these rows).
+    frequent_words: dict[str, list[str]] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         """JSON-serialisable representation (used for MLflow artifacts)."""
@@ -247,6 +251,7 @@ class DatasetProfiler:
         missing_values = {c.name: c.missing for c in details}
         total_missing = int(sum(missing_values.values()))
         total_cells = n_rows * df.shape[1]
+        words = {str(column): found for column in categorical if (found := frequent_tokens(df[column]))}
 
         profile = DatasetProfile(
             dataset_name=dataset_name,
@@ -274,6 +279,7 @@ class DatasetProfiler:
             main_value_share=main_share,
             near_constant_columns=near_constant,
             correlated_pairs=pairs,
+            frequent_words=words,
         )
         if target_column is not None:
             self._profile_target(profile, df[target_column], task_type)

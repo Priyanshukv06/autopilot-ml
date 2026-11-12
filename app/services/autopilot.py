@@ -166,13 +166,16 @@ class _Context:
     notify: Progress
     dataset_fingerprint: str = ""
     use_critic: bool = True
+    # the columns the first Setup left out by itself (recorded as first_setup_exclusions), never the user's
+    restorable: tuple[str, ...] = ()
 
     def diagnose(self, config: ExperimentConfig, result: ExperimentResult, assessment: Assessment) -> list[Diagnosis]:
         if not self.use_critic:  # ablation: no Diagnoses at all
             return []
         search = SearchSummary(**result.search_summary) if result.search_summary else None
         return self.critic.diagnose(profile=self.profile, config=config, assessment=assessment, search=search,
-                                    task_type=self.task_type, primary_metric=self.metric)
+                                    task_type=self.task_type, primary_metric=self.metric,
+                                    restorable=self.restorable)
 
 
 class AutopilotSession:
@@ -231,9 +234,9 @@ class AutopilotSession:
         # 2. Records.
         session_id = self.tracker.allocate_session_id()
         rm = (ResourceManager if session.use_resource_manager else EqualShareManager)(session.budget, self.clock)
+        first_exclusions = self.planner.safe_exclusions(base, profile)
         state = _State(self, session_id, session, base, thresholds, split, folds,
-                       [*notes, *split_notes, *fold_notes], self.planner.safe_exclusions(base, profile),
-                       on_update=on_update)
+                       [*notes, *split_notes, *fold_notes], first_exclusions, on_update=on_update)
         write_json_atomic(self.tracker.session_dir(session_id) / "train_profile.json", to_jsonable(profile.to_dict()))
         state.save()
         state.start_mlflow(base)
@@ -246,7 +249,7 @@ class AutopilotSession:
                                            base.random_seed),
             critic=Critic(thresholds), judge=Judge(session.judge, test_train_ratio=folds.test_train_ratio),
             rm=rm, notify=notify, dataset_fingerprint=dataset_fingerprint(dataframe, base.target_column),
-            use_critic=session.use_critic,
+            use_critic=session.use_critic, restorable=tuple(first_exclusions),
         )
 
         # 3-4. The first Experiment, its Assessment and its Diagnoses.

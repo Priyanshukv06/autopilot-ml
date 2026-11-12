@@ -960,10 +960,11 @@ class AutoMLRunner:
         sample_weight = None
         if config.class_weight == "balanced":
             sample_weight = compute_sample_weight("balanced", y_train)
-        # Data_Steps are learned from the Training_Part only, before the search (Requirement 3.3).
+        # Data_Steps are learned from the Training_Part only, before the search (Requirement 3.3). The search
+        # gets the rows as fit_transform returns them: for target_encode, cross-fitted (Requirement 27.1).
         steps = as_specs(config.data_steps)
-        pipeline = DataPipeline(steps).fit(X_train) if steps else None
-        X_search = pipeline.transform(X_train) if pipeline is not None else X_train
+        pipeline = DataPipeline(steps, task_type=task_type) if steps else None
+        X_search = pipeline.fit_transform(X_train, y_train) if pipeline is not None else X_train
         notify("searching", 0.05, f"AutoML search running ({config.time_budget}s budget)")
         engine_result = self.engine.fit(
             X_search,
@@ -998,7 +999,9 @@ class AutoMLRunner:
             warnings.extend(test_eval.notes)
         else:
             notify("evaluating", 0.85, "Scoring the best model on the training part (test part not used)")
-        train_eval = evaluator.evaluate(model, X_train, y_train, classes)
+        # on the training rows as the model was trained on them (the same as through the pipeline, except
+        # that target encodings stay cross-fitted)
+        train_eval = evaluator.evaluate(engine_result.model, X_search, y_train, classes)
 
         if options.evaluate_test and options.compute_importance:
             notify("explaining", 0.9, "Computing permutation feature importance")
@@ -1152,13 +1155,6 @@ class AutoMLRunner:
             raise ExperimentError("No feature columns left after excluding columns.")
         if len(X) < MIN_ROWS:
             raise ExperimentError(f"At least {MIN_ROWS} labelled rows are required (found {len(X)}).")
-        if config.data_steps:
-            # A dry run on no rows checks the columns and types of every step without reading any data.
-            try:
-                if DataPipeline(config.data_steps).fit_transform(X.head(0)).shape[1] == 0:
-                    raise ExperimentError("The Data_Steps leave no feature columns.")
-            except DataStepError as exc:
-                raise ExperimentError(f"Invalid Data_Step: {exc}") from exc
 
         try:
             if config.task_type is None:
@@ -1178,6 +1174,16 @@ class AutoMLRunner:
             raise ExperimentError("Class weights apply to classification tasks only.")
         elif config.resampler is not None:
             raise ExperimentError("Resampling applies to classification tasks only.")
+        if config.data_steps:
+            # A dry run on no rows checks the columns and types of every step without reading any data. It
+            # comes after the task type, which target_encode needs. Words and classes are learned from rows,
+            # so with such steps an empty result proves nothing.
+            try:
+                pipeline = DataPipeline(config.data_steps, task_type=task_type)
+                if pipeline.fit_transform(X.head(0), y.head(0)).shape[1] == 0 and not pipeline.learns_columns:
+                    raise ExperimentError("The Data_Steps leave no feature columns.")
+            except DataStepError as exc:
+                raise ExperimentError(f"Invalid Data_Step: {exc}") from exc
         return X, y, task_type, metric, warnings
 
     @staticmethod

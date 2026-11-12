@@ -491,16 +491,18 @@ def test_every_kind_in_table_order():
     df["row_id"] = np.arange(n)
     df["flag"] = "same"
     df["twin"] = df["x"] * 3
+    df["title"] = np.where(np.arange(n) % 2, "Mr ", "Miss ") + df["code"]  # shared words: mr, miss
     folds = [fold(0.75 + 0.1 * (i % 2), 0.5 + 0.1 * (i % 2), recall={"a": 1.0, "b": 0.9}, unseen={"code": 0.9})
              for i in range(6)]
     search = summary(gain=0.03, share=0.8, best={"xgboost": 0.8, "sgd": 0.5}, seconds={"xgboost": 10.0, "sgd": 10.0})
     # Some kinds come more than once (age is also constant apart from its empty cells; x, row_id and twin
-    # are three correlated pairs), but always together, in the order of the table.
+    # are three correlated pairs; code and title are both high-cardinality), but always together, in the
+    # order of the table.
     kinds = list(dict.fromkeys(d.kind for d in diagnose(profile_of(df), folds, search=search)))
     assert kinds == [
         DiagnosisKind.OVERFITTING, DiagnosisKind.BUDGET_LIMITED, DiagnosisKind.WASTED_BUDGET,
         DiagnosisKind.CLASS_IMBALANCE, DiagnosisKind.MISSING_VALUES, DiagnosisKind.HIGH_CARDINALITY,
         DiagnosisKind.IDENTIFIER_COLUMN, DiagnosisKind.CONSTANT_COLUMN, DiagnosisKind.REDUNDANT_FEATURES,
-        DiagnosisKind.UNRELIABLE_VALIDATION, DiagnosisKind.WEAK_MODEL_FAMILIES,
+        DiagnosisKind.UNRELIABLE_VALIDATION, DiagnosisKind.WEAK_MODEL_FAMILIES, DiagnosisKind.UNUSED_WORDS,
     ]
     assert set(DiagnosisKind) - set(kinds) == {DiagnosisKind.UNDERFITTING}  # it cannot come with overfitting

@@ -989,7 +989,7 @@ After Phase 3 (31 October 2026, code of commit 812eec4), counted the same way: 1
 | `scripts/run_benchmark.py`, `build_memory.py`, `run_study.py` | 142, 84, 217 | the command lines of the benchmark, the memory build and the three studies |
 | `app/services/strategy_engine.py` | 406 | the rule table and the four selectors (200 lines after Phase 2) |
 
-After the optional tasks 29 to 35 (12 November 2026, the code of the documentation commit of that day), counted the same way (`git ls-files "*.py"`, every line): 20,235 lines in 97 Python files (8,938 in 33 files of `app/`, 3,294 in 13 of `research/`, 1,183 in 12 of `scripts/`, 6,820 in 39 of `tests/`, of which 38 test files). The new modules: `app/services/narrator.py` 203 lines, `app/services/explainer.py` 197, `app/api.py` 180 and `app/services/resampling.py` 101; `transforms.py` grew to 400 lines, `profiler.py` to 470, `critic.py` to 504 and `strategies.py` to 430.
+After the optional tasks 29 to 35 (12 November 2026, code of commit 40c868f), counted the same way (`git ls-files "*.py"`, every line): 20,235 lines in 97 Python files (8,938 in 33 files of `app/`, 3,294 in 13 of `research/`, 1,183 in 12 of `scripts/`, 6,820 in 39 of `tests/`, of which 38 test files). The new modules: `app/services/narrator.py` 203 lines, `app/services/explainer.py` 197, `app/api.py` 180 and `app/services/resampling.py` 101; `transforms.py` grew to 400 lines, `profiler.py` to 470, `critic.py` to 504 and `strategies.py` to 430.
 
 ### 8.2 Main interfaces
 
@@ -1683,7 +1683,8 @@ Future scope (beyond the planned phases):
 | 2026-11-12 | Optional task 34: plain-language Session summaries by a local language model through Ollama (Algorithm 29): `app/services/narrator.py` (facts from the record only, this machine only, labelled, unsupported numbers listed, saved apart), a dashboard section and `scripts/summarise_session.py`; two live runs with `qwen2.5:7b-instruct`, the first of which misread a verdict code, so outcomes are now given in words; 5 tests in `tests/test_narrator.py` and a dashboard test step; 583 tests | cf6c3a9 |
 | 2026-11-12 | Optional task 35: the local HTTP API (`app/api.py`, `scripts/run_api.py`; fastapi, uvicorn and httpx2 pinned) and the Docker image (`Dockerfile`, `scripts/docker_entry.sh`, `.dockerignore`, `.gitattributes`); a live API Session with real FLAML; the image built (2.12 GB) and checked with a short Session inside it; 3 tests in `tests/test_api.py`; 586 tests | 5650aa1 |
 | 2026-11-12 | A run label for the benchmark and the memory build (`--label v2`): a later run writes to `experiments/benchmark-v2*/`, `models/benchmark-v2*/` and `results/benchmark-v2/`, so it can never touch the first run's rows or its frozen memory; tests for both folder layouts | 3d66e8c |
-| 2026-11-12 | Documents brought in line with optional tasks 29 to 35: README, PROJECT.md, how-it-works, architecture, roadmap, research direction, the services package docstring and two stale module docstrings, the dashboard sidebar (only the second benchmark run is planned), and in these notes the objectives table, the future scope and the sidebar description | see the commit of this date |
+| 2026-11-12 | Documents brought in line with optional tasks 29 to 35: README, PROJECT.md, how-it-works, architecture, roadmap, research direction, the services package docstring and two stale module docstrings, the dashboard sidebar (only the second benchmark run is planned), and in these notes the objectives table, the future scope and the sidebar description | 40c868f |
+| 2026-11-12 | Code size after the optional tasks (section 8.1): 20,235 lines in 97 Python files at 40c868f | see the commit of this date |
 
 ---
 

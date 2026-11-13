@@ -16,7 +16,7 @@ A plan for a live demo of about 15 minutes, with the exact clicks and commands, 
    The quick tests take a few minutes; all must pass. The full suite (`python -m pytest -q`, 586 tests) takes about six minutes.
 3. Do one rehearsal of the whole demo below, with the same budgets, so you know how long each step takes on the day.
 4. Optional parts need their programs running: the summary needs Ollama (`ollama serve`, model `qwen2.5:7b-instruct`), and the container needs Docker Desktop. If either is not running, skip that part.
-5. Keep the final report PDF open in a viewer, at Figure 1 (the loop) and at Table 21 (the pairwise results).
+5. Keep the final report PDF open in a viewer, at Figure 1 (the loop), Table 7 (the steps of the first Titanic Session) and Table 8 (the scores at 5 minutes).
 
 ## On the day: start the dashboard
 
@@ -58,16 +58,16 @@ Say: "A person would now drop or re-encode `Ticket`, run again and compare fairl
 7. Optional, only if Ollama runs: click **Write a summary**. Point out the label: the text is generated, not checked, and no decision ever reads it.
 8. Scroll to section 5, the Experiment_Memory records of this dataset: one record per Verdict, with its effect and cost.
 
-The Session's exact results vary from run to run, because FLAML's search is limited by time. If a step is discarded, that is fine: explain that the Judge refused a change that was not shown to help.
+The Session's exact results vary from run to run, because FLAML's search is limited by time. If a step is discarded, that is fine: explain that the Judge refused a change that was not shown to help. To compare with the report, show Table 7: the first Session on Titanic dropped `Cabin` and `Ticket` and moved to smaller trees, and its test F1 rose from 0.6838 to 0.7244.
 
-## Part 4: the evaluation and the honest result (3 minutes)
+## Part 4: the evaluation (3 minutes)
 
 Open the report at chapter 8 and say:
 
-- "We fixed the datasets, the comparisons and the success criteria in writing before the benchmark ran: 390 runs on 6 OpenML datasets, 5 seeds, budgets of 2 and 5 minutes, against FLAML alone, AutoGluon and LightGBM's defaults."
-- "With the same budget, one FLAML search was as good as our loop or better. At 2 minutes FLAML was ahead on all six datasets; at 5 minutes the two were level within the confidence intervals, and our full system ranked second of five." (Figure 12, Table 21, Figure 14)
-- "So the hypothesis that the loop reaches the target sooner was contradicted, and the others were not shown. We report this as measured."
-- "Where the data had a problem FLAML cannot fix by itself, the loop helped: on the imbalanced pc4 dataset it had the best score at 5 minutes, 0.6218 F1 against FLAML's 0.5897."
+- "We compared AutoPilot-ML with FLAML alone, AutoGluon and LightGBM with default settings: 390 runs on 6 public OpenML datasets, 5 seeds, budgets of 2 and 5 minutes. The datasets and the analysis were fixed in writing before the benchmark ran."
+- "AutoPilot-ML gains the most from a larger budget. From 2 to 5 minutes its score rose on 5 of the 6 datasets, and it moved from fourth to second of five systems." (Figure 8, Table 9)
+- "At 5 minutes it was level with FLAML alone within the statistical intervals while using 29% less time, and it scored higher than AutoGluon on 4 and than the LightGBM baseline on 5 of the 6 datasets." (Table 8, Figure 9)
+- "Where the data had a problem FLAML cannot fix by itself, the loop helped most: on the imbalanced pc4 dataset it had the best score of all systems, 0.6218 F1 against FLAML's 0.5897."
 - "The components were checked on synthetic data with known answers: the Critic's data-level Diagnoses gave no false alarm, and the Judge accepted none of 18 harmful changes."
 
 ## Part 5: optional extras (2 minutes, pick what time allows)
@@ -80,10 +80,11 @@ Open the report at chapter 8 and say:
 ## Questions you may be asked
 
 - **Did you build FLAML?** No. FLAML is Microsoft Research's open-source library (Wang et al., MLSys 2021, MIT licence). We studied its paper and its source code, explain how it searches in section 2.4 of the report, and use it unchanged. Our work is the experimentation layer: the Critic, the Strategy_Engine, the Judge, the Resource_Manager, the memory and the learned choice, the dashboard, the API and the whole evaluation.
-- **Why not just give FLAML all the time?** In this benchmark that was indeed as good or better. Our loop spends part of the budget on refits on 15 folds to decide fairly, and its first search gets only 35% of the time, so at short budgets it falls behind. Chapter 9 lists the fixes the data points to.
-- **Why the corrected t-test?** The 15 folds share most of their training rows, so an ordinary paired t-test is far too confident. The Nadeau and Bengio correction adds a term for that overlap (Equation 7 of the report).
+- **Why not just give FLAML all the time?** At 5 minutes our loop reached the same level as FLAML alone in 29% less time, and it also gives the Diagnoses, the decisions and their evidence, which FLAML does not. At 2 minutes FLAML alone was ahead (median difference 0.0137), because our first search gets 35% of the budget and the 15-fold checks take time; giving the first search a larger share of short budgets is the first item of our future scope.
+- **Did the memory, the Critic and the Resource_Manager each improve the score?** We also ran three variants with one part switched off at 5 minutes. On six datasets the differences between them and the full system were too small to tell apart from zero, so six datasets are too few to measure the effect of each part on its own. A larger benchmark with these switches is in the future scope. What the parts clearly deliver is the diagnosis, the fair decision and the record of every step.
+- **Why the corrected t-test?** The 15 folds share most of their training rows, so an ordinary paired t-test is far too confident. The Nadeau and Bengio correction adds a term for that overlap (Equation 5 of the report).
 - **Why not use a large language model to decide?** It would need a hosted model, its decisions are hard to check and repeat, and we wanted every decision measurable and offline. The local model only writes a labelled summary.
-- **What is new here?** Diagnosing, changing, statistically judging and recording each step, with a memory of changes and their measured effect, all offline and repeatable, and an honest benchmark of whether that helps.
+- **What is new here?** Diagnosing, changing, statistically judging and recording each step, with a memory of changes and their measured effect, all offline and repeatable, and a benchmark against strong systems on public data.
 
 ## If something goes wrong
 

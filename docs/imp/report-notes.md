@@ -19,7 +19,7 @@ Last updated: 2026-10-26
 
 - Title submitted to the department: **AutoPilot-ML - An Autonomous, Self-Optimizing Machine Learning Experimentation Framework**. The repository and `PROJECT.md` use the subtitle "Autonomous Machine Learning Experimentation & Self-Optimization Framework". Use the submitted title everywhere in the final report.
 - Members (B.Tech CSE): Priyanshu Verma, Sch. No. 23U02016; Salil Kushwah, Sch. No. 23U02003.
-- Group number, guide, department and institute: to fill in.
+- Group number, guide, department and institute: to fill in. The final report (`docs/imp/final-report/`, built 13 November 2026) uses the Department of Computer Science and Engineering, IIIT Bhopal, the coordinator Dr. Rahul Chourasiya and the Director Prof. Ashutosh Kumar Singh, and still has placeholders for the guide's name and designation in `front.toml`.
 - Phase 1 review: October 2026, completed successfully (exact date to fill in).
 - Abstract: write it last, from the final results. Starting points are the abstract in `PROJECT.md` and the project description posted for the department, copied below. When it was posted only the baseline existed; the critic, strategy engine, memory, resource manager and SHAP were still planned.
 
@@ -1762,6 +1762,7 @@ Future scope (beyond the planned phases):
 | 2026-11-12 | Second frozen memory: 30 development Sessions (19:46 to 21:33), 95 records frozen, SHA-256 d678080a...39f5d; smoke setting: all 8 systems completed (section 9.20) | e995480 (data) |
 | 2026-11-13 | Second benchmark run: all 390 cells completed (21:46 on 12 November to 14:01), no failure, no battery wait; analysis written to `results/benchmark-v2/`; H1 contradicted, H2 to H4 and the ablations not shown (chapter 3, section 9.20, chapter 10) | e995480 (data) |
 | 2026-11-13 | Second run recorded: section 9.20, the outcome in chapter 3, the conclusions and future scope in chapter 10, objectives O3, O5 and O7, Appendix E; README, PROJECT.md, architecture, roadmap, research direction and how-it-works updated; the sidebar's planned items are now the judge agreement study with full-length searches and more datasets | 6d2cd7c |
+| 2026-11-13 | Final report in the department's Word format: builder `scripts/report/build_report.py` (Times New Roman, 1.15 spacing, A4 with equal margins, numbered figures, tables and equations, IEEE references; Word fills the page numbers and exports the PDF) and its format checks; 15 figures drawn by `scripts/report/report_figures.py` from `results/benchmark-v2/`; text in `docs/imp/final-report/chapters/`. Built: 62 pages, 9 chapters, 25 tables, 14 equations, 3 algorithms, 79 references, 0 format problems. FLAML is described as the external engine it is (section 2.4 explains its search from its paper and source code, with citations). Demo guide: `docs/imp/demo-guide.md` | 19fab4f and the report commits after it |
 
 ---
 

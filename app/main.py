@@ -74,11 +74,12 @@ def render_sidebar(settings: Settings) -> str:
         st.markdown("- ✅ Local HTTP API (`scripts/run_api.py`) and a Docker image")
         st.markdown("**Research tools (command line, `scripts/`)**")
         st.markdown(
-            "- ✅ Benchmark against FLAML alone, AutoGluon and a manual baseline, with ablations\n"
+            "- ✅ Benchmark against FLAML alone, AutoGluon and a manual baseline, with ablations "
+            "(full run: 390 cells, 13 November 2026)\n"
             "- ✅ Critic, Judge and judge agreement studies"
         )
         st.markdown("**Planned, not implemented**")
-        st.markdown("- 🕒 The full benchmark with the final code (second run)")
+        st.markdown("- 🕒 A judge agreement study with full-length searches; more evaluation datasets")
         st.divider()
         st.caption("Runs fully locally: no paid APIs, no cloud services.")
         st.caption(f"MLflow store: `{settings.mlflow_tracking_uri}`")

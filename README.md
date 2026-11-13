@@ -10,8 +10,8 @@ We are building it in stages, and this README keeps them apart:
 
 - **Phase 1, the baseline (built):** CSV → dataset profiling → task detection → FLAML AutoML → evaluation → MLflow tracking → Streamlit dashboard.
 - **Phase 2, the autonomous loop (built):** a Session that searches, assesses, diagnoses, changes and judges Setups by itself within a time budget, and records every decision in an experiment memory. It runs from the dashboard or the command line.
-- **Phase 3, learning and evaluation (built):** fixed development and evaluation datasets, choosing changes from what the memory learned on similar datasets (Thompson sampling, UCB1), switches that turn single parts of the loop off (for the ablations), comparison systems (a manual LightGBM baseline, FLAML alone and AutoGluon), a resumable benchmark with its statistics, a frozen experiment memory, and a study of how far the cheap Judge agrees with searching again. The benchmark was stopped early (23 usable runs on 2 datasets with 1 seed), so its results are observations, not tested claims; see Results below.
-- **Optional extensions (built, 1 to 12 November 2026):** SMOTE, cross-fitted target encoding and word features of text columns as new Strategies, group-aware splits, SHAP explanations of a Session's final model, target suggestion and a single-column leakage warning, plain-language Session summaries by a local language model (labelled, never used for decisions), a local HTTP API and a Docker image. The benchmark ran before them, so none of its results include them. A second, full benchmark run with the final code is planned and has not been run yet.
+- **Phase 3, learning and evaluation (built):** fixed development and evaluation datasets, choosing changes from what the memory learned on similar datasets (Thompson sampling, UCB1), switches that turn single parts of the loop off (for the ablations), comparison systems (a manual LightGBM baseline, FLAML alone and AutoGluon), a resumable benchmark with its statistics, a frozen experiment memory, and a study of how far the cheap Judge agrees with searching again. The first benchmark run was stopped early (23 usable runs on 2 datasets with 1 seed), so its results are observations, not tested claims; see Results below.
+- **Optional extensions (built, 1 to 12 November 2026):** SMOTE, cross-fitted target encoding and word features of text columns as new Strategies, group-aware splits, SHAP explanations of a Session's final model, target suggestion and a single-column leakage warning, plain-language Session summaries by a local language model (labelled, never used for decisions), a local HTTP API and a Docker image. The first benchmark run was made before them, so none of its results include them. A second, full benchmark run with the final code, which includes them, completed the whole grid (390 runs) on 12 and 13 November 2026; see Results below.
 
 The detailed project document is [docs/imp/PROJECT.md](docs/imp/PROJECT.md). To understand how the current system and FLAML work, step by step and with diagrams, read [docs/imp/how-it-works.md](docs/imp/how-it-works.md). All maintained documents are in [docs/imp](docs/imp), including the running notes for the final report. The Phase 1 review material is archived in [docs/unimp](docs/unimp).
 
@@ -174,7 +174,7 @@ python scripts/run_benchmark.py analyse                  # tests, tables and cha
 python scripts/run_study.py agreement run                # the judge agreement study; then: agreement analyse
 ```
 
-A second, full run with the final code is planned and has not been run yet. Adding `--label v2` to `build_memory.py` and `run_benchmark.py` makes such a run write to its own folders (`experiments/benchmark-v2*/`, `models/benchmark-v2*/` and `results/benchmark-v2/`), so it can never touch the first run's rows or its frozen memory.
+A second, full run with the final code was made on 12 and 13 November 2026 with `scripts/run_benchmark_v2.cmd` (a Windows batch file that runs the memory build, the freeze, the smoke setting and the grid, each with `--label v2`). Adding `--label v2` to `build_memory.py` and `run_benchmark.py` makes a run write to its own folders (`experiments/benchmark-v2*/`, `models/benchmark-v2*/` and `results/benchmark-v2/`), so it can never touch the first run's rows or its frozen memory.
 
 AutoGluon needs pandas 2.3 and this project pins pandas 3.0, so the benchmark runs AutoGluon from its own conda environment (decision D4). Create it once (versions in `research/requirements-autogluon.txt`):
 
@@ -280,9 +280,9 @@ Exact versions are pinned in `requirements.txt`. Optuna is not used, so it is no
 - CSV and single-table tabular data only. No text, images, time series or clustering.
 - The app suggests likely target columns with their reasons, but you confirm the choice. The suggestion uses simple signals (the name, the position, the values); its points are design choices, not measured. On the 16 registered datasets the registered target came first on 15 (on penguins it came third).
 - The leakage check scores one column at a time and only warns. A column that gives the answer away together with other columns is not found, and only you can tell whether a flagged column is known before the outcome.
-- The autonomous loop changes one thing at a time and tries each change at most once per Session. By default it follows a fixed rule order; the learned order needs a memory with records of similar datasets (at least 3 records from at least 2 datasets for a change), and the stopped benchmark could not show whether it helps.
+- The autonomous loop changes one thing at a time and tries each change at most once per Session. By default it follows a fixed rule order; the learned order needs a memory with records of similar datasets (at least 3 records from at least 2 datasets for a change), and the second benchmark run did not show that it helps (its difference to the rule order was within the intervals over 6 datasets).
 - The Judge decides on refits of the configurations the searches found. A study that searched again for 20 of its decisions agreed with it on 8 (Cohen's kappa 0.05), so one verdict is evidence, not proof.
-- Its changes are the 12 Strategies above, including SMOTE and target encoding. There is no other feature engineering (for example no threshold tuning, feature interactions or outlier handling). The newer Strategies were only checked with short runs; the benchmark ran before them.
+- Its changes are the 12 Strategies above, including SMOTE and target encoding. There is no other feature engineering (for example no threshold tuning, feature interactions or outlier handling). The newer Strategies were checked with short runs; the first benchmark run was made before them, and in the second run token_features was kept 3 of 26 times, smote 2 of 4 and target_encode 0 of 7.
 - Every Setup is refitted 15 times for its Assessment, which takes a share of the budget, more so on bigger data.
 - The Judge compares refits of configurations that FLAML chose on the same training part, so both scores are a little optimistic; pairing removes much of this, not all.
 - In the single-experiment mode, ID-like and constant columns are suggested for exclusion and high-cardinality columns are only flagged.
@@ -335,7 +335,8 @@ All measured on one laptop (CPU only, 16 logical cores); the details, settings a
 - **Critic study** (270 synthetic datasets with planted problems): the data-level Diagnoses raised no false alarm; overfitting was found with precision 0.88 and recall 0.91; unreliable validation is weak (precision 0.27).
 - **Judge study** (84 pairs of Setups with a known true difference): on the reporting seeds the Judge kept 0 of 18 harmful changes and 10 of 12 helpful ones.
 - **Loop against FLAML alone** (4 sample datasets x 3 seeds, 300 s): about the same final test scores on average (4 better, 4 equal, 4 worse), using about two thirds of the time.
-- **Benchmark** (stopped early: 23 usable runs, pc4 and cylinder-bands, seed 1): the full system was never below FLAML alone (pc4 F1 0.600 and 0.613 against 0.590 at 120 and 300 s; cylinder-bands equal at 120 s, 0.872 against 0.870 at 300 s). With 2 datasets no test can confirm this.
+- **First benchmark run** (stopped early: 23 usable runs, pc4 and cylinder-bands, seed 1): the full system was never below FLAML alone (pc4 F1 0.600 and 0.613 against 0.590 at 120 and 300 s; cylinder-bands equal at 120 s, 0.872 against 0.870 at 300 s). With 2 datasets no test can confirm this.
+- **Second benchmark run** (the final code, all 390 runs: 6 evaluation datasets, seeds 1 to 5, 120 and 300 s, 12 and 13 November 2026; report notes, section 9.20): at the same budget, one FLAML search was as good as the loop or better. At 120 s the full system was behind FLAML on all 6 datasets (median difference -0.0137, 95% interval -0.0183 to -0.0022); at 300 s the two were level within the interval (median -0.0010, interval -0.0051 to 0.0205). FLAML reached the target score at an earlier budget in 10 of 30 (dataset, seed) pairs, the full system in 2. The memory, the learned strategy choice, the Critic and the Resource_Manager made no difference beyond the intervals. So H1 is contradicted and H2 to H4 are not shown; with 6 datasets the Wilcoxon tests cannot reach significance after Holm's correction. The loop's decisions are recorded and explained, but on these datasets its changes rarely added to the test score beyond FLAML alone.
 - **Judge agreement** (20 real decisions, each checked by new searches on 5 inner splits): 8 of 20 verdicts agreed (kappa 0.05), and the strict check cost 2.4 times as much.
 - **From the development Sessions:** only changes kept as significantly better raised the test score (+0.016 on average, 8 of 11 Sessions better). Three flaws found in the records were fixed: rounding noise counted once as a gain, unchanged models counted as successes in the memory, and changes seen on only one dataset steered the learned order.
 
@@ -347,19 +348,20 @@ This project was developed in Kiro, an AI-assisted code editor built on VS Code.
 
 1. Baseline: profiling, task detection, FLAML, evaluation, MLflow, dashboard, history (done)
 2. Rule-based loop: assessor, critic, strategy catalogue and rule engine, judge, resource manager, planner, records and experiment memory, dashboard autonomous mode, critic and judge studies, measurement against FLAML alone (done)
-3. Learned strategy selection (bandits, memory-based), benchmark datasets, ablation switches, comparison systems (manual, FLAML alone, AutoGluon), the benchmark harness, statistics and analysis, the frozen memory and the judge agreement study (done; the benchmark grid was stopped early)
+3. Learned strategy selection (bandits, memory-based), benchmark datasets, ablation switches, comparison systems (manual, FLAML alone, AutoGluon), the benchmark harness, statistics and analysis, the frozen memory and the judge agreement study (done; the first benchmark run was stopped early)
 4. Optional extras: SMOTE, target encoding and word features, group-aware splits, SHAP, target suggestion and a leakage check, local language-model summaries, a local HTTP API and a Docker image (done, 1 to 12 November 2026; 586 tests passing)
-5. A second, full benchmark run with the final code (`--label v2`; planned, not run yet)
+5. A second, full benchmark run with the final code (`--label v2`; done, 12 and 13 November 2026: all 390 cells, no failure; H1 contradicted, H2 to H4 not shown)
 
 The summary is in [docs/imp/development-roadmap.md](docs/imp/development-roadmap.md). The detailed plan is a Kiro spec (requirements, design and ordered tasks) in the workspace folder `.kiro/specs/autopilot-ml/`, one level above this repository.
 
 ## Future work
 
-- The second, full benchmark run with the final code, so that the hypotheses can be tested
+- More evaluation datasets, so that the Wilcoxon tests can reach significance after Holm's correction, and a measurement of the optional Strategies on them
+- Ideas from the second benchmark run, not tested: give the first search more than 35% of a short budget, and use the time the Sessions left unused (about 30% at 300 s) for a last, longer search
 - More feature engineering and data-level fixes, for example decision-threshold tuning and outlier handling
 - PostgreSQL-backed tracking for multi-user use
 
-Built since the first version of this list (November 2026): target suggestion and a single-column leakage check, target encoding, SMOTE, SHAP explanations of a Session's final model, the optional local language-model summaries (the decisions stay rule-based or learned, and measurable), a FastAPI service and a Docker image.
+Built since the first version of this list (November 2026): target suggestion and a single-column leakage check, target encoding, SMOTE, SHAP explanations of a Session's final model, the optional local language-model summaries (the decisions stay rule-based or learned, and measurable), a FastAPI service and a Docker image. The second, full benchmark run with the final code was made on 12 and 13 November 2026.
 
 ## Project structure
 

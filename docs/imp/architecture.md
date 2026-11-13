@@ -1,6 +1,6 @@
 # Architecture
 
-This page describes the code as it is now: the Phase 1 baseline (one experiment), the Phase 2 autonomous layer (a Session of experiments), the Phase 3 parts (learned strategy choice, ablation switches, comparison systems, the benchmark harness with its statistics and analysis, the frozen memory build and the judge agreement study) and the optional extensions built from 1 to 12 November 2026 (tasks 29 to 35: SMOTE, target encoding and word features, group-aware splits, SHAP, target suggestion and a leakage check, local language-model summaries, an HTTP API and a Docker image). The benchmark was stopped after 33 of its 390 cells, and the judge agreement study ran on 20 pairs; the results are in the report notes (sections 9.16 to 9.18). Both ran before the optional extensions, and a second, full benchmark run with the final code is planned but has not been run. For a plain-language walkthrough of the same system and of how FLAML works inside it, see [how-it-works.md](how-it-works.md); the full design and the code shapes are in the spec's `design.md`.
+This page describes the code as it is now: the Phase 1 baseline (one experiment), the Phase 2 autonomous layer (a Session of experiments), the Phase 3 parts (learned strategy choice, ablation switches, comparison systems, the benchmark harness with its statistics and analysis, the frozen memory build and the judge agreement study) and the optional extensions built from 1 to 12 November 2026 (tasks 29 to 35: SMOTE, target encoding and word features, group-aware splits, SHAP, target suggestion and a leakage check, local language-model summaries, an HTTP API and a Docker image). The first benchmark run was stopped after 33 of its 390 cells, and the judge agreement study ran on 20 pairs; the results are in the report notes (sections 9.16 to 9.18). Both ran before the optional extensions. A second, full benchmark run with the final code (commit af8f14d, `--label v2`) completed all 390 cells on 12 and 13 November 2026; its results are in section 9.20 of the report notes. For a plain-language walkthrough of the same system and of how FLAML works inside it, see [how-it-works.md](how-it-works.md); the full design and the code shapes are in the spec's `design.md`.
  
 ## Layers
 
@@ -192,10 +192,10 @@ results/benchmark/frozen_memory.jsonl   the frozen memory the benchmark reads (i
 results/studies/judge_agreement_*.csv   the judge agreement study's rows and summaries (in git)
 results/leakage_check.csv               the single-column leakage check on all 16 datasets (in git)
 experiments/benchmark-v2*/, models/benchmark-v2*/, results/benchmark-v2/
-                                        a later run with --label v2 (planned, not run yet)
+                                        the second run with --label v2 (12 and 13 November 2026)
 ```
 
-## Phase 3: built so far and planned
+## Phase 3: built and run
 
 - Built (task 20): `research/datasets.py` and `research/datasets.json`, the fixed development and evaluation datasets.
 - Built (task 21): `RandomSelector`, `ThompsonSelector` and `UCB1Selector` next to `RulesSelector` (`services/strategy_engine.py`), with `SelectionContext(memory, meta_features, task_type, fingerprint, rng)`; they read `ExperimentMemory.strategy_stats` for the nearest past datasets when `SessionSettings.use_memory` is on, and each step records its `selection`.
@@ -207,7 +207,7 @@ experiments/benchmark-v2*/, models/benchmark-v2*/, results/benchmark-v2/
 - Built (task 27): `research/judge_agreement.py` with `scripts/run_study.py agreement run | analyse`: the judged steps of the memory-build Sessions, each compared again with new FLAML searches on 5 inner splits of the Session's training part and the Judge's own rules; agreement, Cohen's kappa and the cost ratio.
 - Changed on 31 October 2026, after reading the results: `Judge.compare` treats a mean difference within `REPEAT_TOLERANCE` as 0; `Assessor.refit_key(columns, config, estimator, best_config)` replaces the cache key, so identical refits reuse their fold scores (`Assessment.reused_from`); `SelectionContext.min_datasets` (2) and `StrategyStats.datasets` keep an arm seen on one dataset in rule order, and `MemoryRecord.counts_as_kept` leaves out kept steps that changed no fold score; the benchmark and the judge agreement study wait while the laptop is on battery and exclude a cell or pair that ends on battery (`results/benchmark/excluded_cells.csv`, status `excluded`).
 - Built on 12 November 2026, for the second, full run with the final code: a run label, `benchmark.folders(root, smoke, label)`, `memory_build.folders(root, label)` and `--label` in `scripts/run_benchmark.py` and `scripts/build_memory.py`. With `--label v2` every `benchmark` folder name becomes `benchmark-v2`, so the run can never touch the first run's rows or its frozen memory.
-- Planned: that second, full run. It has not been run yet.
+- Run on 12 and 13 November 2026: that second, full run, from commit af8f14d. `scripts/run_benchmark_v2.cmd` chains the memory build, the freeze, the smoke setting and the grid, each with `--label v2`, and writes their logs to `experiments/benchmark-v2-logs/`. All 390 cells completed with no failure; the rows (`benchmark_cells.csv`), `analysis_*.csv` and `figures/` are in `results/benchmark-v2/`, and the results are in the report notes, section 9.20.
 
 ## Optional extensions (tasks 29 to 35): where they plug in
 

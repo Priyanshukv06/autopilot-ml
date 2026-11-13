@@ -40,7 +40,7 @@ Status (27 October 2026): done. All milestones are built and tested (468 tests).
 
 Tasks 20 to 28: development and evaluation datasets (fixed in advance and kept apart), learned strategy choice (Thompson sampling and UCB1 over past outcomes from similar datasets), ablation switches, comparison systems (manual baseline, FLAML alone, AutoGluon), a resumable benchmark (5 seeds; budgets of 2 and 5 minutes, since the 10-minute budget was dropped on 27 October 2026 to fit the laptop), the statistics (Friedman and Nemenyi, Wilcoxon with Holm's correction, effect sizes, time-to-target), the judge agreement study, and the final documents.
 
-Status (31 October 2026): tasks 20 to 28 are done (541 tests). The benchmark stopped after 33 of its 390 cells, when the laptop went into standby on battery; 23 cells are usable, and the user decided not to run the rest. The judge agreement study ran on 20 decisions instead of 57. Three flaws found in the records were fixed afterwards (report notes, chapter 10). Next, if wanted: the full benchmark on mains power, and the optional tasks below (built by 12 November 2026).
+Status (31 October 2026): tasks 20 to 28 are done (541 tests). The benchmark stopped after 33 of its 390 cells, when the laptop went into standby on battery; 23 cells are usable, and the user decided not to run the rest. The judge agreement study ran on 20 decisions instead of 57. Three flaws found in the records were fixed afterwards (report notes, chapter 10). Next, if wanted: the full benchmark on mains power (run with the final code on 12 and 13 November 2026), and the optional tasks below (built by 12 November 2026).
 
 ## Optional (after Phase 3, done)
 
@@ -54,9 +54,9 @@ Tasks 29 to 35, each one commit with its tests:
 - [x] Task 34: plain-language Session summaries by a local language model through Ollama, labelled as generated text and never used for decisions
 - [x] Task 35: a local HTTP API (FastAPI, on 127.0.0.1) and a Docker image
 
-Status (12 November 2026): done (586 tests passed in 276.1 s). The catalogue now has 12 Strategies and the Critic 14 kinds of Diagnoses. Each part was checked with short runs (report notes, section 5.5); the benchmark ran before them, so none of its results include them.
+Status (12 November 2026): done (586 tests passed in 276.1 s). The catalogue now has 12 Strategies and the Critic 14 kinds of Diagnoses. Each part was checked with short runs (report notes, section 5.5); the first benchmark run was made before them, so none of its results include them.
 
-Next: a second, full benchmark run with the final code. `scripts/build_memory.py` and `scripts/run_benchmark.py` take `--label v2`, so that run writes to its own folders and cannot touch the first run's rows or its frozen memory. It has not been run yet.
+Status (13 November 2026): the second, full benchmark run with the final code is done. `scripts/build_memory.py` and `scripts/run_benchmark.py` take `--label v2`, so that run wrote to its own folders and could not touch the first run's rows or its frozen memory. `scripts/run_benchmark_v2.cmd` started it from commit af8f14d on 12 November at 19:46; it built a new frozen memory (30 development Sessions, 95 records) and completed all 390 cells by 14:01 on 13 November, with no failure. H1 is contradicted and H2 to H4 are not shown (report notes, chapter 3 and section 9.20); at the same budget, one FLAML search was as good as the loop or better. Next, if wanted: more evaluation datasets, so that the Wilcoxon tests can reach significance after Holm's correction (report notes, chapter 10).
 
 ## Decisions
 

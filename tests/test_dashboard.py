@@ -98,7 +98,8 @@ def test_the_sidebar_marks_the_built_modules(project):
     assert "✅ Benchmark against FLAML alone" in sidebar  # since 31 October 2026
     # since 12 November 2026 (optional tasks 29 and 30)
     assert "✅ Optional strategies: SMOTE, target encoding, word features" in sidebar
-    assert "SMOTE" not in planned and "target encoding" not in planned and "second run" in planned
+    assert "SMOTE" not in planned and "target encoding" not in planned and "judge agreement study" in planned
+    assert "full run: 390 cells" in sidebar  # the second benchmark run finished on 13 November 2026
     assert "✅ Local HTTP API" in sidebar and "API" not in planned  # optional task 35
     assert "✅ SHAP explanation of the final model" in sidebar and "SHAP" not in planned  # optional task 32
     assert "✅ Target suggestion and a leakage warning" in sidebar and "leakage" not in planned  # task 33

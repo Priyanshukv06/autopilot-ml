@@ -97,11 +97,11 @@ The baseline solves part 1 with one AutoML run. The research system works on bot
 |---|---|---|
 | O1 | Baseline: profiling, task detection, FLAML training, held-out evaluation, explanations, experiment tracking, dashboard | Done (Phase 1) |
 | O2 | Critic: automatic, structured diagnosis of each experiment, with evidence | Done (Phase 2: 12 kinds, measured by the critic study; the optional tasks added unused_words and the warning-only possible_leakage, not measured by a study) |
-| O3 | Strategy engine: map diagnoses to candidate changes and rank them (rules, then bandits, then memory) | Rules done (Phase 2: 9 Strategies; 12 with the optional smote, target_encode and token_features); bandits on memory records built (Phase 3, task 21: Thompson sampling and UCB1); their effect is not measured yet: the first benchmark run was stopped after 33 cells (section 9.16), and a second, full run with the final code is planned |
+| O3 | Strategy engine: map diagnoses to candidate changes and rank them (rules, then bandits, then memory) | Rules done (Phase 2: 9 Strategies; 12 with the optional smote, target_encode and token_features); bandits on memory records built (Phase 3, task 21: Thompson sampling and UCB1); measured in the second, full benchmark run (13 November 2026, section 9.20): no difference beyond the intervals over 6 datasets (H2 and H3 not shown) |
 | O4 | Planner and autonomous loop, with a fair comparison of every change over several splits | Done (Phase 2: Assessor on 15 folds and the Judge, measured by the judge study) |
-| O5 | Experiment memory: reuse what worked on similar datasets | Recording done (Phase 2); reuse built (Phase 3, task 21: the learned selectors read the nearest datasets' records); the frozen memory built on 27 October 2026 (97 records, section 9.15); its effect is not measured yet (the first benchmark run was stopped; a second run, with a memory rebuilt by the final code, is planned) |
+| O5 | Experiment memory: reuse what worked on similar datasets | Recording done (Phase 2); reuse built (Phase 3, task 21: the learned selectors read the nearest datasets' records); the frozen memory built on 27 October 2026 (97 records, section 9.15); a second frozen memory built by the final code on 12 November 2026 (95 records); its effect, measured in the second benchmark run, is within the intervals (H2 not shown; section 9.20) |
 | O6 | Resource manager: share the time and CPU budget and decide when to stop (utility = improvement / cost) | Done (Phase 2: budgets, stop rules and the utility of each step recorded); stopping on expected utility needs the memory (Phase 3) |
-| O7 | Evaluation against a manual baseline, FLAML and AutoGluon, with ablations, on public datasets and several seeds | Built (tasks 20 to 26). The first run (started 28 October 2026; 390 cells: 6 OpenML evaluation datasets, budgets of 120 and 300 s, 5 seeds) was stopped after 33 cells, 23 usable (section 9.16); the second, full run with the final code is planned (`--label v2`) |
+| O7 | Evaluation against a manual baseline, FLAML and AutoGluon, with ablations, on public datasets and several seeds | Built (tasks 20 to 26). The first run (started 28 October 2026; 390 cells: 6 OpenML evaluation datasets, budgets of 120 and 300 s, 5 seeds) was stopped after 33 cells, 23 usable (section 9.16). The second run, with the final code, completed all 390 cells on 12 and 13 November 2026 (section 9.20): H1 contradicted, H2 to H4 not shown |
 
 - Scope: CSV, single-table tabular data; binary, multiclass and regression; laptop CPU; fully offline.
 - Out of scope: text, images, time series, clustering; LLMs as decision makers; cloud or paid services.
@@ -119,6 +119,8 @@ Success criteria for the benchmark, written on 28 October 2026 at about 14:25. A
 | RQ3 and the Critic: adaptive budgets and diagnoses help | `autopilot_full` against `no_resource_manager` and against `no_critic`, at 300 s | the interval lies above 0 | the interval lies below 0 |
 
 Outcome (31 October 2026): the benchmark stopped after 23 usable cells on 2 datasets with 1 seed (section 9.16), so none of H1 to H4 can be decided by these criteria: every interval over 2 datasets is wide and rests on one seed. The observations are reported as such in section 9.16 and chapter 10.
+
+Outcome of the second, full run (13 November 2026; all 390 cells, code af8f14d, section 9.20): H1 contradicted (FLAML reached the target at an earlier budget in 10 of 30 (dataset, seed) pairs, the full system in 2; median time-to-target 120 s against 300 s). H4 not shown: not supported at either budget, and not contradicted, although at 120 s the full system was behind FLAML on all 6 datasets (median -0.0137, interval -0.0183 to -0.0022). H2, H3 and the ablations of RQ3 and the Critic not shown: every interval contains 0.
 
 Otherwise the result is "not shown". The Wilcoxon p-values with Holm's correction are reported next to these, but with 6 datasets they cannot fall below 0.05 for any pair once two or more pairs are compared (section 5, Algorithm 21), so no claim rests on them alone. The Friedman test and the Nemenyi critical difference show whether any system stands apart from the others at a budget.
 
@@ -1065,7 +1067,7 @@ python scripts/prepare_datasets.py download # recreate data/raw/ from research/d
 
 ### 8.6 Tests (586, about 276 s on 12 November 2026)
 
-Phase 1 ended with the first three files below (47 tests, about 29 to 41 s). Phase 2 has added the others so far. Full suite on 26 October 2026 after task 16: 457 passed in 139.7 s on the laptop in chapter 7; without the 4 study smoke tests marked slow (`python -m pytest -q -m "not slow"`, marker registered in `pytest.ini`), 453 passed in 123.6 s. After task 17: 458 passed in 150.4 s. After task 18.1: 465 passed in 175.8 s; without the 9 tests marked slow (4 study smoke tests and the 5 dashboard tests), 456 passed in 127.6 s. After task 19 (27 October 2026): 468 passed in 174.0 s. After task 21.1: 482 passed in 173.2 s. After task 22.1: 486 passed in 182.0 s. After task 23.1: 493 passed in 221.9 s. After task 24.1: 504 passed in 218.6 s. After task 25.1: 517 passed in 222.0 s. With the memory build (task 26): 521 passed in 217.1 s. With the benchmark analysis and the judge agreement study: 533 passed in 229.2 s. With the analysis fix of 28 October and the power checks of 31 October 2026: 536 passed in 234.6 s (a first run had one failure, a rounding tolerance in `test_judge_agreement.py`, fixed in e6de199). With the Judge fix, the Assessment reuse and the learned-choice changes (31 October 2026): 541 passed in 208.8 s. With SMOTE (optional task 29, 1 November 2026): 550 passed in 221.1 s. With target encoding and word features (optional task 30, 12 November 2026): 561 passed in 217.3 s. With group-aware splits (optional task 31, the same day): 568 passed in 221.0 s. With SHAP (optional task 32, the same day): 573 passed in 251.4 s, with 3 warnings from shap's own colour-map code (PendingDeprecationWarning). With target suggestion and the leakage check (optional task 33, the same day): 578 passed in 270.8 s; a first run showed 55 warnings from the new check (isotonic fits of weak or constant columns, and a pandas lookup that turned class 1 into 1.0, a real bug, fixed before the commit). With the local summaries (optional task 34, the same day): 583 passed in 265.6 s. With the API (optional task 35, the same day): 586 passed in 276.1 s. The counts below were taken from pytest's list of collected tests.
+Phase 1 ended with the first three files below (47 tests, about 29 to 41 s). Phase 2 has added the others so far. Full suite on 26 October 2026 after task 16: 457 passed in 139.7 s on the laptop in chapter 7; without the 4 study smoke tests marked slow (`python -m pytest -q -m "not slow"`, marker registered in `pytest.ini`), 453 passed in 123.6 s. After task 17: 458 passed in 150.4 s. After task 18.1: 465 passed in 175.8 s; without the 9 tests marked slow (4 study smoke tests and the 5 dashboard tests), 456 passed in 127.6 s. After task 19 (27 October 2026): 468 passed in 174.0 s. After task 21.1: 482 passed in 173.2 s. After task 22.1: 486 passed in 182.0 s. After task 23.1: 493 passed in 221.9 s. After task 24.1: 504 passed in 218.6 s. After task 25.1: 517 passed in 222.0 s. With the memory build (task 26): 521 passed in 217.1 s. With the benchmark analysis and the judge agreement study: 533 passed in 229.2 s. With the analysis fix of 28 October and the power checks of 31 October 2026: 536 passed in 234.6 s (a first run had one failure, a rounding tolerance in `test_judge_agreement.py`, fixed in e6de199). With the Judge fix, the Assessment reuse and the learned-choice changes (31 October 2026): 541 passed in 208.8 s. With SMOTE (optional task 29, 1 November 2026): 550 passed in 221.1 s. With target encoding and word features (optional task 30, 12 November 2026): 561 passed in 217.3 s. With group-aware splits (optional task 31, the same day): 568 passed in 221.0 s. With SHAP (optional task 32, the same day): 573 passed in 251.4 s, with 3 warnings from shap's own colour-map code (PendingDeprecationWarning). With target suggestion and the leakage check (optional task 33, the same day): 578 passed in 270.8 s; a first run showed 55 warnings from the new check (isotonic fits of weak or constant columns, and a pandas lookup that turned class 1 into 1.0, a real bug, fixed before the commit). With the local summaries (optional task 34, the same day): 583 passed in 265.6 s. With the API (optional task 35, the same day): 586 passed in 276.1 s. After the second benchmark run, with the sidebar change of 13 November 2026: 586 passed in 332.4 s. The counts below were taken from pytest's list of collected tests.
 
 | File | Tests | What they cover |
 |---|---|---|
@@ -1495,10 +1497,72 @@ What this shows, and what it does not:
 
 ### 9.19 What was not produced, and why
 
-- The benchmark grid: stopped after 33 of 390 cells, 23 usable (section 9.16); the rest is not planned (the user's decision, 31 October 2026), so hypotheses H1 to H4 are not tested (chapter 3). If more is run later, the harness re-runs the 10 excluded cells first and waits while the laptop is on battery; it then runs the changed selectors (Algorithm 18), so its rows would not be comparable with the 23 cells without saying so.
+- The first benchmark run: stopped after 33 of 390 cells, 23 usable (section 9.16), and not continued (the user's decision, 31 October 2026). Instead, the whole grid was run again with the final code in its own folders on 12 and 13 November 2026 (section 9.20), so the two runs are never mixed.
 - The judge agreement study: 20 of the 57 available pairs (section 9.18).
 - The improvements of 31 October 2026 (Algorithms 9 and 18) are tested but not measured on new data.
 - Sections 9.2 to 9.6 (Phase 1) ran in temporary folders that were deleted; only their numbers remain. Re-running them with the final code would give raw files for the report (open item, Appendix D).
+
+### 9.20 Second benchmark run, with the final code (12 and 13 November 2026)
+
+Setup. Code of commit af8f14d (all optional tasks included). No tracked file changed during the run (`git diff af8f14d` was empty at the end); the 390 grid rows still say `git_dirty` true, only because the run's own new folder `results/benchmark-v2/` was not in git yet. Laptop on mains power throughout: no wait for power and no excluded cell. All cores (`n_jobs` -1, 16 logical CPUs). Docker Desktop and the Ollama server were stopped before the start. Started by `scripts/run_benchmark_v2.cmd` (memory build, freeze, smoke setting, grid, each with `--label v2`); logs and run notes in `experiments/benchmark-v2-logs/`.
+
+Frozen memory (Requirement 22.3, the procedure of section 9.15): 30 Sessions on the 10 development datasets (seeds 1 to 3, 300 s each, random selector, starting from an empty file), 12 November 19:46:21 to 21:33:27, all completed. 95 records from 25 of the Sessions (the other 5 ended after their first Experiment; stop reasons of the 30: 16 no change left, 8 time, 4 three discards in a row, 2 the Experiment limit): 37 discard, 45 keep_simpler, 13 keep; 17 had no effect on any fold score, so 43 count as kept. 21 arms (task type, Strategy, diagnosis kind), of which 7 have at least 3 records from at least 2 datasets and can move (the first frozen memory: 97 records, 20 arms, 6 that can move). SHA-256 `d678080aee96877dd65da31ae380bada1d87b138372a7605bffeaf3218a39f5d`. The optional Strategies in it: target_encode 4 times and token_features 3 times, all on titanic and all discarded; smote 3 times on wilt, 2 kept. Files: `results/benchmark-v2/frozen_memory.jsonl`, `frozen_memory_summary.csv`, `memory_sessions.csv`; records in `experiments/benchmark-v2-memory/`.
+
+Smoke setting (one Session per system on titanic, seed 1, 120 s; a check, not a result): all 8 systems completed (`results/benchmark-v2/smoke/benchmark_cells.csv`).
+
+Grid: all 390 cells (6 evaluation datasets, seeds 1 to 5, the 5 main systems at 120 and 300 s and 3 ablations at 300 s) completed, 12 November 21:46:25 to 13 November 14:01:55, 16.25 h of cell time, no failure. Rows in `results/benchmark-v2/benchmark_cells.csv`, analysis tables and figures in `results/benchmark-v2/` (`analysis_*.csv`, `figures/`), Session records in `experiments/benchmark-v2/`, models in `models/benchmark-v2/`. Every comparison has 6 datasets and 30 (dataset, seed) blocks.
+
+Pairs (difference of signed test scores, each dataset's mean over the 5 seeds; the 95% bootstrap interval of the median over the 6 datasets; wins, ties and losses over the datasets; Wilcoxon p and Holm-corrected p within the family):
+
+| Budget | Pair | Median difference | 95% interval | W / T / L | p | Holm |
+|---|---|---|---|---|---|---|
+| 120 s | autopilot_full vs flaml | -0.0137 | -0.0183 to -0.0022 | 0 / 0 / 6 | 0.031 | 0.156 |
+| 120 s | autopilot_full vs manual | -0.0024 | -0.0181 to 0.0292 | 2 / 0 / 4 | 0.563 | 1.000 |
+| 120 s | autopilot_full vs autogluon | -0.0003 | -0.0177 to 0.0206 | 3 / 0 / 3 | 1.000 | 1.000 |
+| 120 s | autopilot_full vs autopilot_rules | 0.0001 | -0.0013 to 0.0182 | 3 / 1 / 2 | 0.625 | 1.000 |
+| 120 s | autopilot_rules vs flaml | -0.0141 | -0.0363 to -0.0009 | 0 / 0 / 6 | 0.031 | 0.156 |
+| 300 s | autopilot_full vs flaml | -0.0010 | -0.0051 to 0.0205 | 2 / 0 / 4 | 1.000 | 1.000 |
+| 300 s | autopilot_full vs manual | 0.0055 | -0.0013 to 0.0384 | 5 / 0 / 1 | 0.094 | 0.469 |
+| 300 s | autopilot_full vs autogluon | 0.0025 | -0.0081 to 0.0432 | 4 / 0 / 2 | 0.438 | 1.000 |
+| 300 s | autopilot_full vs autopilot_rules | 0.0015 | -0.0017 to 0.0078 | 4 / 0 / 2 | 0.313 | 1.000 |
+| 300 s | autopilot_rules vs flaml | -0.0020 | -0.0122 to 0.0210 | 2 / 0 / 4 | 1.000 | 1.000 |
+| 300 s | autopilot_full vs random_choice | -0.0001 | -0.0023 to 0.0137 | 2 / 1 / 3 | 0.813 | 1.000 |
+| 300 s | autopilot_full vs no_critic | -0.0002 | -0.0024 to 0.0137 | 2 / 0 / 4 | 1.000 | 1.000 |
+| 300 s | autopilot_full vs no_resource_manager | 0.0057 | -0.0018 to 0.0218 | 4 / 0 / 2 | 0.219 | 0.875 |
+
+(The pair autopilot_full against autopilot_rules at 300 s is in both families; its Holm value is 0.938 in the ablation family.)
+
+Friedman test over the 6 datasets: main systems at 120 s chi-squared 7.97, p 0.093 (Iman and Davenport p 0.077); at 300 s p 0.355; ablations at 300 s p 0.434. The Nemenyi critical difference is 2.49 ranks for 5 systems, and at every budget all systems fall in one group. Average ranks (1 is best): at 120 s flaml 1.50, manual 2.83, autogluon 3.33, autopilot_full 3.58, autopilot_rules 3.75; at 300 s flaml 2.17, autopilot_full 2.50, autopilot_rules 3.00, manual 3.67, autogluon 3.67; ablations no_critic 2.00, autopilot_full 2.92, random_choice 3.08, autopilot_rules 3.33, no_resource_manager 3.67.
+
+Time-to-target (target: 99% of the best score of any main system at either budget, per dataset and seed; 30 pairs): FLAML reached it by 120 s in 18 pairs and by 300 s in 22, the full system in 13 and 16 (never in 14); median time-to-target 120 s for FLAML and AutoGluon, 300 s for both AutoPilot systems, never for manual. In a pair-by-pair count the full system reached the target at an earlier budget than FLAML in 2 pairs, the same in 18 and later in 10.
+
+Mean test score over the 5 seeds at 300 s (F1, R2 for energy_efficiency and solar_flare):
+
+| Dataset | manual | flaml | autogluon | autopilot_rules | autopilot_full | random_choice | no_critic | no_resource_manager |
+|---|---|---|---|---|---|---|---|---|
+| MiceProtein | 0.9855 | 0.9989 | 0.9947 | 0.9866 | 0.9921 | 0.9954 | 0.9956 | 0.9956 |
+| cylinder-bands | 0.8485 | 0.8547 | 0.8375 | 0.8426 | 0.8529 | 0.8400 | 0.8438 | 0.8420 |
+| energy_efficiency | 0.9972 | 0.9989 | 0.9987 | 0.9988 | 0.9988 | 0.9989 | 0.9990 | 0.9989 |
+| pc4 | 0.6125 | 0.5897 | 0.5507 | 0.6194 | 0.6218 | 0.6074 | 0.6035 | 0.5892 |
+| segment | 0.9814 | 0.9805 | 0.9723 | 0.9766 | 0.9771 | 0.9784 | 0.9784 | 0.9766 |
+| solar_flare | 0.0457 | 0.1043 | 0.1268 | 0.1166 | 0.1132 | 0.1132 | 0.1134 | 0.1023 |
+
+At 120 s the full system's means were 0.9837, 0.8454, 0.9989, 0.5840, 0.9737 and 0.1023 in the same order, and FLAML's 0.9956, 0.8610, 0.9989, 0.6038, 0.9780 and 0.1192 (all per-dataset means and spreads: `analysis_per_dataset.csv`).
+
+Time used (mean wall seconds per cell, 120 s / 300 s): flaml 121.1 / 300.9, autopilot_full 96.3 / 212.3, autopilot_rules 97.4 / 215.9, autogluon 65.8 / 98.5 (its `medium_quality` preset stops early), manual 0.7 / 0.6; at 300 s random_choice 215.1, no_resource_manager 233.2 and no_critic 292.1. The Session systems ran 4.5 Experiments on average at 300 s (no_critic 5.2).
+
+What the Sessions changed (all Session systems of the grid, steps after the first): drop_columns was tried 472 times and kept 279 times, restrict_model_families 104 and 86, regularised_search_space 40 and 16, more_search_time 26 and 3, group_rare_categories 14 and 9, class_weight_balanced 17 and 1; frequency_encode (11), smoother_search_metric (10) and missing_indicator (7) were never kept. Of the optional Strategies, token_features was tried 26 times on cylinder-bands and kept 3 times; target_encode 7 times (cylinder-bands and solar_flare) and never kept; smote 4 times, kept twice on pc4.
+
+Outcome against the success criteria of chapter 3 (written on 28 October 2026, before any of these cells ran):
+
+- H4 (not worse than FLAML at the same budget): not shown. At 120 s the interval (-0.0183 to -0.0022) reaches below the margin of -0.005, so the hypothesis is not supported, but it does not lie wholly below it, so by the criteria it is not contradicted either; the full system was behind FLAML on all 6 datasets at 120 s. At 300 s the interval (-0.0051 to 0.0205) just reaches below -0.005.
+- H1 (reaches the target sooner than FLAML): contradicted. FLAML reached the target at an earlier budget in 10 pairs and the full system in 2, and FLAML's median time-to-target (120 s) is earlier than the full system's (300 s).
+- H2 (without the memory the loop does worse): not shown (interval -0.0017 to 0.0078 at 300 s, -0.0013 to 0.0182 at 120 s).
+- H3 (without strategy selection the loop does worse): not shown (-0.0023 to 0.0137).
+- RQ3 and the Critic (without the Resource_Manager, or without the Critic, the loop does worse): not shown (-0.0018 to 0.0218 and -0.0024 to 0.0137).
+
+Reading. With the same budget, one FLAML search was the best or level system. At 120 s the loop was behind on every dataset; a likely reason, not measured separately, is that its first search gets only 35% of the time and the 15-fold Assessments take part of the rest. At 300 s the loop was level with FLAML within the intervals, better on pc4 (0.6218 against 0.5897 F1) and solar_flare, and worse on MiceProtein and segment. The Session systems also left about 30% of a 300 s budget unused (212 s of 300 s for the full system): of the 150 Session cells at 300 s, 79 stopped because no change was left to try, 27 after three discards in a row, 39 for time and 5 at the Experiment limit (at 120 s: 30 no change left, 8 three discards, 22 time, of 60). None of the components measured by the ablations (memory, strategy choice, Critic, Resource_Manager) made a difference larger than the intervals over 6 datasets; the run without the Critic even had the best average rank. With 6 datasets the Wilcoxon test cannot reach 0.05 after Holm's correction (Algorithm 21), so these are the results of this grid, not general claims.
+
 - Charts available: the critical-difference diagrams and the score-against-budget chart of the 23 benchmark cells (`results/benchmark/figures/`, 2 datasets, descriptive only), and the Phase 1 search charts (`docs/imp/images/`). Per-seed difference and bootstrap charts were not made, since the benchmark has one seed.
 
 ---
@@ -1526,6 +1590,14 @@ Conclusions so far (Phase 3, 31 October 2026; the benchmark was stopped early, s
 4. The cheap Judge's verdicts were not reproduced by searching again: on 20 real pairs it agreed with a strict comparison (new 25-trial searches on 5 inner splits) on 8 verdicts (kappa 0.05), and 3 of its 4 significant gains were judged worse there (section 9.18). Together with point 3, a single verdict should be read as evidence from fixed refits, not as a proven gain. The strict comparison cost 2.4 times as much even with its smaller searches.
 5. Reading the records showed three flaws, now fixed and tested: rounding noise counted as a gain once (section 4.7), steps that changed nothing counted as successes in the memory, and arms seen on one dataset steered the learned order (Algorithms 9 and 18). Their effect on test scores is not measured.
 
+Conclusions of the second, full benchmark run (13 November 2026; 390 cells on 6 evaluation datasets, 5 seeds, budgets of 120 and 300 s, code af8f14d with the fixes of 31 October and the optional tasks; section 9.20):
+
+1. The whole system ran the memory build (30 Sessions) and all 390 cells unattended in about 18 hours, with no failure.
+2. At the same budget, one FLAML search was as good as the loop or better. At 120 s FLAML was ahead on all 6 datasets (median difference 0.0137); at 300 s the two were level within the intervals (median -0.0010). By the criteria of chapter 3, H1 is contradicted and H4 is not shown.
+3. The memory, the learned strategy choice, the Critic and the Resource_Manager did not change the test score by more than the intervals over 6 datasets (H2, H3 and RQ3 not shown); the run without the Critic had the best average rank of the ablations.
+4. With the judge agreement study (point 4 of the Phase 3 conclusions) and the development Sessions (point 3), the evidence says that the loop's decisions are recorded, replayable and explained, but that on these datasets its changes rarely add to the test score beyond what FLAML finds alone. Spending part of the budget on Assessments is the likely price, most at short budgets (not measured separately).
+5. Ideas from this run, not tested: give the first search more than 35% of a short budget, or skip the loop below some budget; use the time the Sessions left unused (about 30% at 300 s) for a last, longer search from the accepted Setup; and measure the optional Strategies on more datasets (in this grid only token_features, 3 of 26 tries kept on cylinder-bands, and smote, 2 of 4 on pc4, were ever kept; target_encode never).
+
 Scope for improvement found in the results (31 October 2026; ranked by how directly the data points to it; the first three are built, the others are future work):
 
 | No. | Improvement | Evidence | Effort |
@@ -1543,8 +1615,9 @@ Built after this list was first written (optional tasks 29 to 35, 1 to 12 Novemb
 
 Future scope (beyond the planned phases):
 
-- Run the benchmark grid in full on mains power with the final code (390 cells, about a day; `--label v2`), so that H1 to H4 can be tested, and a judge agreement study with strict searches as large as the Sessions'
-- Measure each optional Strategy in the benchmark (how often it is proposed, kept and helpful)
+- A judge agreement study with strict searches as large as the Sessions', on the pairs of the second memory build (the full benchmark grid was run on 12 and 13 November 2026, section 9.20)
+- More evaluation datasets, so that the Wilcoxon tests can reach significance after Holm's correction, and a measurement of the optional Strategies on them
+- The ideas of point 5 of the second run's conclusions (the share of the first search, the unused time)
 - Feature engineering beyond single columns, for example family size from two Titanic columns
 - Warm starts after "smaller trees": move the Accepted_Setup's best configurations into the limited search space instead of leaving them out, and measure whether that helps (section 4.7)
 - The improvements 4 to 8 of the table above
@@ -1684,7 +1757,11 @@ Future scope (beyond the planned phases):
 | 2026-11-12 | Optional task 35: the local HTTP API (`app/api.py`, `scripts/run_api.py`; fastapi, uvicorn and httpx2 pinned) and the Docker image (`Dockerfile`, `scripts/docker_entry.sh`, `.dockerignore`, `.gitattributes`); a live API Session with real FLAML; the image built (2.12 GB) and checked with a short Session inside it; 3 tests in `tests/test_api.py`; 586 tests | 5650aa1 |
 | 2026-11-12 | A run label for the benchmark and the memory build (`--label v2`): a later run writes to `experiments/benchmark-v2*/`, `models/benchmark-v2*/` and `results/benchmark-v2/`, so it can never touch the first run's rows or its frozen memory; tests for both folder layouts | 3d66e8c |
 | 2026-11-12 | Documents brought in line with optional tasks 29 to 35: README, PROJECT.md, how-it-works, architecture, roadmap, research direction, the services package docstring and two stale module docstrings, the dashboard sidebar (only the second benchmark run is planned), and in these notes the objectives table, the future scope and the sidebar description | 40c868f |
-| 2026-11-12 | Code size after the optional tasks (section 8.1): 20,235 lines in 97 Python files at 40c868f | see the commit of this date |
+| 2026-11-12 | Code size after the optional tasks (section 8.1): 20,235 lines in 97 Python files at 40c868f | 4d479df |
+| 2026-11-12 | `scripts/run_benchmark_v2.cmd` chains the second run; started at 19:46 from af8f14d with a clean tree, Docker Desktop and Ollama stopped | af8f14d |
+| 2026-11-12 | Second frozen memory: 30 development Sessions (19:46 to 21:33), 95 records frozen, SHA-256 d678080a...39f5d; smoke setting: all 8 systems completed (section 9.20) | e995480 (data) |
+| 2026-11-13 | Second benchmark run: all 390 cells completed (21:46 on 12 November to 14:01), no failure, no battery wait; analysis written to `results/benchmark-v2/`; H1 contradicted, H2 to H4 and the ablations not shown (chapter 3, section 9.20, chapter 10) | e995480 (data) |
+| 2026-11-13 | Second run recorded: section 9.20, the outcome in chapter 3, the conclusions and future scope in chapter 10, objectives O3, O5 and O7, Appendix E; README, PROJECT.md, architecture, roadmap, research direction and how-it-works updated; the sidebar's planned items are now the judge agreement study with full-length searches and more datasets | see the commit of this date |
 
 ---
 
@@ -1747,6 +1824,7 @@ Charts already made (in `docs/imp/images`, from `scripts/plot_search_history.py`
 ## Appendix E. Where the data and documents are
 
 - Raw results of EXP-001 and EXP-002: `experiments/EXP-001/`, `experiments/EXP-002/` (summary, predictions, leaderboard, trial history, importances, profile, FLAML log), `models/EXP-00x/model.pkl`, and the MLflow store in `mlruns/`. These folders are not in git, so back them up.
+- Second benchmark run (section 9.20, 12 and 13 November 2026, code af8f14d): rows, frozen memory, analysis tables and figures in `results/benchmark-v2/` (in git); the Sessions' records in `experiments/benchmark-v2/` (grid), `experiments/benchmark-v2-memory/` (memory build) and `experiments/benchmark-v2-smoke/`, their models under `models/benchmark-v2*/`, and the logs with the run notes in `experiments/benchmark-v2-logs/` (not in git, so back them up).
 - The development runs (9.2, 9.5), the rehearsal (9.4) and the seed checks (9.6) ran in temporary folders that were deleted afterwards. Only the numbers in this file remain; re-run them for the final report.
 - Phase 2 Sessions: `experiments/SES-###/` (`session.json`, `train_profile.json`) and their Experiments `experiments/EXP-###/` (with `assessment.json`, `diagnoses.json`, `decision.json`), models in `models/EXP-###/`, MLflow parent and child runs in `mlruns/`, and the memory in `experiments/memory/memory.jsonl`. SES-001 is section 9.11; the Sessions of the Phase 2 measurement are listed in `results/phase2/phase2_runs.csv` (column `run_id`). Not in git: back them up.
 - Component studies: summary CSV files in `results/studies/` (in git); the critic study's saved inputs in `experiments/studies/critic_study_inputs.jsonl` (not in git). Phase 2 measurement: `results/phase2/` (in git).

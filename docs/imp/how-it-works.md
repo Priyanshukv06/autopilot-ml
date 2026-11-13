@@ -6,10 +6,10 @@ Everything here has been checked. The numbers come from our own runs, mostly EXP
 
 - To see the diagrams, open this file in Kiro and press Ctrl+Shift+V (Markdown preview). The diagrams are drawn by Mermaid; the charts are PNG files in the `images` folder next to this file.
 - The technical reference for the same code is `architecture.md`. The notes for the final report are in `report-notes.md`.
-- Phase 3 so far: choosing changes from the memory and the switches that turn single parts of the loop off are in section 9.3. The comparison systems and the benchmark harness are research tools outside the app; they are described in `architecture.md` and in the report notes (section 4.10). The benchmark was stopped early; its results and those of the judge agreement study are in the report notes (sections 9.16 to 9.18), not here.
-- Optional extensions (tasks 29 to 35, built from 1 to 12 November 2026): the new Strategies and Diagnoses are in the tables of section 9.3, together with SMOTE, group-aware splits and the new dashboard options; target suggestion, the leakage check, SHAP, the plain-language summaries, the HTTP API and the Docker image are in section 9.8. The benchmark ran before them.
+- Phase 3 so far: choosing changes from the memory and the switches that turn single parts of the loop off are in section 9.3. The comparison systems and the benchmark harness are research tools outside the app; they are described in `architecture.md` and in the report notes (section 4.10). The first benchmark run was stopped early, and a second, full run with the final code finished on 13 November 2026; their results and those of the judge agreement study are in the report notes (sections 9.16 to 9.18 and 9.20), not here.
+- Optional extensions (tasks 29 to 35, built from 1 to 12 November 2026): the new Strategies and Diagnoses are in the tables of section 9.3, together with SMOTE, group-aware splits and the new dashboard options; target suggestion, the leakage check, SHAP, the plain-language summaries, the HTTP API and the Docker image are in section 9.8. The first benchmark run was made before them; the second, full run includes them.
 
-Last updated: 12 November 2026 (the optional extensions: sections 1, 3.2, 3.3, 9.3, 9.7, 9.8 and Appendices A and B; before that, 31 October 2026, changes made after reading the Phase 3 results: sections 9.3 and 9.7)
+Last updated: 13 November 2026 (the second benchmark run: the notes above and section 9.7; before that, 12 November 2026, the optional extensions: sections 1, 3.2, 3.3, 9.3, 9.7, 9.8 and Appendices A and B; before that, 31 October 2026, changes made after reading the Phase 3 results: sections 9.3 and 9.7)
 
 ## Contents
 
@@ -801,13 +801,13 @@ Inside a Session, experiments run with `evaluate_test=False`: no test score, tes
 
 | Limit | Why it matters |
 |---|---|
-| By default the order of changes is a fixed rule table; the learned order needs records of similar datasets in the memory | Without such records, a change that never helps on this kind of data is still tried; the benchmark was stopped too early to show whether the learned order helps |
+| By default the order of changes is a fixed rule table; the learned order needs records of similar datasets in the memory | Without such records, a change that never helps on this kind of data is still tried; the first benchmark run was stopped too early to show whether the learned order helps, and in the second, full run its difference to the rule order was within the intervals over 6 datasets |
 | One change at a time, each tried at most once | Two changes that only help together are not found |
 | Each Assessment refits a configuration 15 times | It takes a share of the budget, more on bigger data |
 | Both scores the Judge compares come from configurations FLAML chose on the same training part | Both are a little optimistic; pairing removes much of this, not all. Searching again on 5 inner splits gave the same verdict for only 8 of 20 real decisions (report notes, section 9.18) |
 | FLAML picks learner families using measured times | Two runs with the same seed can take different paths and end with different models |
 | The unreliable-validation Diagnosis is weak in the critic study | Its Proposal is cheap and still has to pass the Judge |
-| The newest Strategies (smote, target_encode, token_features) and Diagnoses (unused_words, possible_leakage) were not part of the studies or the benchmark | They were only checked with short runs, so whether they help is not measured |
+| The newest Strategies (smote, target_encode, token_features) and Diagnoses (unused_words, possible_leakage) were not part of the studies or the first benchmark run | They were checked with short runs; in the second benchmark run token_features was kept 3 of 26 times, smote 2 of 4 and target_encode 0 of 7, and their effect on the test score is not measured on its own |
 | possible_leakage looks at one column at a time and only warns | A column that gives the answer away only together with other columns is not found, and a flagged column is fine if its value is known before the outcome; only the user can tell |
 
 The Phase 2 measurement against FLAML alone is in `report-notes.md`, section 9.14.

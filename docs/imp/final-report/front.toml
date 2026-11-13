@@ -1,0 +1,21 @@
+# Details for the front pages of the final report. Fields in [brackets] are still to be filled in.
+title = "AutoPilot-ML - An Autonomous, Self-Optimizing Machine Learning Experimentation Framework"
+report_kind = "MINOR PROJECT REPORT"
+degree = "BACHELOR OF TECHNOLOGY"
+department = "Department of Computer Science and Engineering"
+institute = "INDIAN INSTITUTE OF INFORMATION TECHNOLOGY"
+institute_city = "BHOPAL (M.P.)"
+month_year = "November 2026"
+academic_year = "2026-27"
+supervisor = "[Name of supervisor]"
+supervisor_designation = "[Designation of supervisor]"
+coordinator = "Dr. Rahul Chourasiya"
+director = "Prof. Ashutosh Kumar Singh"
+
+[[students]]
+name = "Priyanshu Verma"
+scholar = "23U02016"
+
+[[students]]
+name = "Salil Kushwah"
+scholar = "23U02003"

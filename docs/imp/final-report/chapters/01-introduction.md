@@ -31,7 +31,7 @@ The work of this project, built and measured by the team on top of FLAML [@wang2
 - An autonomous experimentation layer around FLAML with 14 kinds of Diagnosis and 12 Strategies, where every decision is recorded with its numbers and can be replayed from the saved records [@wang2021flaml].
 - A cheap acceptance rule, the Judge, that compares refits of the configurations FLAML found on fixed folds with a corrected resampled t-test, together with a study of its error rates on data with known answers [@nadeau2003inference; @bouckaert2004replicability].
 - A learned choice of the next change from the Experiment_Memory with Thompson sampling or UCB1, with switches that turn each part off for ablation studies [@thompson1933; @auer2002ucb].
-- A benchmark fixed in writing before it ran: 390 runs on 6 OpenML datasets, 5 seeds and 2 time budgets, against FLAML alone, AutoGluon and a manual LightGBM baseline, analysed with the Friedman, Nemenyi and Wilcoxon tests with Holm's correction [@vanschoren2013openml; @demsar2006]. Its results are reported as measured, including the negative ones.
+- A benchmark fixed in writing before it ran: 390 runs on 6 OpenML datasets, 5 seeds and 2 time budgets, against FLAML alone, AutoGluon and a manual LightGBM baseline, analysed with the Friedman, Nemenyi and Wilcoxon tests with Holm's correction [@vanschoren2013openml; @demsar2006]. Its results are reported exactly as measured.
 - Optional parts: SMOTE, cross-fitted target encoding, word features, group-aware folds, SHAP explanations, a leakage warning, plain-language summaries by a local language model, a local web API and a Docker image [@chawla2002smote; @micci2001target; @lundberg2017shap].
 
 ## Organisation of the report

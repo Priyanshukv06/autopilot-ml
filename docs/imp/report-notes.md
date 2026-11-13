@@ -1761,7 +1761,7 @@ Future scope (beyond the planned phases):
 | 2026-11-12 | `scripts/run_benchmark_v2.cmd` chains the second run; started at 19:46 from af8f14d with a clean tree, Docker Desktop and Ollama stopped | af8f14d |
 | 2026-11-12 | Second frozen memory: 30 development Sessions (19:46 to 21:33), 95 records frozen, SHA-256 d678080a...39f5d; smoke setting: all 8 systems completed (section 9.20) | e995480 (data) |
 | 2026-11-13 | Second benchmark run: all 390 cells completed (21:46 on 12 November to 14:01), no failure, no battery wait; analysis written to `results/benchmark-v2/`; H1 contradicted, H2 to H4 and the ablations not shown (chapter 3, section 9.20, chapter 10) | e995480 (data) |
-| 2026-11-13 | Second run recorded: section 9.20, the outcome in chapter 3, the conclusions and future scope in chapter 10, objectives O3, O5 and O7, Appendix E; README, PROJECT.md, architecture, roadmap, research direction and how-it-works updated; the sidebar's planned items are now the judge agreement study with full-length searches and more datasets | see the commit of this date |
+| 2026-11-13 | Second run recorded: section 9.20, the outcome in chapter 3, the conclusions and future scope in chapter 10, objectives O3, O5 and O7, Appendix E; README, PROJECT.md, architecture, roadmap, research direction and how-it-works updated; the sidebar's planned items are now the judge agreement study with full-length searches and more datasets | 6d2cd7c |
 
 ---
 

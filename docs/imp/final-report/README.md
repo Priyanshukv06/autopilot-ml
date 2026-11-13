@@ -35,8 +35,10 @@ The second command writes the .docx, asks Word to fill in the page numbers of th
 - [x] Figures
 - [x] Front pages and abstract
 - [x] Chapters 1 to 9 and references
-- [x] Build, Word update, PDF, visual check: 62 pages, 0 format problems
+- [x] Build, Word update, PDF, visual check: 52 pages, 9 figures, 9 tables, 9 equations, 3 algorithms, 77 references, 0 format problems
 - [x] Report notes work log and commit
+
+The report is the condensed version: it leads with what was delivered, keeps only the main tables and figures, and has no dates or timeline in the chapters. Every chapter is inside the page range the template gives (for example 5.0 pages of implementation and 5.1 of results against "5-10 pages"). The secondary studies left out of it (the ablation variants, time-to-target, the Judge agreement study and the hypothesis outcomes) stay in `docs/imp/report-notes.md` and `results/`. The figure functions that are no longer used (`fig_split`, `fig_judge`, `fig_diff`, `fig_cd`) and their images are kept in case a figure is wanted back.
 
 Still to do by the team: the guide's name and designation in `front.toml` (then build again), the signatures, the plagiarism report from the institute's tool, and a page "List of publications" only if a paper is published or submitted.
 
@@ -45,5 +47,5 @@ Still to do by the team: the guide's name and designation in `front.toml` (then 
 - Chapter and section headings are left aligned, as the written rules say; the template's sample chapter titles are centred. Front-page titles (Certificate, Abstract and the others) stay centred as in the template. To centre the chapter headings, set `HEADING_ALIGN` in the builder.
 - All sections have 2.54 cm margins on every side (the template's cover page had 3 cm on the left), because the rules ask for equal margins and one layout throughout.
 - Page numbering starts at 1 on the Abstract, as in the template; the pages before it carry no number.
-- Equations use Word's equation font (Cambria Math), because Word only draws brackets and roots correctly in a math font. The three code listings use Courier New, so that the code stays readable.
+- Equations use Word's equation font (Cambria Math), because Word only draws brackets and roots correctly in a math font. The code listing uses Courier New, so that the code stays readable.
 - Grammar fixes in the template's declaration text ("is presented in partial fulfillment", "for the award of"), "Bachelor of Technology" in the certificate as on the cover, and the academic year 2026-27 for a report dated November 2026.

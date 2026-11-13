@@ -484,43 +484,25 @@ def fig_cd() -> None:
 
 
 def fig_time() -> None:
+    """Mean wall time per run of the five main systems at the 300 s budget."""
     timing = pd.read_csv(RES / "analysis_timing.csv")
-    cells = pd.read_csv(RES / "benchmark_cells.csv", low_memory=False)
-    fig, (a1, a2) = plt.subplots(2, 1, figsize=(15.5 * CM, 12.0 * CM), gridspec_kw={"height_ratios": [1.5, 1]})
-    order = ["flaml", "no_critic", "no_resource_manager", "autopilot_rules", "random_choice", "autopilot_full",
-             "autogluon", "manual"]
+    order = ["flaml", "autopilot_rules", "autopilot_full", "autogluon", "manual"]
+    colours = {"flaml": "#000000", "autopilot_full": "#1f4e79", "autopilot_rules": "#5b9bd5",
+               "autogluon": "#7f7f7f", "manual": "#a5a5a5"}
     t300 = timing[timing.budget_seconds == 300].set_index("system").loc[order]
+    fig, ax = plt.subplots(figsize=(15.5 * CM, 6.0 * CM))
     ys = np.arange(len(order))[::-1]
-    a1.barh(ys, t300.mean_wall_seconds, color="#5b9bd5", edgecolor="black", lw=0.5, height=0.6)
+    ax.barh(ys, t300.mean_wall_seconds, color=[colours[s] for s in order], edgecolor="black", lw=0.5,
+            height=0.6)
     for yy, v in zip(ys, t300.mean_wall_seconds):
-        a1.text(v + 4, yy, f"{v:.1f}", ha="left", va="center", fontsize=TICK)
-    a1.axvline(300, color="black", lw=0.8, ls="--")
-    a1.set_yticks(ys)
-    a1.set_yticklabels([SYSTEM_NAMES[s] for s in order], fontsize=TICK)
-    a1.set_xlabel("mean wall time per run in seconds (budget 300 s, dashed line)", fontsize=TEXT)
-    a1.set_xlim(0, 340)
-    a1.tick_params(length=2)
-    systems = ["autopilot_full", "autopilot_rules", "random_choice", "no_critic", "no_resource_manager"]
-    sess = cells[cells.system.isin(systems) & (cells.budget_seconds == 300)]
-    names = {"no_proposals": "no change left", "patience": "three discards in a row", "time": "time",
-             "experiments": "Experiment limit"}
-    counts = sess.groupby(["system", "stop_reason"]).size().unstack(fill_value=0).reindex(systems)
-    left = np.zeros(len(counts))
-    shades = {"no_proposals": "#1f4e79", "patience": "#5b9bd5", "time": "#bdd7ee", "experiments": "#ffffff"}
-    ys2 = np.arange(len(counts))[::-1]
-    for reason in ["no_proposals", "patience", "time", "experiments"]:
-        vals = counts[reason].values if reason in counts else np.zeros(len(counts))
-        a2.barh(ys2, vals, left=left, color=shades[reason], edgecolor="black", lw=0.5, height=0.6,
-                label=names[reason])
-        left += vals
-    a2.set_yticks(ys2)
-    a2.set_yticklabels([SYSTEM_NAMES[s] for s in systems], fontsize=TICK)
-    a2.set_xlabel("Session runs at 300 s by stop reason (30 runs each)", fontsize=TEXT)
-    a2.set_xlim(0, 30)
-    a2.legend(loc="upper center", bbox_to_anchor=(0.4, -0.38), ncol=4, frameon=False, fontsize=TICK,
-              columnspacing=1.0, handlelength=1.4)
-    a2.tick_params(length=2)
-    fig.subplots_adjust(left=0.3, right=0.97, top=0.98, bottom=0.17, hspace=0.42)
+        ax.text(v + 5, yy, f"{v:.1f} s", ha="left", va="center", fontsize=TICK)
+    ax.axvline(300, color="black", lw=0.8, ls="--")
+    ax.set_yticks(ys)
+    ax.set_yticklabels([SYSTEM_NAMES[s] for s in order], fontsize=TICK)
+    ax.set_xlabel("mean wall time per run in seconds (budget 300 s, dashed line)", fontsize=TEXT)
+    ax.set_xlim(0, 365)
+    ax.tick_params(length=2)
+    fig.subplots_adjust(left=0.24, right=0.97, top=0.96, bottom=0.21)
     fig.savefig(OUT / "fig_time.png", dpi=300)
     plt.close(fig)
 

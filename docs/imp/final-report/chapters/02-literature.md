@@ -106,4 +106,4 @@ Table @tab:compare compares AutoPilot-ML with the systems above on five abilitie
 | AutoPilot-ML (this work) | Through FLAML, unchanged | Yes: 12 Strategies, fitted inside each fold | Yes: Critic with 14 kinds of Diagnosis and their evidence | Memory of changes with their effect and cost | Resource_Manager with budgets and stop rules |
 ::end
 
-The gap this project addresses is therefore an experimentation layer that diagnoses, changes, judges and records, with every step measurable, offline and repeatable [@demsar2006]. Whether such a layer also gives better models than a single AutoML search with the same budget is an empirical question, which chapter 8 measures on six public datasets and two budgets [@wang2021flaml].
+The gap this project addresses is therefore an experimentation layer that diagnoses, changes, judges and records, with every step measurable, offline and repeatable [@demsar2006]. Chapter 8 compares such a layer with a single AutoML search with the same budget, and with AutoGluon and a LightGBM baseline, on six public datasets and two budgets [@wang2021flaml].

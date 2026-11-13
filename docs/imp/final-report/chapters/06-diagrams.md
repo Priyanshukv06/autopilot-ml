@@ -1,6 +1,6 @@
 # Proposed flowchart, block diagram and DFD
 
-This chapter shows the structure of AutoPilot-ML in four views: a block diagram of its layers, data flow diagrams at levels 0 and 1, a flowchart of the Session loop and a flowchart of the Judge's decision. All diagrams were drawn for this report from the code. Boxes drawn in grey are libraries used as they are; white boxes are parts built in this project.
+This chapter shows the structure of AutoPilot-ML as a block diagram of its layers, data flow diagrams at levels 0 and 1, and a flowchart of the Session loop. All diagrams were drawn for this report from the code. Boxes drawn in grey are libraries used as they are; white boxes are parts built in this project.
 
 ## Block diagram
 
@@ -22,12 +22,6 @@ Figure @fig:dfd1 opens the system into its main processes and data stores. Proce
 
 ## Flowchart of the Session loop
 
-Figure @fig:flow follows one Session from the split to the final evaluation. It is the same loop as Algorithm @alg:session. The loop leaves through the stop check of the Resource_Manager only, so every Session ends with a Final_Evaluation and a complete record, also when the user presses Stop.
+Figure @fig:flow follows one Session from the split to the final evaluation. It is the same loop as Algorithm @alg:session, with the Judge's decision of Algorithm @alg:judge inside it. The loop leaves through the stop check of the Resource_Manager only, so every Session ends with a Final_Evaluation and a complete record, also when the user presses Stop.
 
 ::figure fig:flow | figures/fig_flow.png | 12 | Flowchart of one Session
-
-## Flowchart of the Judge
-
-Figure @fig:judge shows the decision of Algorithm @alg:judge. The check for equal differences comes first, because with no spread the t statistic cannot be computed, and two refits of the same model agree to within 10^{−12}.
-
-::figure fig:judge | figures/fig_judge.png | 13 | Flowchart of the Judge's decision for one candidate

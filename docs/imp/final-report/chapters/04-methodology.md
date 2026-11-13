@@ -2,19 +2,9 @@
 
 ## Overall approach
 
-The work followed one rule: build and measure a reliable baseline first, then add one autonomous part at a time, each with its own tests and a way to measure it before any claim depends on it. Mature open-source libraries were used instead of being rebuilt: FLAML for the search [@wang2021flaml], scikit-learn for splits, metrics and importance [@pedregosa2011sklearn], MLflow for tracking [@zaharia2018mlflow] and Streamlit for the dashboard [@streamlit]. Other fixed rules were: no language model in any decision, no paid service and no cloud, business logic kept apart from the user interface, and no result reported unless it was measured, with anything not built marked as planned.
+The work followed one rule: build and measure a reliable baseline first, then add one autonomous part at a time, each with its own tests and a way to measure it. Mature open-source libraries were used instead of being rebuilt: FLAML for the search [@wang2021flaml], scikit-learn for splits, metrics and importance [@pedregosa2011sklearn], MLflow for tracking [@zaharia2018mlflow] and Streamlit for the dashboard [@streamlit]. Every decision of the system is made by rules and statistics that run offline, with no language model, no paid service and no cloud, and the business logic is kept apart from the user interface.
 
-From the second phase on, the work was planned as a written specification in the Kiro development environment [@kiro]: a requirements document (32 requirements with 160 numbered acceptance criteria written as WHEN, IF, THEN and SHALL statements), a design document (components, code shapes, data formats and design decisions) and a task list (35 tasks and 21 test and run sub-tasks, each linked to the criteria it satisfies). Each task was built, tested and committed on its own, with one logical change per commit. Table @tab:phases shows the phases of the work.
-
-::table tab:phases | Phases of the work | widths=1.6,10,4.2 | align=cjc
-| Phase | Content | When |
-|---|---|---|
-| 1 | Baseline: dataset profiling, task detection, FLAML search, held-out evaluation, MLflow tracking, dashboard and experiment history | Built by 7 October 2026; reviewed in October 2026 |
-| 2 | Autonomous layer: Assessor, Critic, Strategy_Engine, Judge, Resource_Manager, Planner and Session loop, Experiment_Memory, autonomous mode of the dashboard; the Critic and Judge studies; a first comparison with FLAML alone | 26 and 27 October 2026 |
-| 3 | Learned strategy choice, ablation switches, comparison systems, benchmark harness and statistics, frozen memory, Judge agreement study | 27 to 31 October 2026 |
-| Optional | SMOTE, target encoding, word features, group-aware splits, SHAP, target suggestion and leakage warning, local summaries, web API and Docker image | 1 to 12 November 2026 |
-| Final run | The whole benchmark of 390 runs with the final code | 12 and 13 November 2026 |
-::end
+The autonomous layer was planned as a written specification in the Kiro development environment [@kiro]: a requirements document with 32 requirements and 160 numbered acceptance criteria, a design document with the components, code shapes, data formats and design decisions, and a task list of 35 tasks, each linked to the criteria it satisfies. Each task was built, tested and committed on its own. The work was built in stages: first the baseline pipeline, then the autonomous layer with the studies of its components, then the learned choice of changes and the benchmark, and finally the optional extensions.
 
 ## One Experiment: the baseline pipeline
 
@@ -26,9 +16,7 @@ FLAML searches on the training part only. The best model is scored once on the t
 
 A Session runs Experiments one after another within a total time budget. Each Experiment searches one Setup: the feature columns, the Data_Steps (column changes learned only from training rows, such as an encoding), class weights or a resampler, the learner families FLAML may use, limits on its search space, the search metric and the time budget. The Setup currently believed to be best is the Accepted_Setup.
 
-A Session first makes the outer split into a Training_Part and a Test_Part, as in Phase 1, and then splits the Training_Part into 3 repeats of 5-fold cross-validation, the 15 Session_Folds, with a seed of its own. Every decision of the Session is made on these folds of the Training_Part; the Test_Part is used once, at the end, to report the first and the final model [@cawley2010overfit]. Figure @fig:split shows the split.
-
-::figure fig:split | figures/fig_split.png | 15.5 | The outer split and the 15 Session_Folds; decisions use only the Training_Part
+A Session first makes the outer split into a Training_Part and a Test_Part, and then splits the Training_Part into 3 repeats of 5-fold cross-validation, the 15 Session_Folds. Every decision of the Session is made on these folds of the Training_Part, and the Test_Part is used only once, at the end, to report the first and the final model [@cawley2010overfit].
 
 The first Setup is the user's settings with identifier-like and constant columns left out. It is searched with the first budget, assessed and diagnosed. Then the loop repeats: the Strategy_Engine proposes changes to the Accepted_Setup, the Resource_Manager decides whether to stop and gives the next budget, the first Proposal is applied to a copy of the Accepted_Setup, FLAML searches it starting from the Accepted_Setup's best configurations, and the Judge compares it with the Accepted_Setup on the same folds. A kept change becomes the new Accepted_Setup and is diagnosed again. Chapter 5 gives the loop as Algorithm @alg:session.
 
@@ -38,19 +26,17 @@ FLAML's own validation score is the best of many trials on its own folds, so it 
 
 ## The Critic
 
-The Critic turns the profile of the Training_Part, the Assessment and a summary of FLAML's search into Diagnoses. Each Diagnosis has a kind, a severity (low, moderate or high), the columns concerned, its evidence numbers and a plain message. The rules run in a fixed order, and their thresholds live in a versioned settings file. They use a diagnostic metric m: the primary metric if it is bounded and higher is better, otherwise F1 or R². Two examples of evidence are the overfitting gap of Equation (@eq:gap) over the J = 15 folds, and the skill over the trivial baseline of Equation (@eq:skill), used for underfitting [@hastie2009esl].
+The Critic turns the profile of the Training_Part, the Assessment and a summary of FLAML's search into Diagnoses. Each Diagnosis has a kind, a severity (low, moderate or high), the columns concerned, its evidence numbers and a plain message. The rules run in a fixed order, and their thresholds are kept in a versioned settings file. They use a diagnostic metric m: the primary metric if it is bounded and higher is better, otherwise F1 or R². For example, the evidence for overfitting is the gap g of Equation (@eq:gap), the mean difference between the training and validation scores over the J = 15 folds [@hastie2009esl].
 
 ::equation eq:gap
 
-::equation eq:skill
-
-Table @tab:diagnoses lists all 14 kinds with the thresholds of the version `v1-critic-study`. That version came from the Critic study of chapter 8, which changed three starting values: the overfitting gap from 0.10 to 0.11, the empty share from 0.40 to 0.30 and the near-constant share from 0.99 to 0.98. The last two kinds were added with the optional tasks; possible_leakage is a warning only, because only the user knows whether a column is available before the outcome [@kaufman2012leakage].
+Table @tab:diagnoses lists all 14 kinds with their thresholds, which were tuned on synthetic data with known answers, as described under the evaluation method at the end of this chapter. The possible_leakage kind is a warning only, because only the user knows whether a column is available before the outcome [@kaufman2012leakage].
 
 ::table tab:diagnoses | The 14 kinds of Diagnosis and their thresholds | widths=4.2,5.8,3.0,2.8 | align=jjcc
 | Kind | Evidence | Moderate | High |
 |---|---|---|---|
 | overfitting | Gap g of Equation (@eq:gap) | 0.11 or more | 0.20 or more |
-| underfitting | Skill s of Equation (@eq:skill), only when the gap is below 0.03 | below 0.50 | below 0.25 |
+| underfitting | Skill over the trivial baseline, the share of the possible gain that the model reaches, only when the gap is below 0.03 | below 0.50 | below 0.25 |
 | budget_limited | Gain of the search's best score in the last quarter of its time | 0.005 or more | 0.02 or more |
 | wasted_budget | Share of the search time after its best configuration | 0.50 or more | 0.75 or more |
 | class_imbalance | Largest over smallest class; validation recall of the smallest class | ratio 3 or more, or recall below 0.5 | ratio 9 or more, or recall below 0.3 |
@@ -82,13 +68,11 @@ A Strategy is a named change that returns a changed copy of a Setup and applies 
 | more_search_time | The same Setup with at least twice the search time | underfitting, budget limited | same |
 | smoother_search_metric | Searches with log loss instead of the primary metric | class imbalance, unreliable validation | same |
 | smote | Synthetic rows of the smaller classes, in each fold's training rows only | class imbalance | more complex |
-| target_encode | Cross-fitted, smoothed mean target of each value (Equation @eq:te) | high cardinality | same |
+| target_encode | Cross-fitted, smoothed mean target of each value | high cardinality | same |
 | token_features | 0/1 columns for up to 20 frequent words of a text column | unused words | more complex |
 ::end
 
-SMOTE is applied through FLAML's resampling hook, so FLAML resamples only the training rows of each of its folds and never the validation rows [@chawla2002smote; @lemaitre2017imblearn]. Target encoding replaces a value c by the smoothed mean target of Equation (@eq:te), with m = 10, where the sum runs over the training rows that have the value c and n_{c} is their number [@micci2001target]. It is cross-fitted: the training rows are split into 5 parts, and each part is encoded with the means of the other 4, so that no row's encoding uses its own label.
-
-::equation eq:te
+SMOTE is applied through FLAML's resampling hook, so FLAML resamples only the training rows of each of its folds and never the validation rows [@chawla2002smote; @lemaitre2017imblearn]. Target encoding replaces a value by the mean target of the training rows that have it, pulled towards the overall mean with a weight of 10 rows so that rare values are not trusted too much [@micci2001target]. It is cross-fitted: the training rows are split into 5 parts, and each part is encoded with the means of the other 4, so that no row's encoding uses its own label.
 
 ## The Judge
 
@@ -98,7 +82,7 @@ The Judge decides whether a candidate Setup replaces the Accepted_Setup. On each
 
 ::equation eq:var
 
-From t the Judge computes p(better) and p(worse) with Student's t distribution with J - 1 degrees of freedom. It returns one of three Verdicts. **Keep** when the mean difference is above the minimum gain (0) and p(better) is at most alpha (0.20). **Keep_simpler** when the candidate is simpler, its mean difference is at least -0.005 and p(worse) is above alpha. **Discard** in every other case. When all differences are equal, that is, their standard deviation is at most the refit tolerance of 10^{−12}, the Judge decides on the mean alone, and a mean within that tolerance counts as no gain. As an example with 5 folds, the differences 0.02, 0.01, 0.03, -0.01 and 0.02 have a mean of 0.014 and give a corrected t of 1.376 with p(better) 0.120, while an uncorrected paired t-test would give t = 2.064 and p = 0.054 [@dietterich1998tests].
+From t the Judge computes p(better) and p(worse) with Student's t distribution with J - 1 degrees of freedom. It returns one of three Verdicts. **Keep** when the mean difference is above the minimum gain (0) and p(better) is at most alpha (0.20). **Keep_simpler** when the candidate is simpler, its mean difference is at least -0.005 and p(worse) is above alpha. **Discard** in every other case. When all differences are equal, that is, their standard deviation is at most the refit tolerance of 10^{−12}, the Judge decides on the mean alone. As an example with 5 folds, the differences 0.02, 0.01, 0.03, -0.01 and 0.02 have a mean of 0.014 and give a corrected t of 1.376 with p(better) 0.120, while an uncorrected paired t-test, which ignores the overlap, would give t = 2.064 and p = 0.054 [@dietterich1998tests].
 
 ## The Resource_Manager
 
@@ -118,7 +102,7 @@ An arm is a pair of Strategy and diagnosis kind. For the 5 nearest earlier datas
 
 ::equation eq:ucb
 
-An arm with fewer than 3 records, or with records from only one dataset, keeps its place in the rule order, and a kept record that changed no fold score counts as not kept. Each step records how its Proposal was placed. Four switches turn parts of the loop off for ablation studies: the memory, the strategy choice (a random order), the Critic (random valid changes instead of Diagnoses) and the Resource_Manager (equal shares of the time, no reserve and no patience rule).
+An arm with fewer than 3 records, or with records from only one dataset, keeps its place in the rule order, so the learned choice moves only changes with evidence from at least two other datasets.
 
 ## Optional extensions
 
@@ -132,57 +116,18 @@ The following parts were added after the core loop and are switched on by settin
 
 ## Evaluation method
 
-### Component studies
+### Studies of the Critic and the Judge
 
-The Critic and the Judge were first measured on synthetic data with known answers. Each synthetic dataset of 1,000 rows comes with a fresh sample of 20,000 rows from the same generator, so a model's score on the fresh sample estimates its true score. The Critic study used 270 binary datasets, each with one planted problem (class imbalance, label noise, useless columns, an identifier column, a constant column, a high-cardinality column, empty cells or duplicated columns) at three strengths, or no problem, over 5 tuning seeds and 5 reporting seeds. The Judge study used 84 pairs of Setups, where the second Setup changes one thing, and counted a false keep when the Judge accepted a change whose true effect was below -0.005, and power as the share of truly helpful changes (above +0.01) it kept, over 9 settings of alpha and fold repeats. The rule that picks the settings was written before the runs.
+The Critic and the Judge were first checked on synthetic data with known answers. Each synthetic dataset of 1,000 rows comes with a fresh sample of 20,000 rows from the same generator, so a model's score on the fresh sample estimates its true score. The Critic study used 270 binary datasets, each with one planted problem (class imbalance, label noise, useless columns, an identifier column, a constant column, a high-cardinality column, empty cells or duplicated columns) at three strengths, or no problem, with one set of seeds for tuning the thresholds and another for reporting. The Judge study used 84 pairs of Setups, where the second Setup changes one thing with a known true effect, and counted how many harmful changes (a true effect below -0.005) the Judge kept and how many helpful changes (above +0.01) it found.
 
-### Datasets
+### Datasets and comparison systems
 
-The benchmark datasets were chosen by a written rule before any of them was downloaded. From the 107 datasets of two curated OpenML suites, OpenML-CC18 for classification and OpenML-CTR23 for regression [@vanschoren2013openml; @bischl2021suites], those with 500 to 10,000 rows and at most 100 feature columns were kept and sorted into six groups. In each group the candidates were shuffled with a generator seeded with 2026: the first became an evaluation dataset and the second a development dataset. Development datasets, with the four sample datasets, are used to build the memory and may be looked at; evaluation datasets are used only in the benchmark. Table @tab:datasets lists them.
+The benchmark datasets were chosen by a written rule before any of them was downloaded. From the 107 datasets of two curated OpenML suites, OpenML-CC18 for classification and OpenML-CTR23 for regression [@vanschoren2013openml; @bischl2021suites], those with 500 to 10,000 rows and at most 100 feature columns were sorted into six groups, and one evaluation and one development dataset were drawn at random from each group. The six evaluation datasets are pc4 (1,458 rows, binary, with a class ratio of 7.2), cylinder-bands (540 rows, binary, with 14 text columns and empty cells), segment (2,310 rows, 7 classes), MiceProtein (1,080 rows, 77 columns, 8 classes), energy_efficiency (768 rows, regression) and solar_flare (1,066 rows, regression with text columns). The development datasets (wilt, tic-tac-toe, vehicle, balance-scale, kin8nm and student_performance_por) and the four sample datasets were used to build the memory and were never part of the benchmark.
 
-::table tab:datasets | Evaluation and development datasets (OpenML ID in brackets) | widths=2.6,6.6,6.6 | align=cjj
-| Group | Evaluation dataset | Development dataset |
-|---|---|---|
-| Binary, imbalanced | pc4 (1049): 1,458 rows, 37 numeric columns, class ratio 7.2 | wilt (40983): 4,839 rows, 5 columns, ratio 17.5 |
-| Binary, messy | cylinder-bands (6332): 540 rows, 37 columns of which 14 text, 5% empty cells | tic-tac-toe (50): 958 rows, 9 text columns |
-| Multiclass, clean | segment (40984): 2,310 rows, 18 columns, 7 classes | vehicle (54): 846 rows, 18 columns, 4 classes |
-| Multiclass, messy | MiceProtein (40966): 1,080 rows, 77 columns, 8 classes, 1.7% empty cells | balance-scale (11): 625 rows, 4 columns, 3 classes |
-| Regression, clean | energy_efficiency (44960): 768 rows, 8 columns | kin8nm (44980): 8,192 rows, 8 columns |
-| Regression, messy | solar_flare (44966): 1,066 rows, 10 columns of which 3 text | student_performance_por (44967): 649 rows, 30 columns of which 17 text |
-| Samples | none | titanic, breast_cancer, penguins, california_housing |
-::end
+Every system gets the same training and test rows of a dataset and seed, the same columns, the same time budget and all CPU cores, and its test predictions are scored by the same evaluator. AutoPilot-ML is compared with three systems: FLAML alone with the whole budget [@wang2021flaml], AutoGluon-Tabular 1.6.3 with its medium_quality preset [@erickson2020autogluon], and LightGBM with its library defaults trained once, with no search [@ke2017lightgbm]. AutoPilot-ML runs in two forms: with the rule order of the Strategy_Engine (AutoPilot-ML rules) and with Thompson sampling on a memory built beforehand (AutoPilot-ML full).
 
-### Comparison systems
+### Benchmark runs and analysis
 
-Every system gets the same training and test rows of a dataset and seed, the same columns, the same time budget and all CPU cores, and its test predictions are scored by the same evaluator. Table @tab:systems lists the eight systems. AutoGluon could not be installed next to the project's libraries, because it needs an older pandas, so it runs in its own environment as a separate process [@erickson2020autogluon].
+The benchmark has 390 runs on the 6 evaluation datasets with seeds 1 to 5: the five systems at budgets of 120 and 300 seconds, and three variants of AutoPilot-ML with one part switched off at 300 seconds. The memory of the full system was built by 30 Sessions on the development datasets and then frozen, and its SHA-256 hash was checked in every run. The harness writes one row per finished run and can be stopped and restarted.
 
-::table tab:systems | The systems compared in the benchmark | widths=4.0,11.8 | align=jj
-| System | What it does |
-|---|---|
-| manual | LightGBM with its library defaults (100 trees, 31 leaves, learning rate 0.1), trained once; no search [@ke2017lightgbm] |
-| flaml | One FLAML search with the whole budget [@wang2021flaml] |
-| autogluon | AutoGluon-Tabular 1.6.3 with the medium_quality preset, CPU only [@erickson2020autogluon] |
-| autopilot_rules | A Session with the rule order of the Strategy_Engine |
-| autopilot_full | A Session with Thompson sampling on the frozen memory |
-| random_choice | Ablation: the same changes in a random order |
-| no_critic | Ablation: random valid changes instead of Diagnoses |
-| no_resource_manager | Ablation: equal shares of the time, no reserve and no patience rule |
-::end
-
-### Benchmark grid and statistics
-
-The grid has 390 cells, one per system, dataset, budget and seed: the five main systems at 120 and 300 seconds and the three ablations at 300 seconds, on the 6 evaluation datasets with seeds 1 to 5. A third budget of 600 seconds was dropped because it would have added about 20 hours on one laptop. The memory the full system reads was built beforehand by 30 Sessions on the development datasets, frozen and checked by its SHA-256 hash in every row. The harness appends one row per finished cell, never edits a row, can be stopped and restarted, and waits while the laptop runs on battery.
-
-The analysis was fixed before any cell ran [@demsar2006]. A system's score on a dataset is its mean test score over the 5 seeds, with error metrics negated. Within each dataset the systems are ranked, and the Friedman statistic of Equation (@eq:friedman), with R_{j} the average rank of system j over N datasets and k systems, tests whether any system stands apart [@friedman1937; @iman1980]. The Nemenyi critical difference of Equation (@eq:cd) gives the smallest difference of average ranks that counts as real [@nemenyi1963].
-
-::equation eq:friedman
-
-::equation eq:cd
-
-Pairs of systems are compared with the Wilcoxon signed-rank test with Holm's correction, the rank-biserial correlation as effect size and a 95% bootstrap interval of the median difference from 10,000 resamples [@wilcoxon1945; @holm1979; @kerby2014; @efron1993bootstrap]. For time-to-target, the target of a dataset and seed is 99% of the best score any main system reached at either budget, and a system's time-to-target is the smallest budget at which it reached it.
-
-### Judge agreement study
-
-The last study asks whether the cheap Judge decides like a strict comparison that searches again. From the steps the Judge really judged while building the memory, 20 pairs were drawn, at most 2 per development dataset. For each pair, both Setups were searched again by FLAML on 5 random 80/20 splits of the Training_Part, at most 25 trials each, and the 5 differences were judged with the Judge's own rules. Agreement is reported with Cohen's kappa of Equation (@eq:kappa), where p_{o} is the observed share of equal verdicts and p_{e} the share expected by chance [@cohen1960kappa].
-
-::equation eq:kappa
+The analysis follows Demšar's method for comparing systems over several datasets [@demsar2006]. A system's score on a dataset is its mean test score over the 5 seeds. Within each dataset the systems are ranked, and each system's average rank over the six datasets summarises its standing. Two systems are compared by the median of their differences over the datasets, with a 95% bootstrap interval from 10,000 resamples, and by the number of datasets on which each one was better [@efron1993bootstrap].

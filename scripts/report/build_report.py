@@ -524,6 +524,20 @@ class Report:
         cap.paragraph_format.alignment, cap.paragraph_format.line_spacing = CENTER, LINE
         sec = doc.sections[0]
         self._page(sec)
+        # Word 2013 and later layout, so Word does not open the file in compatibility mode.
+        settings = doc.settings.element
+        compat = settings.find(qn("w:compat"))
+        if compat is None:
+            compat = OxmlElement("w:compat")
+            settings.append(compat)
+        for old in compat.findall(qn("w:compatSetting")):
+            if old.get(qn("w:name")) == "compatibilityMode":
+                compat.remove(old)
+        mode = OxmlElement("w:compatSetting")
+        mode.set(qn("w:name"), "compatibilityMode")
+        mode.set(qn("w:uri"), "http://schemas.microsoft.com/office/word")
+        mode.set(qn("w:val"), "15")
+        compat.append(mode)
         cp = doc.core_properties
         cp.title = self.front["title"]
         cp.subject = "Final project report"
@@ -668,10 +682,11 @@ class Report:
             for k, s in enumerate(self.front["students"]):
                 self.par(f"{s['name']} ({s['scholar']})", LEFT, before=18 if k == 0 else 0, after=0)
 
-    def list_page(self, title: str, header: tuple[str, str, str], rows: list[tuple[str, str, str]]) -> None:
+    def list_page(self, title: str, header: tuple[str, str, str], rows: list[tuple[str, str, str]],
+                  first: float = 1.8) -> None:
         self.title(title)
         table = self.doc.add_table(rows=len(rows) + 1, cols=3)
-        setup_table(table, [1.8, TEXT_WIDTH_CM - 4.3, 2.5], margin_tb=0.1)
+        setup_table(table, [first, TEXT_WIDTH_CM - first - 2.5, 2.5], margin_tb=0.1)
         set_borders(table, 0, 0, 0, 0, 0, 0)
         for c, text in enumerate(header):
             add_runs(cell_par(table.cell(0, c), CENTER if c != 1 else LEFT), text, BODY_PT, True)
@@ -800,11 +815,16 @@ class Report:
         table = self.doc.add_table(rows=len(rows), cols=ncols)
         setup_table(table, widths)
         set_borders(table)
+        # A short table moves to the next page as a whole. A longer one may break across pages,
+        # but not before its header and first two rows, and never leaving one row on its own.
+        n = len(rows)
+        keep = set(range(n - 1)) if n <= 6 else {0, 1, n - 2}
         for r, row in enumerate(rows):
             for c, cell_text in enumerate(row):
                 cell = table.cell(r, c)
                 cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
                 p = cell_par(cell, CENTER if r == 0 else ALIGNS[align[c]])
+                p.paragraph_format.keep_with_next = (r in keep) or None
                 add_runs(p, resolve(cell_text, self.nums), TABLE_PT, bold=r == 0)
             row_flags(table.rows[r], header=r == 0)
         self.pending_before = 12
@@ -914,7 +934,7 @@ class Report:
         self.list_page("LIST OF FIGURES", ("Fig", "Description", "Page No."),
                        [(str(n), t, f"_RefFig{n}") for n, t in self.figures])
         self.list_page("LIST OF TABLES", ("Table No.", "Description", "Page No."),
-                       [(str(n), t, f"_RefTab{n}") for n, t in self.tables])
+                       [(str(n), t, f"_RefTab{n}") for n, t in self.tables], first=2.5)
         for el in list(body)[start:-1]:
             holder._p.addprevious(el)
 
@@ -1020,7 +1040,17 @@ def word_finalize(docx: Path, pdf: Path) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--no-word", action="store_true", help="do not open Word (no page numbers, no PDF)")
+    ap.add_argument("--out", type=Path, default=OUT_DOCX, help="where to write the .docx (the PDF goes next to it)")
     args = ap.parse_args()
+    out_docx = args.out.resolve()
+    out_pdf = out_docx.with_suffix(".pdf")
+    for path in (out_docx, out_pdf):
+        if path.exists():
+            try:
+                with open(path, "ab"):
+                    pass
+            except PermissionError:
+                raise SystemExit(f"{path} is open in another program (probably Word); close it or use --out")
     front = tomllib.loads((SRC / "front.toml").read_text(encoding="utf-8"))
     refs = load_references(SRC / "references.txt")
     special, blocks = {}, []
@@ -1036,13 +1066,13 @@ def main() -> None:
     report.build()
     problems = source_checks(blocks, nums)
     unused = sorted(set(refs) - set(nums.cite_order))
-    report.doc.save(OUT_DOCX)
-    print(f"written {OUT_DOCX.relative_to(ROOT)}: {report.chapter} chapters, {len(report.figures)} figures, "
+    report.doc.save(out_docx)
+    print(f"written {out_docx}: {report.chapter} chapters, {len(report.figures)} figures, "
           f"{len(report.tables)} tables, {len(nums.items['eq'])} equations, {len(nums.items['alg'])} algorithms, "
           f"{len(nums.cite_order)} references cited ({len(unused)} listed but not cited: {', '.join(unused)})")
     if not args.no_word:
-        word_finalize(OUT_DOCX, OUT_PDF)
-    problems += docx_checks(OUT_DOCX)
+        word_finalize(out_docx, out_pdf)
+    problems += docx_checks(out_docx)
     print(f"{len(problems)} format problems")
     for p in problems:
         print("  -", p)

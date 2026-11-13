@@ -1,0 +1,89 @@
+# key | IEEE reference text (*italic* for journal, book and proceedings titles)
+# Only entries cited in the chapters are printed, numbered in order of first citation.
+# AutoML systems and search
+wang2021flaml | C. Wang, Q. Wu, M. Weimer, and E. Zhu, "FLAML: A fast and lightweight AutoML library," in *Proc. Machine Learning and Systems (MLSys)*, vol. 3, 2021, pp. 434-447.
+flamlrepo | Microsoft, "FLAML: A fast library for automated machine learning and tuning," source code, version 2.7.0, MIT licence. [Online]. Available: https://github.com/microsoft/FLAML
+wu2021cfo | Q. Wu, C. Wang, and S. Huang, "Frugal optimization for cost-related hyperparameters," in *Proc. AAAI Conf. Artificial Intelligence*, vol. 35, no. 12, 2021, pp. 10347-10354.
+wang2021blend | C. Wang, Q. Wu, S. Huang, and A. Saied, "Economical hyperparameter optimization with blended search strategy," in *Proc. Int. Conf. Learning Representations (ICLR)*, 2021.
+kayali2022zeroshot | M. Kayali and C. Wang, "Mining robust default configurations for resource-constrained AutoML," arXiv:2202.09927, 2022.
+feurer2015autosklearn | M. Feurer, A. Klein, K. Eggensperger, J. Springenberg, M. Blum, and F. Hutter, "Efficient and robust automated machine learning," in *Advances in Neural Information Processing Systems 28 (NeurIPS)*, 2015, pp. 2962-2970.
+feurer2022autosklearn2 | M. Feurer, K. Eggensperger, S. Falkner, M. Lindauer, and F. Hutter, "Auto-Sklearn 2.0: Hands-free AutoML via meta-learning," *Journal of Machine Learning Research*, vol. 23, no. 261, pp. 1-61, 2022.
+erickson2020autogluon | N. Erickson, J. Mueller, A. Shirkov, H. Zhang, P. Larroy, M. Li, and A. Smola, "AutoGluon-Tabular: Robust and accurate AutoML for structured data," arXiv:2003.06505, 2020.
+olson2016tpot | R. S. Olson, N. Bartley, R. J. Urbanowicz, and J. H. Moore, "Evaluation of a tree-based pipeline optimization tool for automating data science," in *Proc. Genetic and Evolutionary Computation Conf. (GECCO)*, 2016, pp. 485-492.
+thornton2013autoweka | C. Thornton, F. Hutter, H. H. Hoos, and K. Leyton-Brown, "Auto-WEKA: Combined selection and hyperparameter optimization of classification algorithms," in *Proc. 19th ACM SIGKDD Int. Conf. Knowledge Discovery and Data Mining*, 2013, pp. 847-855.
+hutter2019automl | F. Hutter, L. Kotthoff, and J. Vanschoren, Eds., *Automated Machine Learning: Methods, Systems, Challenges*. Cham, Switzerland: Springer, 2019.
+ledell2020h2o | E. LeDell and S. Poirier, "H2O AutoML: Scalable automatic machine learning," in *Proc. 7th ICML Workshop on Automated Machine Learning (AutoML)*, 2020.
+gijsbers2024amlb | P. Gijsbers, M. L. P. Bueno, S. Coors, E. LeDell, S. Poirier, J. Thomas, B. Bischl, and J. Vanschoren, "AMLB: An AutoML benchmark," *Journal of Machine Learning Research*, vol. 25, no. 101, pp. 1-65, 2024.
+yang2019oboe | C. Yang, Y. Akimoto, D. W. Kim, and M. Udell, "OBOE: Collaborative filtering for AutoML model selection," in *Proc. 25th ACM SIGKDD Int. Conf. Knowledge Discovery and Data Mining*, 2019, pp. 1173-1183.
+hutter2011smac | F. Hutter, H. H. Hoos, and K. Leyton-Brown, "Sequential model-based optimization for general algorithm configuration," in *Learning and Intelligent Optimization (LION 5)*, ser. Lecture Notes in Computer Science, vol. 6683. Springer, 2011, pp. 507-523.
+bergstra2011tpe | J. Bergstra, R. Bardenet, Y. Bengio, and B. Kégl, "Algorithms for hyper-parameter optimization," in *Advances in Neural Information Processing Systems 24 (NeurIPS)*, 2011, pp. 2546-2554.
+bergstra2012random | J. Bergstra and Y. Bengio, "Random search for hyper-parameter optimization," *Journal of Machine Learning Research*, vol. 13, pp. 281-305, 2012.
+snoek2012bo | J. Snoek, H. Larochelle, and R. P. Adams, "Practical Bayesian optimization of machine learning algorithms," in *Advances in Neural Information Processing Systems 25 (NeurIPS)*, 2012, pp. 2951-2959.
+jamieson2016sh | K. Jamieson and A. Talwalkar, "Non-stochastic best arm identification and hyperparameter optimization," in *Proc. 19th Int. Conf. Artificial Intelligence and Statistics (AISTATS)*, 2016, pp. 240-248.
+li2018hyperband | L. Li, K. Jamieson, G. DeSalvo, A. Rostamizadeh, and A. Talwalkar, "Hyperband: A novel bandit-based approach to hyperparameter optimization," *Journal of Machine Learning Research*, vol. 18, no. 185, pp. 1-52, 2018.
+falkner2018bohb | S. Falkner, A. Klein, and F. Hutter, "BOHB: Robust and efficient hyperparameter optimization at scale," in *Proc. 35th Int. Conf. Machine Learning (ICML)*, 2018, pp. 1437-1446.
+vanschoren2018meta | J. Vanschoren, "Meta-learning: A survey," arXiv:1810.03548, 2018.
+vanschoren2013openml | J. Vanschoren, J. N. van Rijn, B. Bischl, and L. Torgo, "OpenML: Networked science in machine learning," *ACM SIGKDD Explorations Newsletter*, vol. 15, no. 2, pp. 49-60, 2013.
+bischl2021suites | B. Bischl, G. Casalicchio, M. Feurer, P. Gijsbers, F. Hutter, M. Lang, R. G. Mantovani, J. N. van Rijn, and J. Vanschoren, "OpenML benchmarking suites," in *Proc. NeurIPS Datasets and Benchmarks Track*, 2021.
+grinsztajn2022trees | L. Grinsztajn, E. Oyallon, and G. Varoquaux, "Why do tree-based models still outperform deep learning on typical tabular data?" in *Advances in Neural Information Processing Systems 35 (NeurIPS), Datasets and Benchmarks Track*, 2022.
+sculley2015debt | D. Sculley, G. Holt, D. Golovin, E. Davydov, T. Phillips, D. Ebner, V. Chaudhary, M. Young, J.-F. Crespo, and D. Dennison, "Hidden technical debt in machine learning systems," in *Advances in Neural Information Processing Systems 28 (NeurIPS)*, 2015, pp. 2503-2511.
+amershi2019se4ml | S. Amershi, A. Begel, C. Bird, R. DeLine, H. Gall, E. Kamar, N. Nagappan, B. Nushi, and T. Zimmermann, "Software engineering for machine learning: A case study," in *Proc. IEEE/ACM 41st Int. Conf. Software Engineering: Software Engineering in Practice (ICSE-SEIP)*, 2019, pp. 291-300.
+# Learners
+ke2017lightgbm | G. Ke, Q. Meng, T. Finley, T. Wang, W. Chen, W. Ma, Q. Ye, and T.-Y. Liu, "LightGBM: A highly efficient gradient boosting decision tree," in *Advances in Neural Information Processing Systems 30 (NeurIPS)*, 2017, pp. 3146-3154.
+chen2016xgboost | T. Chen and C. Guestrin, "XGBoost: A scalable tree boosting system," in *Proc. 22nd ACM SIGKDD Int. Conf. Knowledge Discovery and Data Mining*, 2016, pp. 785-794.
+breiman2001rf | L. Breiman, "Random forests," *Machine Learning*, vol. 45, no. 1, pp. 5-32, 2001.
+# Bandits and meta-learning
+thompson1933 | W. R. Thompson, "On the likelihood that one unknown probability exceeds another in view of the evidence of two samples," *Biometrika*, vol. 25, no. 3/4, pp. 285-294, 1933.
+auer2002ucb | P. Auer, N. Cesa-Bianchi, and P. Fischer, "Finite-time analysis of the multiarmed bandit problem," *Machine Learning*, vol. 47, no. 2-3, pp. 235-256, 2002.
+chapelle2011ts | O. Chapelle and L. Li, "An empirical evaluation of Thompson sampling," in *Advances in Neural Information Processing Systems 24 (NeurIPS)*, 2011, pp. 2249-2257.
+# Data problems and the changes that answer them
+chawla2002smote | N. V. Chawla, K. W. Bowyer, L. O. Hall, and W. P. Kegelmeyer, "SMOTE: Synthetic minority over-sampling technique," *Journal of Artificial Intelligence Research*, vol. 16, pp. 321-357, 2002.
+he2009imbalance | H. He and E. A. Garcia, "Learning from imbalanced data," *IEEE Trans. Knowledge and Data Engineering*, vol. 21, no. 9, pp. 1263-1284, 2009.
+elkan2001cost | C. Elkan, "The foundations of cost-sensitive learning," in *Proc. 17th Int. Joint Conf. Artificial Intelligence (IJCAI)*, 2001, pp. 973-978.
+lemaitre2017imblearn | G. Lemaître, F. Nogueira, and C. K. Aridas, "Imbalanced-learn: A Python toolbox to tackle the curse of imbalanced datasets in machine learning," *Journal of Machine Learning Research*, vol. 18, no. 17, pp. 1-5, 2017.
+micci2001target | D. Micci-Barreca, "A preprocessing scheme for high-cardinality categorical attributes in classification and prediction problems," *ACM SIGKDD Explorations Newsletter*, vol. 3, no. 1, pp. 27-32, 2001.
+kaufman2012leakage | S. Kaufman, S. Rosset, C. Perlich, and O. Stitelman, "Leakage in data mining: Formulation, detection, and avoidance," *ACM Trans. Knowledge Discovery from Data*, vol. 6, no. 4, Art. no. 15, 2012.
+roberts2017groupcv | D. R. Roberts, V. Bahn, S. Ciuti, M. S. Boyce, J. Elith, G. Guillera-Arroita, S. Hauenstein, J. J. Lahoz-Monfort, B. Schröder, W. Thuiller, D. I. Warton, B. A. Wintle, F. Hartig, and C. F. Dormann, "Cross-validation strategies for data with temporal, spatial, hierarchical, or phylogenetic structure," *Ecography*, vol. 40, no. 8, pp. 913-929, 2017.
+hastie2009esl | T. Hastie, R. Tibshirani, and J. Friedman, *The Elements of Statistical Learning: Data Mining, Inference, and Prediction*, 2nd ed. New York, NY, USA: Springer, 2009.
+# Honest evaluation and statistics
+cawley2010overfit | G. C. Cawley and N. L. C. Talbot, "On over-fitting in model selection and subsequent selection bias in performance evaluation," *Journal of Machine Learning Research*, vol. 11, pp. 2079-2107, 2010.
+kohavi1995cv | R. Kohavi, "A study of cross-validation and bootstrap for accuracy estimation and model selection," in *Proc. 14th Int. Joint Conf. Artificial Intelligence (IJCAI)*, 1995, pp. 1137-1143.
+dietterich1998tests | T. G. Dietterich, "Approximate statistical tests for comparing supervised classification learning algorithms," *Neural Computation*, vol. 10, no. 7, pp. 1895-1923, 1998.
+nadeau2003inference | C. Nadeau and Y. Bengio, "Inference for the generalization error," *Machine Learning*, vol. 52, no. 3, pp. 239-281, 2003.
+bouckaert2004replicability | R. R. Bouckaert and E. Frank, "Evaluating the replicability of significance tests for comparing learning algorithms," in *Advances in Knowledge Discovery and Data Mining (PAKDD)*, ser. Lecture Notes in Computer Science, vol. 3056. Springer, 2004, pp. 3-12.
+demsar2006 | J. Demšar, "Statistical comparisons of classifiers over multiple data sets," *Journal of Machine Learning Research*, vol. 7, pp. 1-30, 2006.
+friedman1937 | M. Friedman, "The use of ranks to avoid the assumption of normality implicit in the analysis of variance," *Journal of the American Statistical Association*, vol. 32, no. 200, pp. 675-701, 1937.
+iman1980 | R. L. Iman and J. M. Davenport, "Approximations of the critical region of the Friedman statistic," *Communications in Statistics: Theory and Methods*, vol. 9, no. 6, pp. 571-595, 1980.
+nemenyi1963 | P. B. Nemenyi, "Distribution-free multiple comparisons," Ph.D. dissertation, Princeton Univ., Princeton, NJ, USA, 1963.
+wilcoxon1945 | F. Wilcoxon, "Individual comparisons by ranking methods," *Biometrics Bulletin*, vol. 1, no. 6, pp. 80-83, 1945.
+holm1979 | S. Holm, "A simple sequentially rejective multiple test procedure," *Scandinavian Journal of Statistics*, vol. 6, no. 2, pp. 65-70, 1979.
+kerby2014 | D. S. Kerby, "The simple difference formula: An approach to teaching nonparametric correlation," *Comprehensive Psychology*, vol. 3, 2014.
+efron1993bootstrap | B. Efron and R. J. Tibshirani, *An Introduction to the Bootstrap*. New York, NY, USA: Chapman and Hall, 1993.
+cohen1960kappa | J. Cohen, "A coefficient of agreement for nominal scales," *Educational and Psychological Measurement*, vol. 20, no. 1, pp. 37-46, 1960.
+# Explanations
+fisher2019importance | A. Fisher, C. Rudin, and F. Dominici, "All models are wrong, but many are useful: Learning a variable's importance by studying an entire class of prediction models simultaneously," *Journal of Machine Learning Research*, vol. 20, no. 177, pp. 1-81, 2019.
+lundberg2017shap | S. M. Lundberg and S.-I. Lee, "A unified approach to interpreting model predictions," in *Advances in Neural Information Processing Systems 30 (NeurIPS)*, 2017, pp. 4765-4774.
+lundberg2020treeshap | S. M. Lundberg, G. Erion, H. Chen, A. DeGrave, J. M. Prutkin, B. Nair, R. Katz, J. Himmelfarb, N. Bansal, and S.-I. Lee, "From local explanations to global understanding with explainable AI for trees," *Nature Machine Intelligence*, vol. 2, no. 1, pp. 56-67, 2020.
+# Language-model agents for data science
+hollmann2023caafe | N. Hollmann, S. Müller, and F. Hutter, "Large language models for automated data science: Introducing CAAFE for context-aware automated feature engineering," in *Advances in Neural Information Processing Systems 36 (NeurIPS)*, 2023.
+huang2024mlagentbench | Q. Huang, J. Vora, P. Liang, and J. Leskovec, "MLAgentBench: Evaluating language agents on machine learning experimentation," in *Proc. 41st Int. Conf. Machine Learning (ICML)*, 2024.
+chan2024mlebench | J. S. Chan, N. Chowdhury, O. Jaffe, J. Aung, D. Sherburn, E. Mays, G. Starace, K. Liu, L. Maksin, T. Patwardhan, L. Weng, and A. Madry, "MLE-bench: Evaluating machine learning agents on machine learning engineering," arXiv:2410.07095, 2024.
+jiang2025aide | Z. Jiang, D. Schmidt, D. Srikanth, D. Xu, I. Kaplan, D. Jacenko, and Y. Wu, "AIDE: AI-driven exploration in the space of code," arXiv:2502.13138, 2025.
+qwen2024 | Qwen Team, A. Yang et al., "Qwen2.5 technical report," arXiv:2412.15115, 2024.
+# Software used
+pedregosa2011sklearn | F. Pedregosa, G. Varoquaux, A. Gramfort, V. Michel, B. Thirion, O. Grisel, M. Blondel, P. Prettenhofer, R. Weiss, V. Dubourg, J. Vanderplas, A. Passos, D. Cournapeau, M. Brucher, M. Perrot, and E. Duchesnay, "Scikit-learn: Machine learning in Python," *Journal of Machine Learning Research*, vol. 12, pp. 2825-2830, 2011.
+mckinney2010pandas | W. McKinney, "Data structures for statistical computing in Python," in *Proc. 9th Python in Science Conf. (SciPy)*, 2010, pp. 56-61.
+harris2020numpy | C. R. Harris, K. J. Millman, S. J. van der Walt, R. Gommers, P. Virtanen, D. Cournapeau, E. Wieser, J. Taylor, S. Berg, N. J. Smith et al., "Array programming with NumPy," *Nature*, vol. 585, pp. 357-362, 2020.
+virtanen2020scipy | P. Virtanen, R. Gommers, T. E. Oliphant, M. Haberland, T. Reddy, D. Cournapeau, E. Burovski, P. Peterson, W. Weckesser, J. Bright et al., "SciPy 1.0: Fundamental algorithms for scientific computing in Python," *Nature Methods*, vol. 17, pp. 261-272, 2020.
+hunter2007matplotlib | J. D. Hunter, "Matplotlib: A 2D graphics environment," *Computing in Science and Engineering*, vol. 9, no. 3, pp. 90-95, 2007.
+zaharia2018mlflow | M. Zaharia, A. Chen, A. Davidson, A. Ghodsi, S. A. Hong, A. Konwinski, S. Murching, T. Nykodym, P. Ogilvie, M. Parkhe et al., "Accelerating the machine learning lifecycle with MLflow," *IEEE Data Engineering Bulletin*, vol. 41, no. 4, pp. 39-45, 2018.
+streamlit | Snowflake Inc., "Streamlit: A faster way to build and share data apps," software, version 1.65.0. [Online]. Available: https://streamlit.io
+fastapi | S. Ramírez, "FastAPI," software, version 0.142.2. [Online]. Available: https://fastapi.tiangolo.com
+ollama | Ollama, "Ollama: Run large language models locally," software, version 0.32.1. [Online]. Available: https://ollama.com
+merkel2014docker | D. Merkel, "Docker: Lightweight Linux containers for consistent development and deployment," *Linux Journal*, vol. 2014, no. 239, Art. no. 2, 2014.
+pytest | H. Krekel et al., "pytest: Helps you write better programs," software, version 9.1.1. [Online]. Available: https://pytest.org
+kiro | Amazon Web Services, "Kiro: An AI IDE for spec-driven development," software. [Online]. Available: https://kiro.dev
+plotly | Plotly Technologies Inc., "Plotly Python graphing library," software, version 7.1.0. [Online]. Available: https://plotly.com/python/
+uvicorn | Encode, "Uvicorn: An ASGI web server for Python," software, version 0.54.0. [Online]. Available: https://www.uvicorn.org
+git | L. Torvalds, J. Hamano et al., "Git: A distributed version control system," software, version 2.55.0. [Online]. Available: https://git-scm.com
+pythondocx | S. Canny et al., "python-docx: Create and update Microsoft Word .docx files," software, version 1.2.0. [Online]. Available: https://github.com/python-openxml/python-docx

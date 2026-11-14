@@ -4,7 +4,7 @@
 
 Most data that organisations use for prediction is tabular: records in rows, with numeric and text columns, such as customers, patients, machines or transactions. On this kind of data, ensembles of decision trees trained by gradient boosting, such as LightGBM and XGBoost, are still among the most accurate models, often ahead of deep neural networks [@grinsztajn2022trees; @ke2017lightgbm; @chen2016xgboost].
 
-Getting a good model is rarely a single step. A data scientist trains a first model, looks at its scores, finds out why it is weak, changes the data, the features or the model family, trains again and compares the two results. Studies of machine learning practice describe this loop of experiments as the main part of the work, and also as a source of hidden cost and mistakes [@amershi2019se4ml; @sculley2015debt].
+Getting a good model is rarely a single step. A data scientist trains a first model, looks at its scores, finds out why it is weak, changes the data, the features or the model family, trains again and compares the two results. Studies of machine learning practice describe this loop of experiments as the main part of the work [@amershi2019se4ml].
 
 Automated machine learning (AutoML) takes over one part of this loop: choosing a learning algorithm and its hyperparameters for a given dataset, known as the combined algorithm selection and hyperparameter optimisation (CASH) problem [@thornton2013autoweka; @hutter2019automl]. Open-source systems such as Auto-sklearn, TPOT, AutoGluon and FLAML solve it well and are compared on public benchmarks [@feurer2015autosklearn; @olson2016tpot; @erickson2020autogluon; @wang2021flaml; @gijsbers2024amlb].
 
@@ -20,17 +20,17 @@ The work also had practical limits: a laptop CPU, no GPU, no paid services and n
 
 ## Proposed solution in brief
 
-AutoPilot-ML is an autonomous experimentation layer built on top of FLAML. It runs the loop of the data scientist by itself, as a Session of Experiments within a time budget. After each Experiment, a Critic diagnoses weaknesses from evidence measured on 15 fixed folds of the training data, a Strategy_Engine proposes changes that answer the Diagnoses, and a Judge keeps a change only if a corrected resampled t-test on the same folds says it is better, or if it is simpler and not worse [@nadeau2003inference; @bouckaert2004replicability]. A Resource_Manager divides the time budget between Experiments, and an Experiment_Memory records every change with its measured effect and cost, so that a bandit method can learn which changes tend to work on similar datasets [@thompson1933; @auer2002ucb]. Figure @fig:loop shows this loop and the part that FLAML performs inside it [@wang2021flaml].
+AutoPilot-ML is an autonomous experimentation layer built on top of FLAML. It runs the loop of the data scientist by itself, as a session of experiments within a time budget. After each experiment, a Critic diagnoses weaknesses from evidence measured on 15 fixed folds of the training data, a Strategy Engine proposes changes that answer the diagnoses, and a Judge keeps a change only if a corrected resampled t-test on the same folds says it is better, or if it is simpler and not worse [@nadeau2003inference; @bouckaert2004replicability]. A Resource Manager divides the time budget between experiments, and an Experiment Memory records every change with its measured effect and cost, so that a bandit method can learn which changes tend to work on similar datasets [@thompson1933; @auer2002ucb]. Figure @fig:loop shows this loop and the part that FLAML performs inside it [@wang2021flaml]: each box is one step and each arrow names what passes to the next step. Only the grey box, the search itself, is done by FLAML; every other step was built in this project.
 
-::figure fig:loop | figures/fig_loop.png | 15.5 | The experimentation loop of AutoPilot-ML; the search inside each Experiment is done by FLAML
+::figure fig:loop | figures/fig_loop.png | 15.5 | The experimentation loop of AutoPilot-ML; the search inside each experiment is done by FLAML
 
 ## Contributions
 
 The work of this project, built and measured by the team on top of FLAML [@wang2021flaml], is the following.
 
-- An autonomous experimentation layer around FLAML with 14 kinds of Diagnosis and 12 Strategies, where every decision is recorded with its numbers and can be replayed from the saved records [@wang2021flaml].
+- An autonomous experimentation layer around FLAML with 14 kinds of diagnosis and 12 strategies, where every decision is recorded with its numbers and can be replayed from the saved records [@wang2021flaml].
 - A cheap acceptance rule, the Judge, that compares refits of the configurations FLAML found on fixed folds with a corrected resampled t-test, together with a study of its error rates on data with known answers [@nadeau2003inference; @bouckaert2004replicability].
-- A learned choice of the next change from the Experiment_Memory with Thompson sampling or UCB1, so that changes that worked on similar datasets can be tried first [@thompson1933; @auer2002ucb].
+- A learned choice of the next change from the Experiment Memory with Thompson sampling or UCB1, so that changes that worked on similar datasets can be tried first [@thompson1933; @auer2002ucb].
 - A benchmark of 390 runs on 6 OpenML datasets, 5 seeds and 2 time budgets against FLAML alone, AutoGluon and a LightGBM baseline with default settings, with its datasets and its analysis fixed in writing before it ran [@vanschoren2013openml; @demsar2006].
 - Optional parts: SMOTE, cross-fitted target encoding, word features, group-aware folds, SHAP explanations, a leakage warning, plain-language summaries by a local language model, a local web API and a Docker image [@chawla2002smote; @micci2001target; @lundberg2017shap].
 

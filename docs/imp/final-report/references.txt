@@ -2,7 +2,7 @@
 # Only entries cited in the chapters are printed, numbered in order of first citation.
 # AutoML systems and search
 wang2021flaml | C. Wang, Q. Wu, M. Weimer, and E. Zhu, "FLAML: A fast and lightweight AutoML library," in *Proc. Machine Learning and Systems (MLSys)*, vol. 3, 2021, pp. 434-447.
-flamlrepo | Microsoft, "FLAML: A fast library for automated machine learning and tuning," source code, version 2.7.0, MIT licence. [Online]. Available: https://github.com/microsoft/FLAML
+flamlrepo | Microsoft, "FLAML: A fast library for automated machine learning and tuning," source code, version 2.7.0, MIT licence. Accessed: Nov. 2026. [Online]. Available: https://github.com/microsoft/FLAML
 wu2021cfo | Q. Wu, C. Wang, and S. Huang, "Frugal optimization for cost-related hyperparameters," in *Proc. AAAI Conf. Artificial Intelligence*, vol. 35, no. 12, 2021, pp. 10347-10354.
 wang2021blend | C. Wang, Q. Wu, S. Huang, and A. Saied, "Economical hyperparameter optimization with blended search strategy," in *Proc. Int. Conf. Learning Representations (ICLR)*, 2021.
 kayali2022zeroshot | M. Kayali and C. Wang, "Mining robust default configurations for resource-constrained AutoML," arXiv:2202.09927, 2022.
@@ -82,7 +82,7 @@ fastapi | S. Ramírez, "FastAPI," software, version 0.142.2. [Online]. Available
 ollama | Ollama, "Ollama: Run large language models locally," software, version 0.32.1. [Online]. Available: https://ollama.com
 merkel2014docker | D. Merkel, "Docker: Lightweight Linux containers for consistent development and deployment," *Linux Journal*, vol. 2014, no. 239, Art. no. 2, 2014.
 pytest | H. Krekel et al., "pytest: Helps you write better programs," software, version 9.1.1. [Online]. Available: https://pytest.org
-kiro | Amazon Web Services, "Kiro: An AI IDE for spec-driven development," software. [Online]. Available: https://kiro.dev
+kiro | Amazon Web Services, "Kiro: An AI IDE for spec-driven development," software. Accessed: Nov. 2026. [Online]. Available: https://kiro.dev
 plotly | Plotly Technologies Inc., "Plotly Python graphing library," software, version 7.1.0. [Online]. Available: https://plotly.com/python/
 uvicorn | Encode, "Uvicorn: An ASGI web server for Python," software, version 0.54.0. [Online]. Available: https://www.uvicorn.org
 git | L. Torvalds, J. Hamano et al., "Git: A distributed version control system," software, version 2.55.0. [Online]. Available: https://git-scm.com

@@ -36,12 +36,12 @@ plt.rcParams.update({
 SYSTEM_NAMES = {
     "flaml": "FLAML alone", "autopilot_full": "AutoPilot-ML full", "autopilot_rules": "AutoPilot-ML rules",
     "autogluon": "AutoGluon", "manual": "Manual LightGBM", "random_choice": "Random order",
-    "no_critic": "Without Critic", "no_resource_manager": "Without Resource_Manager",
+    "no_critic": "Without Critic", "no_resource_manager": "Without Resource Manager",
 }
 SHORT_NAMES = {
     "flaml": "FLAML alone", "autopilot_full": "AutoPilot full", "autopilot_rules": "AutoPilot rules",
     "autogluon": "AutoGluon", "manual": "Manual LightGBM", "random_choice": "Random order",
-    "no_critic": "No Critic", "no_resource_manager": "No Resource_Manager",
+    "no_critic": "No Critic", "no_resource_manager": "No Resource Manager",
 }
 DATASETS = ["pc4", "cylinder-bands", "segment", "MiceProtein", "energy_efficiency", "solar_flare"]
 
@@ -124,19 +124,19 @@ class Canvas:
 
 def fig_loop() -> None:
     c = Canvas(15.5, 7.7)
-    c.box(12.85, 6.85, 4.8, 1.2, "Resource_Manager", "budgets and stop rules")
-    c.box(7.75, 5.7, 5.0, 1.3, "Search a Setup", "FLAML, used unchanged", fill=GREY)
-    c.box(12.85, 4.0, 4.8, 1.3, "Assess", "refits on 15 Session_Folds")
+    c.box(12.85, 6.85, 4.8, 1.2, "Resource Manager", "budgets and stop rules")
+    c.box(7.75, 5.7, 5.0, 1.3, "Search a setup", "FLAML, used unchanged", fill=GREY)
+    c.box(12.85, 4.0, 4.8, 1.3, "Assess", "refits on 15 session folds")
     c.box(12.85, 1.1, 4.8, 1.3, "Judge", "keep, keep_simpler, discard")
     c.box(2.65, 1.1, 4.8, 1.3, "Diagnose", "Critic, 14 kinds")
-    c.box(2.65, 4.0, 4.8, 1.3, "Propose a change", "Strategy_Engine")
-    c.box(7.75, 2.75, 4.4, 1.3, "Experiment_Memory", "changes, effects and costs")
+    c.box(2.65, 4.0, 4.8, 1.3, "Propose a change", "Strategy Engine")
+    c.box(7.75, 2.75, 4.4, 1.3, "Experiment Memory", "changes, effects and costs")
     c.line([(2.65, 4.65), (2.65, 5.7), (5.25, 5.7)], "next change", (2.8, 5.85), ha="left")
     c.line([(10.25, 5.7), (12.85, 5.7), (12.85, 4.65)], "best\nconfiguration", (13.0, 5.2), ha="left",
            va="center")
     c.line([(12.85, 3.35), (12.85, 1.75)], "fold scores", (13.0, 2.55), ha="left", va="center")
-    c.line([(10.45, 1.1), (5.05, 1.1)], "if kept: the new Accepted_Setup", (7.75, 0.85), va="top")
-    c.line([(2.65, 1.75), (2.65, 3.35)], "Diagnoses", (2.8, 2.55), ha="left", va="center")
+    c.line([(10.45, 1.1), (5.05, 1.1)], "if kept: the new accepted setup", (7.75, 0.85), va="top")
+    c.line([(2.65, 1.75), (2.65, 3.35)], "diagnoses", (2.8, 2.55), ha="left", va="center")
     c.line([(10.9, 1.75), (9.95, 2.35)], "record", (10.55, 2.25), dashed=True, ha="left")
     c.line([(5.55, 3.15), (5.05, 3.55)], "past effects", (5.7, 3.55), dashed=True, ha="left")
     c.line([(10.45, 6.85), (9.65, 6.35)], "budget", (10.0, 6.9), dashed=True, ha="right")
@@ -168,9 +168,9 @@ def fig_split() -> None:
     ax = c.ax
     left, right, split = 0.4, 15.1, 11.9
     c.box((left + right) / 2, 5.9, right - left, 0.8, "Dataset D (the rows with a target)", rounded=False)
-    c.box((left + split) / 2, 4.6, split - left - 0.1, 0.8, "Training_Part: 80% of the rows", rounded=False,
+    c.box((left + split) / 2, 4.6, split - left - 0.1, 0.8, "Training part: 80% of the rows", rounded=False,
           fill=LIGHT)
-    c.box((split + right) / 2 + 0.05, 4.6, right - split - 0.1, 0.8, "Test_Part: 20%", rounded=False, fill=GREY)
+    c.box((split + right) / 2 + 0.05, 4.6, right - split - 0.1, 0.8, "Test part: 20%", rounded=False, fill=GREY)
     c.line([(6.15, 5.5), (6.15, 5.0)], "seeded, stratified split", (6.35, 5.25), ha="left", va="center")
     c.line([(13.5, 5.5), (13.5, 5.0)])
     cell_w = (split - left - 1.9) / 5
@@ -183,7 +183,7 @@ def fig_split() -> None:
             ax.add_patch(FancyBboxPatch((x0 + 0.04, y - 0.28), cell_w - 0.08, 0.56, boxstyle="square,pad=0",
                                         fc=GREY if val else "white", ec="black", lw=0.6))
             c.text(x0 + cell_w / 2, y, f"part {k + 1}", TICK)
-    c.text(left, 0.55, "15 Session_Folds: in each fold one part gives the validation rows (grey in this "
+    c.text(left, 0.55, "15 session folds: in each fold one part gives the validation rows (grey in this "
            "example) and the\nother four parts the training rows. The Assessor, the Critic and the Judge use "
            "only these folds.", ha="left")
     c.text((split + right) / 2 + 0.05, 2.65, "Used once, at\nthe end, to score\nthe first and\nthe final model")
@@ -191,51 +191,53 @@ def fig_split() -> None:
 
 
 def fig_block() -> None:
-    c = Canvas(15.5, 14.1)
+    c = Canvas(15.5, 12.85)
     x0, x1 = 0.7, 15.45
-    w3, w4, h = 4.65, 3.45, 0.98
+    w3, w4, h = 4.65, 3.45, 0.96
+    pitch, head, gap = 1.08, 0.44, 0.4  # row pitch, band title height and gap between bands (cm)
     xs3 = [x0 + 0.15 + w3 / 2 + i * (w3 + 0.3) for i in range(3)]
     xs4 = [x0 + 0.15 + w4 / 2 + i * (w4 + 0.25) for i in range(4)]
 
     def band(top, title, rows):
-        height = 0.5 + rows * 1.18 + 0.05
+        height = head + rows * pitch + 0.04
         c.rect((x0 + x1) / 2, top - height / 2, x1 - x0, height, fill="none", rounded=False, lw=0.6, ls=(0, (3, 2)))
-        c.text(x0 + 0.15, top - 0.25, title, ha="left", style="italic")
-        return [top - 0.5 - 0.56 - i * 1.18 for i in range(rows)], top - height
+        c.text(x0 + 0.15, top - head / 2, title, ha="left", style="italic")
+        return [top - head - pitch / 2 - i * pitch for i in range(rows)], top - height
 
-    ys, bottom = band(14.05, "User interfaces (built in this project)", 1)
+    def link(bottom, label):
+        c.line([(7.75, bottom - 0.02), (7.75, bottom - gap + 0.02)], label, (7.95, bottom - gap / 2),
+               ha="left", va="center")
+
+    ys, bottom = band(12.8, "User interfaces (built in this project)", 1)
     for x, (n, s) in zip(xs3, [("Dashboard", "Streamlit pages"), ("Command line", "scripts/*.py"),
                                ("Web API", "FastAPI, local only")]):
         c.box(x, ys[0], w3, h, n, s)
-    c.line([(7.75, bottom - 0.02), (7.75, bottom - 0.43)], "start, stop and read Sessions", (7.95, bottom - 0.22),
-           ha="left", va="center")
-    ys, bottom = band(bottom - 0.45, "Session layer: the autonomous loop (built in this project)", 3)
-    rows = [[("Session loop", "runs the Experiments"), ("Critic", "14 kinds of Diagnosis"),
-             ("Strategy_Engine", "12 Strategies")],
+    link(bottom, "start, stop and read sessions")
+    ys, bottom = band(bottom - gap, "Session layer: the autonomous loop (built in this project)", 3)
+    rows = [[("Session loop", "runs the experiments"), ("Critic", "14 kinds of diagnosis"),
+             ("Strategy Engine", "12 strategies")],
             [("Judge", "corrected t-test"), ("Assessor", "refits on 15 folds"),
-             ("Resource_Manager", "budgets, stop rules")],
-            [("Planner", "the first Setup"), ("Experiment_Memory", "the learned order"),
-             ("Data_Steps", "fitted in each fold")]]
+             ("Resource Manager", "budgets, stop rules")],
+            [("Planner", "the first setup"), ("Experiment Memory", "the learned order"),
+             ("Data steps", "fitted in each fold")]]
     for y, row in zip(ys, rows):
         for x, (n, s) in zip(xs3, row):
             c.box(x, y, w3, h, n, s)
     session_mid = (ys[0] + ys[-1]) / 2
-    c.line([(7.75, bottom - 0.02), (7.75, bottom - 0.43)], "search, refit, profile, explain",
-           (7.95, bottom - 0.22), ha="left", va="center")
-    ys, bottom = band(bottom - 0.45, "Experiment layer: one search and its evaluation (built in this project)", 2)
+    link(bottom, "search, refit, profile, explain")
+    ys, bottom = band(bottom - gap, "Experiment layer: one search and its evaluation (built in this project)", 2)
     rows = [[("AutoML runner", "one FLAML search"), ("Profiler", "and task detector"),
              ("Evaluator", "metrics, importance")],
             [("Tracker", "records, MLflow runs"), ("Explainer", "SHAP values"), ("Narrator", "local summaries")]]
     for y, row in zip(ys, rows):
         for x, (n, s) in zip(xs3, row):
             c.box(x, y, w3, h, n, s)
-    c.line([(7.75, bottom - 0.02), (7.75, bottom - 0.43)], "search, train, score", (7.95, bottom - 0.22),
-           ha="left", va="center")
-    ys, bottom = band(bottom - 0.45, "Libraries used unchanged", 1)
+    link(bottom, "search, train, score")
+    ys, bottom = band(bottom - gap, "Libraries used unchanged", 1)
     for x, (n, s) in zip(xs4, [("FLAML", "search engine"), ("scikit-learn", "imbalanced-learn"),
                                ("LightGBM", "and XGBoost"), ("SHAP", "and Ollama")]):
         c.box(x, ys[0], w4, h, n, s, fill=GREY)
-    ys, bottom = band(bottom - 0.45, "Storage (files on this machine)", 1)
+    ys, bottom = band(bottom - gap, "Storage (files on this machine)", 1)
     for x, (n, s) in zip(xs4, [("JSON records", "experiments/"), ("Model files", "models/"),
                                ("MLflow runs", "mlruns/"), ("Memory file", "memory.jsonl")]):
         c.box(x, ys[0], w4, h, n, s, fill=LIGHT)
@@ -251,30 +253,30 @@ def fig_dfd0() -> None:
     c.entity(13.3, 5.45, 3.0, 0.9, "OpenML")
     c.entity(13.2, 0.75, 3.2, 0.9, "Ollama server")
     c.line([(3.4, 3.65), (6.39, 3.65)], "dataset (CSV),\ntarget, budget\nand settings", (4.85, 3.8))
-    c.line([(6.39, 2.55), (3.4, 2.55)], "models, test scores,\nDiagnoses, Verdicts,\nexplanations", (4.85, 2.4),
+    c.line([(6.39, 2.55), (3.4, 2.55)], "models, test scores,\ndiagnoses, verdicts,\nexplanations", (4.85, 2.4),
            va="top")
     c.line([(11.8, 5.45), (9.2, 4.3)], "public datasets for the\nbenchmark (once)", (9.7, 5.15))
-    c.line([(9.2, 1.9), (11.6, 1.0)], "facts of a finished\nSession record", (11.3, 2.05))
+    c.line([(9.2, 1.9), (11.6, 1.0)], "facts of a finished\nsession record", (11.3, 2.05))
     c.line([(11.6, 0.5), (8.58, 1.5)], "summary text, labelled\nas generated", (8.6, 0.85), va="top")
     c.save("fig_dfd0.png")
 
 
 def fig_dfd1() -> None:
-    c = Canvas(15.5, 11.2)
+    c = Canvas(15.5, 10.0)
     r = 1.12
     xl, xm, xr = 2.3, 7.6, 12.9
-    y1, y2, y3, y4 = 10.15, 6.95, 3.55, 0.8
+    y1, y2, y3, y4 = 9.0, 6.1, 3.1, 0.75
     xb, yb, rb = 11.9, y1 - 0.15, 1.05  # process 5.0
     c.entity(xl, y1, 2.8, 0.9, "User")
     c.store(7.0, y1, 4.0, "D1", "Dataset (CSV)")
     c.circle(xb, yb, rb, "5.0", "Manage\nbudget")
     c.circle(xl, y2, r, "1.0", "Prepare\ndata")
-    c.circle(xm, y2, r, "2.0", "Run\nExperiment")
+    c.circle(xm, y2, r, "2.0", "Run\nexperiment")
     c.circle(xr, y2, r, "3.0", "Judge")
     c.circle(xl, y3, r, "6.0", "Final\nevaluation")
     c.store(xm, y3, 4.4, "D2", "Records, models")
     c.circle(xr, y3, r, "4.0", "Diagnose,\npropose")
-    c.store(12.3, y4, 5.0, "D3", "Experiment_Memory")
+    c.store(12.3, y4, 5.0, "D3", "Experiment Memory")
     d, db = 0.707 * r, 0.707 * rb
 
     def along(p0, p1, t, dx=0.0, dy=0.0):
@@ -284,22 +286,22 @@ def fig_dfd1() -> None:
            ha="right", va="center")
     p0, p1 = (5.0, y1), (xl + d, y2 + d)
     c.line([p0, p1], "rows", along(p0, p1, 0.45, dx=0.2), ha="left", va="center")
-    c.line([(xl + r, y2), (xm - r, y2)], "Training_Part,\nfolds, first Setup", ((xl + xm) / 2, y2 + 0.15))
-    c.line([(xm + r, y2), (xr - r, y2)], "fold scores of\nboth Setups", ((xm + xr) / 2, y2 + 0.15))
-    c.line([(xr, y2 - r), (xr, y3 + r)], "kept Setup", (xr + 0.2, (y2 + y3) / 2), ha="left", va="center")
+    c.line([(xl + r, y2), (xm - r, y2)], "training part,\nfolds, first setup", ((xl + xm) / 2, y2 + 0.15))
+    c.line([(xm + r, y2), (xr - r, y2)], "fold scores of\nboth setups", ((xm + xr) / 2, y2 + 0.15))
+    c.line([(xr, y2 - r), (xr, y3 + r)], "kept setup", (xr + 0.2, (y2 + y3) / 2), ha="left", va="center")
     p0, p1 = (xr - d, y3 + d), (xm + d, y2 - d)
-    c.line([p0, p1], "changed Setup", along(p0, p1, 0.4, dy=-0.3), va="top")
+    c.line([p0, p1], "changed setup", along(p0, p1, 0.55, dy=-0.3), va="top")
     p0, p1 = (xr - d, y2 + d), (xb + 0.2, yb - rb + 0.02)
     c.line([p0, p1], "step cost", along(p0, p1, 0.5, dx=0.25), ha="left", va="center")
     p0, p1 = (xb - db, yb - db), (xm + d, y2 + d)
     c.line([p0, p1], "search budget", along(p0, p1, 0.55, dx=-0.2, dy=0.3), va="bottom")
     c.line([(xm, y2 - r), (xm, y3 + 0.375)], "models and\nrecords", (xm - 0.2, (y2 - r + y3 + 0.375) / 2),
            ha="right", va="center")
-    c.line([(xl, y2 - r), (xl, y3 + r)], "Test_Part", (xl + 0.2, (y2 + y3) / 2), ha="left", va="center")
+    c.line([(xl, y2 - r), (xl, y3 + r)], "test part", (xl + 0.2, (y2 + y3) / 2), ha="left", va="center")
     c.line([(xm - 2.2, y3), (xl + r, y3)], "first and\nfinal model", ((xm - 2.2 + xl + r) / 2, y3 + 0.15))
     c.line([(xl - r, y3), (0.4, y3), (0.4, y1), (xl - 1.4, y1)], "test scores and explanations",
            (0.68, (y3 + y1) / 2), rotation=90, va="center")
-    c.line([(xr + r, y2), (15.15, y2), (15.15, y4), (14.8, y4)], "Verdict records", (14.92, (y2 + y4) / 2 - 0.4),
+    c.line([(xr + r, y2), (15.15, y2), (15.15, y4), (14.8, y4)], "verdict records", (14.92, (y2 + y4) / 2 - 0.4),
            rotation=90, va="center")
     c.line([(xr, y4 + 0.375), (xr, y3 - r)], "past effects", (xr - 0.2, (y4 + 0.375 + y3 - r) / 2), ha="right",
            va="center")
@@ -307,32 +309,51 @@ def fig_dfd1() -> None:
 
 
 def fig_flow() -> None:
-    c = Canvas(12.0, 19.4)
-    x, w = 5.3, 8.0
-    c.terminal(x, 18.75, 6.8, 0.9, "Start: dataset, target, budget")
-    c.box(x, 17.35, w, 1.2, "Split and make the folds", "Training_Part, Test_Part, 15 Session_Folds")
-    c.box(x, 15.8, w, 1.2, "Search the first Setup", "35% of the time, Training_Part only")
-    c.box(x, 14.25, w, 1.2, "Assess and diagnose", "refits on the folds, then the Critic")
-    c.box(x, 12.7, w, 1.2, "Propose changes not tried yet", "rule table, ordered by the selector")
-    c.diamond(x, 10.95, 3.9, 1.7, "Stop?")
-    c.box(x, 9.2, w, 1.2, "Search the candidate", "the next budget, warm started")
-    c.box(x, 7.65, w, 1.2, "Assess the candidate", "on the same 15 folds")
-    c.diamond(x, 5.85, 4.2, 1.8, "Judge:\nkept?")
-    c.box(2.9, 3.8, 4.4, 1.2, "Accept the candidate", "then diagnose it")
-    c.box(8.3, 3.8, 3.6, 1.2, "Keep the", "Accepted_Setup")
-    c.box(x, 2.15, w, 1.0, "Write the step's record and the memory")
-    for y0, y1 in ((18.3, 17.95), (16.75, 16.4), (15.2, 14.85), (13.65, 13.3), (12.1, 11.8), (8.6, 8.25),
-                   (7.05, 6.75)):
-        c.line([(x, y0), (x, y1)])
-    c.line([(x, 10.1), (x, 9.8)], "no", (x + 0.2, 9.95), ha="left", va="center")
-    c.line([(x - 2.1, 5.85), (2.9, 5.85), (2.9, 4.4)], "yes", (3.05, 6.0), ha="left")
-    c.line([(x + 2.1, 5.85), (8.3, 5.85), (8.3, 4.4)], "no", (7.55, 6.0), ha="left")
-    c.line([(2.9, 3.2), (2.9, 2.65)])
-    c.line([(8.3, 3.2), (8.3, 2.65)])
-    c.line([(x - w / 2, 2.15), (0.7, 2.15), (0.7, 12.7), (x - w / 2, 12.7)], "next step", (0.42, 7.5),
-           rotation=90, va="center")
-    c.line([(x + 1.95, 10.95), (10.9, 10.95), (10.9, 1.05), (x + 2.6, 1.05)], "yes", (7.5, 11.1), ha="left")
-    c.terminal(x, 1.05, 5.2, 0.9, "Final_Evaluation, then end")
+    """Flowchart of one session, laid out from the top with fixed gaps so that it fits a page with its text."""
+    width, height = 12.0, 17.2
+    c = Canvas(width, height)
+    x, w, h = 5.3, 8.0, 1.05
+    shapes, top = {}, height - 0.1
+
+    def place(name, size, gap=0.35):
+        nonlocal top
+        shapes[name] = (top - size / 2, size)
+        top -= size + gap
+
+    for name, size, gap in (("start", 0.8, 0.35), ("split", h, 0.35), ("first", h, 0.35), ("assess", h, 0.35),
+                            ("propose", h, 0.35), ("stop", 1.5, 0.4), ("search", h, 0.35), ("check", h, 0.35),
+                            ("judge", 1.6, 0.45), ("branch", h, 0.4), ("write", 0.9, 0.3), ("end", 0.8, 0)):
+        place(name, size, gap)
+    y = {k: v[0] for k, v in shapes.items()}
+    edge = {k: (v[0] + v[1] / 2, v[0] - v[1] / 2) for k, v in shapes.items()}  # (top, bottom)
+    c.terminal(x, y["start"], 6.8, 0.8, "Start: dataset, target, budget")
+    c.box(x, y["split"], w, h, "Split and make the folds", "training part, test part, 15 session folds")
+    c.box(x, y["first"], w, h, "Search the first setup", "35% of the time, training part only")
+    c.box(x, y["assess"], w, h, "Assess and diagnose", "refits on the folds, then the Critic")
+    c.box(x, y["propose"], w, h, "Propose changes not tried yet", "rule table, ordered by the selector")
+    c.diamond(x, y["stop"], 3.9, 1.5, "Stop?")
+    c.box(x, y["search"], w, h, "Search the candidate", "the next budget, warm started")
+    c.box(x, y["check"], w, h, "Assess the candidate", "on the same 15 folds")
+    c.diamond(x, y["judge"], 4.2, 1.6, "Judge:\nkept?")
+    c.box(2.9, y["branch"], 4.4, h, "Accept the candidate", "then diagnose it")
+    c.box(8.3, y["branch"], 3.6, h, "Keep the", "accepted setup")
+    c.box(x, y["write"], w, 0.9, "Write the step's record and the memory")
+    c.terminal(x, y["end"], 5.2, 0.8, "Final evaluation, then end")
+    for a, b in (("start", "split"), ("split", "first"), ("first", "assess"), ("assess", "propose"),
+                 ("propose", "stop"), ("search", "check"), ("check", "judge")):
+        c.line([(x, edge[a][1]), (x, edge[b][0])])
+    c.line([(x, edge["stop"][1]), (x, edge["search"][0])], "no", (x + 0.2, (edge["stop"][1] + edge["search"][0]) / 2),
+           ha="left", va="center")
+    c.line([(x - 2.1, y["judge"]), (2.9, y["judge"]), (2.9, edge["branch"][0])], "yes", (3.05, y["judge"] + 0.15),
+           ha="left")
+    c.line([(x + 2.1, y["judge"]), (8.3, y["judge"]), (8.3, edge["branch"][0])], "no", (7.55, y["judge"] + 0.15),
+           ha="left")
+    c.line([(2.9, edge["branch"][1]), (2.9, edge["write"][0])])
+    c.line([(8.3, edge["branch"][1]), (8.3, edge["write"][0])])
+    c.line([(x - w / 2, y["write"]), (0.7, y["write"]), (0.7, y["propose"]), (x - w / 2, y["propose"])],
+           "next step", (0.42, (y["write"] + y["propose"]) / 2), rotation=90, va="center")
+    c.line([(x + 1.95, y["stop"]), (10.9, y["stop"]), (10.9, y["end"]), (x + 2.6, y["end"])], "yes",
+           (7.5, y["stop"] + 0.15), ha="left")
     c.save("fig_flow.png")
 
 
@@ -390,11 +411,11 @@ def fig_scores() -> None:
         ax.set_title(ds, fontsize=NAME)
         ax.set_xticks([120, 300])
         ax.set_xlim(90, 330)
-        ax.set_ylabel(f"test {metric}", fontsize=TEXT)
+        ax.set_ylabel(f"Test {metric}", fontsize=TEXT)
         ax.tick_params(length=2)
         ax.grid(axis="y", lw=0.3, color="#bfbfbf")
     for ax in axes[1]:
-        ax.set_xlabel("budget (s)", fontsize=TEXT)
+        ax.set_xlabel("Budget (s)", fontsize=TEXT)
     handles, labels = axes[0, 0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="lower center", ncol=3, frameon=False, fontsize=TEXT,
                handlelength=2.4, columnspacing=1.4)
@@ -495,14 +516,15 @@ def fig_time() -> None:
     ax.barh(ys, t300.mean_wall_seconds, color=[colours[s] for s in order], edgecolor="black", lw=0.5,
             height=0.6)
     for yy, v in zip(ys, t300.mean_wall_seconds):
-        ax.text(v + 5, yy, f"{v:.1f} s", ha="left", va="center", fontsize=TICK)
+        ax.text(v + 5, yy, f"{v:.1f} s", ha="left", va="center", fontsize=TEXT)
     ax.axvline(300, color="black", lw=0.8, ls="--")
     ax.set_yticks(ys)
-    ax.set_yticklabels([SYSTEM_NAMES[s] for s in order], fontsize=TICK)
-    ax.set_xlabel("mean wall time per run in seconds (budget 300 s, dashed line)", fontsize=TEXT)
+    ax.set_yticklabels([SYSTEM_NAMES[s] for s in order], fontsize=NAME)  # the systems are the labels: 12 pt
+    ax.set_xlabel("Mean wall time per run in seconds (budget 300 s, dashed line)", fontsize=TEXT)
     ax.set_xlim(0, 365)
-    ax.tick_params(length=2)
-    fig.subplots_adjust(left=0.24, right=0.97, top=0.96, bottom=0.21)
+    ax.tick_params(length=2, labelsize=TICK)
+    ax.tick_params(axis="y", labelsize=NAME)
+    fig.subplots_adjust(left=0.27, right=0.97, top=0.96, bottom=0.21)
     fig.savefig(OUT / "fig_time.png", dpi=300)
     plt.close(fig)
 

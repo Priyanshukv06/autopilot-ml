@@ -58,13 +58,16 @@ OUT_DOCX = SRC / "AutoPilot-ML-Final-Report.docx"
 OUT_PDF = SRC / "AutoPilot-ML-Final-Report.pdf"
 TEMPLATE = SRC / "template" / "Minor Project format - final 2026.docx"
 
-FONT = "Times New Roman"
-CODE_FONT = "Courier New"
+FONT = "Times New Roman"  # the only font of the report, also in the code listing
 MARGIN_CM = 2.54
 TEXT_WIDTH_CM = 21.0 - 2 * MARGIN_CM
 LINE = 1.15
 BODY_PT, TABLE_PT, CAPTION_PT, REF_PT, CODE_PT = 12, 11, 11, 10, 10
-H1_PT, H2_PT, H3_PT = 16, 14, 12
+H1_PT, H2_PT, H3_PT = 16, 14, 14  # main headings 16 pt, all subheadings 14 pt
+CODE_INDENT_CM = 0.6  # one level (four spaces) of the code listing
+# A hyphen before a digit that does not follow a letter, digit or dot is a minus sign: printed as U+2212,
+# which Word keeps with its number at the end of a line (a plain hyphen let "-0.0002" break after the "-").
+MINUS = re.compile(r"(?<![\w.])-(?=\d)")
 HEADING_ALIGN = WD_ALIGN_PARAGRAPH.LEFT  # the department's rule: headings left aligned
 JUSTIFY, CENTER = WD_ALIGN_PARAGRAPH.JUSTIFY, WD_ALIGN_PARAGRAPH.CENTER
 LEFT, RIGHT = WD_ALIGN_PARAGRAPH.LEFT, WD_ALIGN_PARAGRAPH.RIGHT
@@ -249,7 +252,7 @@ def format_cites(numbers: list[int]) -> str:
             prev = n
             continue
         if prev - start >= 2:
-            groups.append(f"[{start}]-[{prev}]")
+            groups.append(f"[{start}]\u2013[{prev}]")  # IEEE writes a range of three or more with an en dash
         else:
             groups.extend(f"[{k}]" for k in range(start, prev + 1))
         if n is not None:
@@ -316,12 +319,12 @@ def add_runs(par, text: str, size: float = BODY_PT, bold: bool = False, italic: 
         if piece.startswith("**") and piece.endswith("**") and len(piece) > 4:
             piece, b = piece[2:-2], True
         elif piece.startswith("`") and piece.endswith("`"):
-            piece = piece[1:-1]
+            piece = piece[1:-1]  # names of files, columns and code: same font as the text
         elif piece.startswith("*") and piece.endswith("*") and len(piece) > 2:
             piece, it = piece[1:-1], True
         elif piece[:2] in ("^{", "_{") and piece.endswith("}"):
             piece, script = piece[2:-1], piece[0]
-        run = par.add_run(piece)
+        run = par.add_run(MINUS.sub("\u2212", piece))
         style_run(run, size, b, it, font)
         if script == "^":
             run.font.superscript = True
@@ -451,6 +454,16 @@ def row_flags(row, header: bool = False) -> None:
         trpr.append(hdr)
 
 
+def table_height_cm(rows: list[list[str]], widths: list[float]) -> float:
+    """A rough height of a table at 11 pt: 0.19 cm per character, 0.45 cm per line, 0.1 cm cell margins."""
+    total = 0.0
+    for row in rows:
+        lines = max(-(-len(re.sub(r"\[@[^\]]+\]", "[00]", text)) * 0.19 // max(w - 0.24, 0.5)) or 1
+                    for text, w in zip(row, widths))
+        total += lines * 0.45 + 0.1
+    return total
+
+
 def cell_par(cell, align=JUSTIFY, before: float = 0, after: float = 0, first: bool = True):
     par = cell.paragraphs[0] if first else cell.add_paragraph()
     fmt(par, align, before, after)
@@ -468,6 +481,7 @@ class Report:
         self.nums = nums
         self.doc = Document()
         self.pending_before = 0.0  # extra space before the next paragraph (after a table)
+        self.footer_made = False
         self.chapter = self.section = self.subsection = 0
         self.toc: list[tuple[str, str, str]] = []  # (S.no, title, bookmark)
         self.figures: list[tuple[int, str]] = []
@@ -508,7 +522,7 @@ class Report:
         pf.alignment, pf.line_spacing = JUSTIFY, LINE
         pf.space_before, pf.space_after, pf.widow_control = Pt(0), Pt(6), True
         for name, size, before, after in (("Heading 1", H1_PT, 0, 12), ("Heading 2", H2_PT, 12, 6),
-                                          ("Heading 3", H3_PT, 10, 4)):
+                                          ("Heading 3", H3_PT, 12, 6)):
             st = doc.styles[name]
             st.font.size, st.font.bold, st.font.italic = Pt(size), True, False
             st.font.color.rgb = RGBColor(0, 0, 0)
@@ -610,11 +624,11 @@ class Report:
 
     def certificate(self) -> None:
         f = self.front
-        self.par(f["institute"], CENTER, H1_PT, True, after=0, page_break=True)
+        self.par(f["institute"], CENTER, H1_PT, True, after=0)  # the section break starts the new page
         self.par(f["institute_city"], CENTER, H1_PT, True, after=0)
         p = self.par(align=CENTER, before=12, after=0)
         p.add_run().add_picture(str(self.logo), width=Cm(2.9))
-        self.title("CERTIFICATE", page_break=False, before=18)
+        self.title("CERTIFICATE", page_break=False, before=18, bookmark="_RefCert")
         names = " and ".join(f"{s['name']} ({s['scholar']})" for s in f["students"])
         text = (f"This is to certify that the work embodied in this report entitled **\u201c{f['title']}\u201d** "
                 f"has been satisfactorily completed by **{names}**. It is a bonafide piece of work, carried out "
@@ -653,7 +667,7 @@ class Report:
         name_cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
         for k, line in enumerate(("INDIAN INSTITUTE OF", "INFORMATION TECHNOLOGY", f["institute_city"])):
             add_runs(cell_par(name_cell, CENTER, first=k == 0), line, 20, True)
-        self.title("DECLARATION", page_break=False, before=18)
+        self.title("DECLARATION", page_break=False, before=18, bookmark="_RefDecl")
         text = (f"We hereby declare that the project report entitled \u201c{f['title']}\u201d is presented in partial "
                 f"fulfillment of the requirements for the award of the degree of **Bachelor of Technology in "
                 f"Computer Science and Engineering**. It is an authentic documentation of our original work "
@@ -674,26 +688,26 @@ class Report:
             add_runs(cell_par(table.cell(r, 1), RIGHT, before=before), "Signature", BODY_PT)
         self.pending_before = 12
 
-    def text_page(self, title: str, key: str, signed: bool = False) -> None:
-        self.title(title)
+    def text_page(self, title: str, key: str, signed: bool = False, bookmark: str | None = None) -> None:
+        self.title(title, bookmark=bookmark)
         for b in self.special[key]:
             self.paragraph_block(b)
         if signed:
             for k, s in enumerate(self.front["students"]):
-                self.par(f"{s['name']} ({s['scholar']})", LEFT, before=18 if k == 0 else 0, after=0)
+                self.par(f"{s['name']} ({s['scholar']})", JUSTIFY, before=18 if k == 0 else 0, after=0)
 
     def list_page(self, title: str, header: tuple[str, str, str], rows: list[tuple[str, str, str]],
-                  first: float = 1.8) -> None:
-        self.title(title)
+                  first: float = 1.8, bookmark: str | None = None) -> None:
+        self.title(title, bookmark=bookmark)
         table = self.doc.add_table(rows=len(rows) + 1, cols=3)
         setup_table(table, [first, TEXT_WIDTH_CM - first - 2.5, 2.5], margin_tb=0.1)
         set_borders(table, 0, 0, 0, 0, 0, 0)
         for c, text in enumerate(header):
-            add_runs(cell_par(table.cell(0, c), CENTER if c != 1 else LEFT), text, BODY_PT, True)
+            add_runs(cell_par(table.cell(0, c), CENTER), text, BODY_PT, True)
         row_flags(table.rows[0], header=True)
         for r, (no, text, bookmark) in enumerate(rows, 1):
             add_runs(cell_par(table.cell(r, 0), CENTER), no, BODY_PT)
-            add_runs(cell_par(table.cell(r, 1), LEFT), text, BODY_PT)
+            add_runs(cell_par(table.cell(r, 1), JUSTIFY), text, BODY_PT)
             p = cell_par(table.cell(r, 2), CENTER)
             if bookmark:
                 add_field(p, f"PAGEREF {bookmark} \\h", "1", BODY_PT)
@@ -786,10 +800,14 @@ class Report:
         while lines and not lines[-1]:
             lines.pop()
         for k, line in enumerate(lines):
-            p = cell_par(cell, LEFT, first=k == 0)
+            # Times New Roman like the rest of the report; each level of four leading spaces becomes a
+            # fixed left indent, so the structure of the code stays exact in a proportional font.
+            p = cell_par(cell, JUSTIFY, first=k == 0)
             p.paragraph_format.keep_with_next = True
-            text = line.replace(" ", "\u00a0") if line else "\u00a0"
-            style_run(p.add_run(text), CODE_PT, font=CODE_FONT)
+            depth = (len(line) - len(line.lstrip(" "))) / 4
+            if depth:
+                p.paragraph_format.left_indent = Cm(CODE_INDENT_CM * depth)
+            style_run(p.add_run(line.strip() or "\u00a0"), CODE_PT)
         row_flags(table.rows[0])
         text = resolve(b.text, self.nums)
         self.caption("Figure", n, text, 6, 12, False, f"_RefFig{n}")
@@ -815,10 +833,11 @@ class Report:
         table = self.doc.add_table(rows=len(rows), cols=ncols)
         setup_table(table, widths)
         set_borders(table)
-        # A short table moves to the next page as a whole. A longer one may break across pages,
-        # but not before its header and first two rows, and never leaving one row on its own.
+        # A short table (up to about 6.5 cm high) moves to the next page as a whole. A taller one may break
+        # across pages, so that it leaves no large blank space, but not before its first data row and never
+        # leaving its last row on its own; the header row repeats on the next page.
         n = len(rows)
-        keep = set(range(n - 1)) if n <= 6 else {0, 1, n - 2}
+        keep = set(range(n - 1)) if table_height_cm(rows, widths) <= 6.5 else {0, n - 2}
         for r, row in enumerate(rows):
             for c, cell_text in enumerate(row):
                 cell = table.cell(r, c)
@@ -852,7 +871,7 @@ class Report:
         table = self.doc.add_table(rows=2, cols=1)
         setup_table(table, [TEXT_WIDTH_CM], margin_lr=0.1, margin_tb=0.06)
         set_borders(table, 12, 12, 0, 0, 6, 0)
-        head = cell_par(table.cell(0, 0), LEFT)
+        head = cell_par(table.cell(0, 0), JUSTIFY)
         head.paragraph_format.keep_with_next = True
         style_run(head.add_run(f"Algorithm {n}: "), TABLE_PT, True)
         add_runs(head, resolve(b.text, self.nums), TABLE_PT, True)
@@ -884,33 +903,50 @@ class Report:
     def references(self) -> None:
         for k, key in enumerate(self.nums.cite_order, 1):
             p = self.doc.add_paragraph()
-            fmt(p, LEFT, 0, 4, left=1.0, first=-1.0, tab=1.0)
-            add_runs(p, f"[{k}]\t" + smart_quotes(self.nums.refs[key]), REF_PT)
+            fmt(p, JUSTIFY, 0, 4, left=1.0, first=-1.0, tab=1.0)
+            # IEEE: page and issue ranges with an en dash
+            text = re.sub(r"(?<=\d)-(?=\d)", "\u2013", smart_quotes(self.nums.refs[key]))
+            add_runs(p, f"[{k}]\t" + text, REF_PT)
 
     # -- assembly
 
-    def build(self) -> None:
-        self.setup()
-        self.cover()
-        self.certificate()
-        self.declaration()
-        self.text_page("ACKNOWLEDGEMENT", "acknowledgement", signed=True)
-        self.text_page("AREA OF WORK", "area-of-work")
+    def new_section(self, number_format: str) -> Paragraph:
+        """Start a section on a new page, numbered from 1 in the given format at the bottom centre.
+
+        python-docx puts the previous section's break into a new empty paragraph, which is returned;
+        it is kept 2 pt high. The first new section gets the footer with the PAGE field; later sections
+        share that footer and only change the number format."""
         sec = self.doc.add_section(WD_SECTION.NEW_PAGE)
-        # python-docx puts the first section's break into a new empty paragraph; keep it 2 pt high.
-        # The contents, figure and table lists are built at the end (when their rows are known)
-        # and moved in front of this paragraph.
         holder = Paragraph(self.doc.element.body[-2], self.doc._body)
         fmt(holder, LEFT, 0, 0)
         holder.paragraph_format.line_spacing = Pt(2)
         self._page(sec)
-        sec.footer.is_linked_to_previous = False
-        fp = sec.footer.paragraphs[0]
-        fmt(fp, CENTER, 0, 0)
-        add_field(fp, "PAGE", "1", BODY_PT)
+        if not self.footer_made:
+            sec.footer.is_linked_to_previous = False
+            fp = sec.footer.paragraphs[0]
+            fmt(fp, CENTER, 0, 0)
+            add_field(fp, "PAGE", "1", BODY_PT)
+            self.footer_made = True
+        sect = sec._sectPr
+        for old in sect.findall(qn("w:pgNumType")):
+            sect.remove(old)
         pg = OxmlElement("w:pgNumType")
+        pg.set(qn("w:fmt"), number_format)
         pg.set(qn("w:start"), "1")
-        sec._sectPr.find(qn("w:pgMar")).addnext(pg)
+        sect.find(qn("w:pgMar")).addnext(pg)
+        return holder
+
+    def build(self) -> None:
+        self.setup()
+        self.cover()  # no page number on the cover
+        self.new_section("lowerRoman")  # certificate to the list of tables: i, ii, ...
+        self.certificate()
+        self.declaration()
+        self.text_page("ACKNOWLEDGEMENT", "acknowledgement", signed=True, bookmark="_RefAck")
+        self.text_page("AREA OF WORK", "area-of-work", bookmark="_RefArea")
+        # From the Abstract on: 1, 2, ... (the template's numbering). The contents, figure and table
+        # lists are built at the end (when their rows are known) and moved in front of `holder`.
+        holder = self.new_section("decimal")
         self.title("ABSTRACT", page_break=False, bookmark="_RefAbstract")
         for b in self.special["abstract"]:
             self.paragraph_block(b)
@@ -926,15 +962,16 @@ class Report:
         """Build the contents, figure and table lists at the end, then move them before the Abstract."""
         body = self.doc.element.body
         start = len(body) - 1  # the final sectPr stays last
-        rows = [("", "Certificate", ""), ("", "Declaration", ""), ("", "Acknowledgement", ""),
-                ("", "Area of work", ""), ("", "List of figures", ""), ("", "List of tables", ""),
+        rows = [("", "Certificate", "_RefCert"), ("", "Declaration", "_RefDecl"),
+                ("", "Acknowledgement", "_RefAck"), ("", "Area of work", "_RefArea"),
+                ("", "List of figures", "_RefLoF"), ("", "List of tables", "_RefLoT"),
                 ("", "Abstract", "_RefAbstract")]
         rows += [(sno, title, bm) for sno, title, bm in self.toc]
         self.list_page("TABLE OF CONTENTS", ("S.no", "Title", "Page No."), rows)
         self.list_page("LIST OF FIGURES", ("Fig", "Description", "Page No."),
-                       [(str(n), t, f"_RefFig{n}") for n, t in self.figures])
+                       [(str(n), t, f"_RefFig{n}") for n, t in self.figures], bookmark="_RefLoF")
         self.list_page("LIST OF TABLES", ("Table No.", "Description", "Page No."),
-                       [(str(n), t, f"_RefTab{n}") for n, t in self.tables], first=2.5)
+                       [(str(n), t, f"_RefTab{n}") for n, t in self.tables], first=2.5, bookmark="_RefLoT")
         for el in list(body)[start:-1]:
             holder._p.addprevious(el)
 
@@ -993,7 +1030,7 @@ def docx_checks(path: Path) -> list[str]:
         in_math = any(a.tag.startswith(math_ns) for a in rf.iterancestors())
         if not in_math:
             fonts.add(rf.get(w + "ascii"))
-    for bad in fonts - {FONT, CODE_FONT, None}:
+    for bad in fonts - {FONT, None}:
         problems.append(f"font in use outside equations: {bad}")
     for u in root.iter(w + "u"):
         if u.get(w + "val") not in ("none", None):

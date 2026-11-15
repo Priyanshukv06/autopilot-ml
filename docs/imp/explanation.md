@@ -2,7 +2,7 @@
 
 **Project explanation and demonstration**
 
-B.Tech Minor Project, Department of Computer Science and Engineering, Indian Institute of Information Technology Bhopal
+B.Tech Major Project, Department of Computer Science and Engineering, Indian Institute of Information Technology Bhopal
 Priyanshu Verma (23U02016) and Salil Kushwah (23U02003), November 2026
 
 ---

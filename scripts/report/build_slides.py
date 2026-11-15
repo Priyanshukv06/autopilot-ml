@@ -673,6 +673,8 @@ def main() -> None:
     slide_references(prs)
     prs.core_properties.title = "AutoPilot-ML: major project presentation"
     prs.core_properties.author = "Priyanshu Verma, Salil Kushwah"
+    prs.core_properties.subject = "Major project presentation"
+    prs.core_properties.comments = ""  # python-pptx's default template says "generated using python-pptx"
     prs.save(OUT_PPTX)
     print(f"written {OUT_PPTX}: {len(prs.slides)} slides")
     if not args.no_office:

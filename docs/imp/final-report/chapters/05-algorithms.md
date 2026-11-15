@@ -1,10 +1,10 @@
 # Proposed algorithms
 
-This chapter gives the three algorithms at the centre of AutoPilot-ML, in the notation of chapter 4. FLAML's own search, which runs inside every "search" step below, is described in section 2.4 and is not part of this work [@wang2021flaml].
+This chapter presents the three main algorithms of AutoPilot-ML, written in the notation of chapter 4. FLAML's own search, which runs inside every "search" step below, is described in section 2.4 and is not part of our work [@wang2021flaml].
 
 ## The session loop
 
-Algorithm @alg:session is the autonomous loop. Every decision in it uses only the training part and its session folds; the test part is read once, in the last two lines.
+Algorithm @alg:session is the autonomous loop. Every decision in it uses only the training part and its session folds, and the test part is read just once, in the last two lines.
 
 ::algorithm alg:session | The session loop
 Input: dataset D with target y; time T; limits on experiments and CPU cores; selector; seed
@@ -28,7 +28,7 @@ Output: the final setup, its model, and the test scores of the first and the fin
 
 ## The Judge
 
-Algorithm @alg:judge decides from the two assessments whether a candidate replaces the accepted setup.
+Algorithm @alg:judge decides, from the two assessments, whether a candidate replaces the accepted setup.
 
 ::algorithm alg:judge | The Judge
 Input: assessments of both setups on the same J folds; α = 0.20; whether simpler
@@ -46,7 +46,7 @@ Output: a verdict: keep, keep_simpler or discard
 
 ## The learned order of the changes
 
-Algorithm @alg:select reorders the proposals of the rule table with what the memory says about similar datasets. Arms with too little evidence keep their rule-order place, so the learned choice can only move changes it has seen work or fail on at least two other datasets [@thompson1933; @auer2002ucb].
+Algorithm @alg:select reorders the proposals of the rule table using what the memory says about similar datasets. Arms with too little evidence keep their place in the rule order, so the learned choice can only move a change that it has seen succeed or fail on at least two other datasets [@thompson1933; @auer2002ucb].
 
 ::algorithm alg:select | Learned ordering of the proposals
 Input: proposals P in rule order; Experiment Memory M; current dataset x; selector; random generator

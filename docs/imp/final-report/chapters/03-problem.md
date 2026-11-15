@@ -2,16 +2,16 @@
 
 ## Problem statement
 
-The problem is stated as follows. Given a tabular dataset D with a target column y, a task T (binary classification, multiclass classification or regression), a primary metric m and a compute budget B (a time limit, a largest number of experiments and a number of CPU cores), the system must do two things.
+We state the problem as follows. Given a tabular dataset D with a target column y, a task T (binary classification, multiclass classification or regression), a primary metric m and a compute budget B (a time limit, a largest number of experiments and a number of CPU cores), the system has to do two things.
 
-1. Find a pipeline p, meaning the treatment of the data, the features, the model and its hyperparameters, with the best possible score m(p) on test data it has never used for any decision.
-2. Reach that pipeline using as little of the budget B as possible.
+1. Find a pipeline p, that is, the treatment of the data, the features, the model and its hyperparameters, with the best possible score m(p) on test data that it has never used for any decision.
+2. Reach that pipeline while using as little of the budget B as possible.
 
-A conventional AutoML run solves the first part with one search [@wang2021flaml]. AutoPilot-ML works on both parts with a sequence of experiments e1, e2, ..., ek, where each next experiment is chosen from the diagnoses of the earlier ones and from a memory of experiments on other datasets. The research question of the project is whether an autonomous experimentation layer can improve the efficiency and effectiveness of conventional AutoML by learning from previous experiments, diagnosing model weaknesses, selecting appropriate improvement strategies and allocating computational resources adaptively.
+A conventional AutoML run tackles the first part with a single search [@wang2021flaml]. AutoPilot-ML works on both parts with a sequence of experiments e1, e2, ..., ek, in which each new experiment is chosen from the diagnoses of the earlier ones and from a memory of experiments on other datasets. The research question of the project is whether an autonomous experimentation layer can improve the efficiency and effectiveness of conventional AutoML by learning from previous experiments, diagnosing model weaknesses, selecting appropriate improvement strategies and allocating computational resources adaptively.
 
 ## Objectives
 
-Table @tab:objectives lists the seven objectives of the project. Each row pairs one objective with the part of AutoPilot-ML that delivers it, and the table shows that all seven were achieved; chapters 4 to 8 describe and measure each of these parts.
+Table @tab:objectives lists the seven objectives we set for the project. Each row pairs an objective with the part of AutoPilot-ML that delivers it, and as the last column shows, all seven were achieved. Chapters 4 to 8 describe and measure each of these parts.
 
 ::table tab:objectives | Objectives of the project and what was delivered | widths=0.8,6,7 | align=cjj
 | No. | Objective | Delivered |
@@ -27,8 +27,8 @@ Table @tab:objectives lists the seven objectives of the project. Each row pairs 
 
 ## Scope
 
-The work has the following scope.
+The scope of the work is as follows.
 
 - In scope: single-table tabular data in CSV files; binary classification, multiclass classification and regression; a laptop CPU; fully offline operation.
 - Out of scope: images, free text documents, time series and clustering; language models as decision makers; cloud or paid services.
-- Supported settings: time budgets from 5 seconds to one hour for one experiment, datasets with at least 20 labelled rows and a test share between 5% and 50%. The user chooses the target column, helped by ranked suggestions.
+- Supported settings: time budgets from 5 seconds to one hour for one experiment, datasets with at least 20 labelled rows, and a test share between 5% and 50%. The user picks the target column, with the help of ranked suggestions.

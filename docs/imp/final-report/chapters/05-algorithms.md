@@ -28,7 +28,7 @@ Output: the final setup, its model, and the test scores of the first and the fin
 
 ## The Judge
 
-Algorithm @alg:judge decides, from the two assessments, whether a candidate replaces the accepted setup.
+Algorithm @alg:judge decides from the two assessments whether a candidate replaces the accepted setup.
 
 ::algorithm alg:judge | The Judge
 Input: assessments of both setups on the same J folds; α = 0.20; whether simpler

@@ -200,28 +200,34 @@ def make_figures() -> dict[str, Path]:
     ranks = pd.read_csv(RESULTS / "analysis_ranks.csv")
     ranks = ranks[ranks.family == "main"].pivot_table(index="system", columns="budget_seconds",
                                                       values="average_rank")
-    order = ["autopilot_full", "autopilot_rules", "flaml", "autogluon", "manual"]
-    labels = ["AutoPilot-ML\nfull", "AutoPilot-ML\nrules", "FLAML\nalone", "AutoGluon", "LightGBM\nbaseline"]
+    # slope chart of the average ranks (report Table 9) from 2 to 5 minutes, AutoPilot-ML full highlighted
+    names = {"autopilot_full": "AutoPilot-ML full", "flaml": "FLAML alone", "autopilot_rules": "AutoPilot-ML rules",
+             "autogluon": "AutoGluon", "manual": "LightGBM baseline"}
+    style = {"autopilot_full": ("#1F4E79", 3.6, 9), "autopilot_rules": ("#5B9BD5", 2.0, 6)}
     fig, ax = plt.subplots(figsize=(6.6, 3.65), dpi=220)
-    xs = range(len(order))
-    width = 0.36
-    for k, (budget, colour, text) in enumerate(((120, "#BDD7EE", "2 minutes"), (300, "#1F4E79", "5 minutes"))):
-        values = [ranks.loc[s, budget] for s in order]
-        bars = ax.bar([x + (k - 0.5) * width for x in xs], values, width, color=colour, edgecolor="#1F4E79",
-                      linewidth=0.6, label=text)
-        for b, v in zip(bars, values):
-            ax.text(b.get_x() + b.get_width() / 2, v + 0.05, f"{v:.2f}", ha="center", va="bottom", fontsize=11)
-    ax.set_xticks(list(xs))
-    ax.set_xticklabels(labels, fontsize=12)
-    ax.set_ylabel("Average rank (1 is best)", fontsize=13)
-    ax.set_ylim(0, 4.3)
-    ax.set_yticks([0, 1, 2, 3, 4])
-    ax.set_title("Average rank over the 6 datasets: lower is better", fontsize=14, color="#1F4E79", pad=30)
-    ax.legend(frameon=False, fontsize=12, loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=2,
-              borderaxespad=0.2)
-    for side in ("top", "right"):
-        ax.spines[side].set_visible(False)
-    ax.tick_params(length=0)
+    for s in ("manual", "autogluon", "flaml", "autopilot_rules", "autopilot_full"):  # highlighted line on top
+        a, b = ranks.loc[s, 120], ranks.loc[s, 300]
+        colour, width, size = style.get(s, ("#A6A6A6", 1.8, 5))
+        ax.plot([0, 1], [a, b], color=colour, lw=width, marker="o", ms=size, zorder=3 if s in style else 2)
+        ax.text(-0.05, a, f"{a:.2f}", ha="right", va="center", fontsize=11.5,
+                color=colour if s in style else "#595959", fontweight="bold" if s == "autopilot_full" else None)
+    by_value: dict[float, list[str]] = {}
+    for s in names:
+        by_value.setdefault(round(ranks.loc[s, 300], 2), []).append(s)
+    for value, systems in by_value.items():
+        colour = style.get(systems[0], ("#595959",))[0]
+        ax.text(1.05, value, f"{value:.2f}  " + ", ".join(names[s] for s in systems), ha="left", va="center",
+                fontsize=11.5, color=colour, fontweight="bold" if "autopilot_full" in systems else None)
+    for x, text in ((0, "2 minutes"), (1, "5 minutes")):
+        ax.plot([x, x], [1.32, 3.9], color="#D9D9D9", lw=1, zorder=1)
+        ax.text(x, 1.02, text, ha="center", va="top", fontsize=12.5, color="#222222", fontweight="bold")
+    gain = ranks.loc["autopilot_full", 120] - ranks.loc["autopilot_full", 300]
+    ax.text(0.5, 4.08, f"AutoPilot-ML full: the largest gain of the five systems ({gain:.2f} ranks)",
+            ha="center", va="center", fontsize=11.5, color="#1F4E79", style="italic")
+    ax.set_xlim(-0.36, 2.15)
+    ax.set_ylim(4.25, 1.0)
+    ax.axis("off")
+    ax.set_title("Average rank over the 6 datasets (1 is best)", fontsize=14, color="#1F4E79")
     fig.tight_layout()
     chart = FIG_DIR / "slide_ranks.png"
     fig.savefig(chart)
@@ -554,7 +560,8 @@ def slide_results(prs, figs) -> None:
                                     {"color": GREY, "italic": True})], margin=0.02)
     kpis = [
         ("29% less time", "212 s against 301 s per run, at the same score level as FLAML alone"),
-        ("4th \u2192 2nd", "average rank of five systems, from 2 to 5 minutes"),
+        ("5 of 6 datasets", "improved from 2 to 5 minutes, the most of all systems "
+                            "(FLAML\u00a0alone:\u00a02\u00a0of\u00a06)"),
         ("0.6218 F1", "the best of all systems on the imbalanced pc4 dataset (FLAML:\u00a00.5897)"),
         ("4 / 6 and 5 / 6", "datasets with a higher score than AutoGluon and the LightGBM baseline"),
     ]
@@ -576,7 +583,7 @@ def slide_results(prs, figs) -> None:
     notes(s, "Time: about 50 seconds.\n\nIn the benchmark, at five minutes, AutoPilot-ML matched the score level "
              "of FLAML with 29 percent less time, ranked second of five systems, scored higher than AutoGluon on "
              "four datasets and than the LightGBM baseline on five, and gave the best score on pc4. The chart "
-             "shows that it gains from more time, moving from fourth to second place. On Titanic, it found by "
+             "shows that it gains the most from more time, moving from fourth to second place. On Titanic, it found by "
              "itself that the Ticket column was misleading, and the test F1 rose from 0.684 to 0.724. And on data "
              "with known answers, the Critic raised no false data-level alarm, and the Judge kept none of 18 "
              "harmful changes.")

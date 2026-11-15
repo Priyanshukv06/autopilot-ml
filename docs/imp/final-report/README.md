@@ -31,18 +31,18 @@ The second command writes the .docx, asks Word to fill in the page numbers of th
 - No underlining, no em dashes, no emojis; component names (Critic, Judge, Strategy Engine and the others) are the only capitalised terms; a negative number is printed with a minus sign that never breaks away from its digits.
 - Long tables may break across pages with the header row repeated; short tables, figures, equations and algorithms stay whole. The layout leaves no blank space larger than about 2 cm inside a chapter.
 
-## Status (14 November 2026)
+## Status (15 November 2026)
 
 - [x] Builder and checks
 - [x] Figures
-- [x] Front pages and abstract
+- [x] Front pages and abstract, with all names filled in: MAJOR PROJECT REPORT on the cover, the supervisor Dr. Gagan Vishwakarma (Assistant Professor, Department of CSE, IIIT Bhopal) and the Director Dr. Ashutosh Kumar Singh
 - [x] Chapters 1 to 9 and references
 - [x] Build, Word update, PDF, visual check: 47 pages (8 front pages and 39 numbered pages), 9 figures, 9 tables, 9 equations, 3 algorithms, 34 references, 0 format problems
 - [x] Report notes work log and commit
 
 The report is the condensed version: it leads with what was delivered, keeps only the main tables and figures, and has no dates or timeline in the chapters. Chapter lengths against the template's ranges: introduction 2.3 pages, literature review 6.4, problem and objectives 1.4, methodology 7.0, algorithms 1.4, diagrams 2.9, implementation 5.0, results 5.0, conclusion 2.0 and references 1.7 (shorter than the template's 2 to 5 pages because the list was cut to at most 35 entries). The secondary studies left out of it (the ablation variants, time-to-target, the Judge agreement study and the hypothesis outcomes) stay in `docs/imp/report-notes.md` and `results/`. The figure functions that are no longer used (`fig_split`, `fig_judge`, `fig_diff`, `fig_cd`) and their images are kept in case a figure is wanted back.
 
-Still to do by the team: the guide's name and designation in `front.toml` (then build again), the signatures, the plagiarism report from the institute's tool, and a page "List of publications" only if a paper is published or submitted.
+Still to do by the team: the signatures and the certificate's date on the printed copy, the plagiarism report from the institute's tool (the template asks for content plagiarism below 12%, placed after the references), and a page "List of publications" only if a paper is published, accepted or submitted. The template file keeps the department's name "Minor Project format"; that name is not printed anywhere in the report.
 
 ## Deliberate choices where the template and the written rules differ
 

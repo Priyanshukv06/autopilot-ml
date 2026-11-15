@@ -388,7 +388,7 @@ Table 11 lists the 12 strategies. For each one it gives what the strategy change
 
 ### C.7 Implementation
 
-Table 12 lists the software used, with the versions pinned in the project's requirements file. Everything is open source and runs offline on a laptop CPU, and each tool is the work of its own authors.
+Table 12 lists the software used and the versions run; the Python libraries are pinned to these versions in the project's requirements files. Everything except Docker Desktop is open source, Docker Desktop is free for personal and educational use, all of it runs offline on a laptop CPU, and each tool is the work of its own authors. The specification, the code and the documents were written in Kiro, an AI-assisted development environment (report section 4.1).
 
 *Table 12: Tools and libraries used, with their versions (report Table 5)*
 
@@ -414,8 +414,6 @@ Table 12 lists the software used, with the versions pinned in the project's requ
 | Datasets | OpenML | API v1 | Downloading the 12 benchmark datasets once |
 | Testing | pytest | 9.1.1 | The 586 automated tests |
 | Version control | Git | 2.55.0 | History, one change per commit |
-| Development environment | Kiro | Not pinned | AI-assisted editor used to write the specification, code and documents |
-| Report | python-docx | 1.2.0 | Building the report in the department's format |
 
 Table 13 lists the main modules of the autonomous layer with their size and their task. The work is spread over small, separate services: the largest is the experiment runner around FLAML, and the session loop coordinates the others in 680 lines.
 

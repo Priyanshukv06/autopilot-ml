@@ -1,4 +1,4 @@
-# Details for the front pages of the final report. Fields in [brackets] are still to be filled in.
+# Details for the front pages of the final report; the title slide of the presentation reads the supervisor from here.
 title = "AutoPilot-ML - An Autonomous, Self-Optimizing Machine Learning Experimentation Framework"
 report_kind = "MAJOR PROJECT REPORT"
 degree = "BACHELOR OF TECHNOLOGY"
@@ -7,8 +7,8 @@ institute = "INDIAN INSTITUTE OF INFORMATION TECHNOLOGY"
 institute_city = "BHOPAL (M.P.)"
 month_year = "November 2026"
 academic_year = "2026-27"
-supervisor = "[Name of supervisor]"
-supervisor_designation = "[Designation of supervisor]"
+supervisor = "Dr. Gagan Vishwakarma"
+supervisor_designation = "Assistant Professor"
 coordinator = "Dr. Rahul Chourasiya"
 director = "Prof. Ashutosh Kumar Singh"
 

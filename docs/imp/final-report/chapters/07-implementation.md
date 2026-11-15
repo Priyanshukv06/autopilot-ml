@@ -31,8 +31,6 @@ Table @tab:tools lists the software the project uses, with the versions pinned i
 | Datasets | OpenML [@vanschoren2013openml] | API v1 | Downloading the 12 benchmark datasets once |
 | Testing | pytest | 9.1.1 | The 586 automated tests |
 | Version control | Git | 2.55.0 | History, one change per commit |
-| Development environment | Kiro [@kiro] | Not pinned | AI-assisted editor used to write the specification, code and documents |
-| Report | python-docx | 1.2.0 | Building this report in the department's format |
 ::end
 
 ## Structure of the code

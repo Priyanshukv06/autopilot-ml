@@ -4,7 +4,7 @@
 
 The work followed one rule: build and measure a reliable baseline first, then add one autonomous part at a time, each with its own tests and a way to measure it. Mature open-source libraries were used instead of being rebuilt: FLAML for the search [@wang2021flaml], scikit-learn for splits, metrics and importance [@pedregosa2011sklearn], MLflow for tracking and Streamlit for the dashboard. Every decision of the system is made by rules and statistics that run offline, with no language model, no paid service and no cloud, and the business logic is kept apart from the user interface.
 
-The autonomous layer was planned as a written specification in the Kiro development environment [@kiro]: 32 requirements with 160 numbered acceptance criteria, a design of the components and their data formats, and 35 tasks, each linked to the criteria it satisfies and built, tested and committed on its own. The work went from the baseline pipeline to the autonomous layer and its studies, then to the learned choice of changes and the benchmark, and finally to the optional extensions.
+The autonomous layer was planned as a written specification: 32 requirements with 160 numbered acceptance criteria, a design of the components and their data formats, and 35 tasks, each linked to the criteria it satisfies and built, tested and committed on its own. We worked in Kiro, an AI-assisted development environment, and used it to write the specification, the code and the documents [@kiro]. The work went from the baseline pipeline to the autonomous layer and its studies, then to the learned choice of changes and the benchmark, and finally to the optional extensions.
 
 ## One experiment: the baseline pipeline
 

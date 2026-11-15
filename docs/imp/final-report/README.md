@@ -27,7 +27,7 @@ The second command writes the .docx, asks Word to fill in the page numbers of th
 - Times New Roman everywhere, also in the code listing: chapter headings 16 pt bold and all section headings 14 pt bold, left aligned; body text 12 pt justified; table text 11 pt, justified or centred; captions 11 pt centred (figure captions below the figure, table captions above the table, no full stop); references 10 pt in IEEE style. Figures are drawn at their printed width, with component names and labels at 12 pt and other text at 10 to 11 pt.
 - Line spacing 1.15 everywhere; spacing between paragraphs comes from paragraph spacing, never from empty lines.
 - Figures, tables and equations numbered in one sequence each; every figure and table is introduced by number in the paragraph next to it ("Table 3 lists ..."), with what it shows and what it means.
-- Every paragraph of chapters 1 and 2 has a citation; 34 references, all cited, in IEEE style (page ranges and citation ranges with an en dash, access dates on online sources).
+- Every paragraph of chapters 1 and 2 has a citation; 33 references, all cited, in IEEE style (page ranges and citation ranges with an en dash, access dates on online sources).
 - No underlining, no em dashes, no emojis; component names (Critic, Judge, Strategy Engine and the others) are the only capitalised terms; a negative number is printed with a minus sign that never breaks away from its digits.
 - Long tables may break across pages with the header row repeated; short tables, figures, equations and algorithms stay whole. The layout leaves no blank space larger than about 2 cm inside a chapter.
 
@@ -37,7 +37,7 @@ The second command writes the .docx, asks Word to fill in the page numbers of th
 - [x] Figures
 - [x] Front pages and abstract, with all names filled in: MAJOR PROJECT REPORT on the cover, the supervisor Dr. Gagan Vishwakarma (Assistant Professor, Department of CSE, IIIT Bhopal) and the Director Dr. Ashutosh Kumar Singh
 - [x] Chapters 1 to 9 and references, rewritten on 15 November 2026 in a more natural voice (the team speaks as "we"), with the same facts, numbers, citations, tables and figures
-- [x] Build, Word update, PDF, visual check: 48 pages (8 front pages and 40 numbered pages), 9 figures, 9 tables, 9 equations, 3 algorithms, 34 references, 0 format problems
+- [x] Build, Word update, PDF, visual check: 48 pages (8 front pages and 40 numbered pages), 9 figures, 9 tables, 9 equations, 3 algorithms, 33 references, 0 format problems
 - [x] Report notes work log and commit
 
 The report is the condensed version: it leads with what was delivered, keeps only the main tables and figures, and has no dates or timeline in the chapters. Chapter lengths against the template's ranges: introduction 2.4 pages, literature review 6.4, problem and objectives 1.4, methodology 7.3, algorithms 1.4, diagrams 2.9, implementation 5.0, results 4.9 (five printed pages), conclusion 2.0 and references 1.7 (shorter than the template's 2 to 5 pages because the list was cut to at most 35 entries). The secondary studies left out of it (the ablation variants, time-to-target, the Judge agreement study and the hypothesis outcomes) stay in `docs/imp/report-notes.md` and `results/`. The figure functions that are no longer used (`fig_split`, `fig_judge`, `fig_diff`, `fig_cd`) and their images are kept in case a figure is wanted back.

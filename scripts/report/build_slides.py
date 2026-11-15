@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import re
 import subprocess
+import tomllib
 import zipfile
 from pathlib import Path
 
@@ -39,7 +40,8 @@ OUT_DIR = ROOT / "docs" / "imp" / "presentation"
 FIG_DIR = OUT_DIR / "figures"
 OUT_PPTX = OUT_DIR / "AutoPilot-ML-Presentation.pptx"
 RESULTS = ROOT / "results" / "benchmark-v2"
-TEMPLATE = REPORT / "template" / "Minor Project format - final 2026.docx"
+TEMPLATE = REPORT / "template" / "Minor Project format - final 2026.docx"  # the department's file name
+FRONT = REPORT / "front.toml"
 
 FONT = "Calibri"
 DARK, MID, LIGHT, PALE = RGBColor(0x1F, 0x4E, 0x79), RGBColor(0x5B, 0x9B, 0xD5), RGBColor(0xDD, 0xEB, 0xF7), \
@@ -137,7 +139,7 @@ def frame(slide, title: str, number: int) -> None:
     accent.shadow.inherit = False
     box(slide, 0.5, 0.13, 11.6, 0.72, [(title, 28, {"color": WHITE, "bold": True})], anchor=MSO_ANCHOR.MIDDLE,
         margin=0.02)
-    box(slide, 0.5, 7.07, 9.5, 0.3, [("AutoPilot-ML  |  Minor Project  |  Department of CSE, IIIT Bhopal", 11,
+    box(slide, 0.5, 7.07, 9.5, 0.3, [("AutoPilot-ML  |  Major Project  |  Department of CSE, IIIT Bhopal", 11,
                                       {"color": GREY})], margin=0.02)
     box(slide, 11.33, 7.07, 1.5, 0.3, [(f"{number} / {TOTAL}", 11, {"color": GREY, "align": PP_ALIGN.RIGHT})],
         margin=0.02)
@@ -265,6 +267,7 @@ REFERENCES = [
 
 
 def slide_title(prs, figs) -> None:
+    front = tomllib.loads(FRONT.read_text(encoding="utf-8"))  # the supervisor, as on the report's front pages
     s = prs.slides.add_slide(prs.slide_layouts[6])
     band = s.shapes.add_shape(MSO_SHAPE.RECTANGLE, 0, Inches(6.55), Inches(W), Inches(0.95))
     band.fill.solid()
@@ -281,16 +284,18 @@ def slide_title(prs, figs) -> None:
     box(s, 0.5, 2.95, 12.33, 1.0,
         [("An Autonomous, Self-Optimizing Machine Learning Experimentation Framework", 24,
           {"color": TEXT, "align": PP_ALIGN.CENTER, "after": 6}),
-         ("Minor Project Presentation", 18, {"color": MID, "bold": True, "align": PP_ALIGN.CENTER})],
+         ("Major Project Presentation", 18, {"color": MID, "bold": True, "align": PP_ALIGN.CENTER})],
         name="anim:02:fade")
     box(s, 2.0, 4.3, 9.33, 2.1,
         [("Presented by", 14, {"color": GREY, "align": PP_ALIGN.CENTER, "after": 2}),
          ("Priyanshu Verma (23U02016)     Salil Kushwah (23U02003)", 20,
           {"color": TEXT, "bold": True, "align": PP_ALIGN.CENTER, "after": 12}),
          ("Under the supervision of", 14, {"color": GREY, "align": PP_ALIGN.CENTER, "after": 2}),
-         ("[Name of supervisor], [Designation of supervisor]", 18, {"color": TEXT, "align": PP_ALIGN.CENTER})],
+         (front["supervisor"], 20, {"color": TEXT, "bold": True, "align": PP_ALIGN.CENTER, "after": 0}),
+         (f"{front['supervisor_designation']}, Department of CSE, IIIT Bhopal", 16,
+          {"color": TEXT, "align": PP_ALIGN.CENTER})],
         name="anim:03:fade")
-    notes(s, "Time: about 15 seconds.\n\nGood morning. We are Priyanshu Verma and Salil Kushwah. Our minor project"
+    notes(s, "Time: about 15 seconds.\n\nGood morning. We are Priyanshu Verma and Salil Kushwah. Our major project"
              " is AutoPilot-ML, an autonomous, self-optimizing machine learning experimentation framework, built "
              "on top of the open-source AutoML library FLAML.")
 
@@ -666,7 +671,7 @@ def main() -> None:
     slide_results(prs, figs)
     slide_conclusion(prs)
     slide_references(prs)
-    prs.core_properties.title = "AutoPilot-ML: minor project presentation"
+    prs.core_properties.title = "AutoPilot-ML: major project presentation"
     prs.core_properties.author = "Priyanshu Verma, Salil Kushwah"
     prs.save(OUT_PPTX)
     print(f"written {OUT_PPTX}: {len(prs.slides)} slides")

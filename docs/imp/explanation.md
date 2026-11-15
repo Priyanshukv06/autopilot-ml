@@ -388,7 +388,7 @@ Table 11 lists the 12 strategies. For each one it gives what the strategy change
 
 ### C.7 Implementation
 
-Table 12 lists the software used and the versions run; the Python libraries are pinned to these versions in the project's requirements files. Everything except Docker Desktop is open source, Docker Desktop is free for personal and educational use, all of it runs offline on a laptop CPU, and each tool is the work of its own authors. The specification, the code and the documents were written with an AI-assisted development environment (report section 4.1).
+Table 12 lists the software used and the versions run; the Python libraries are pinned to these versions in the project's requirements files. Everything except Docker Desktop is open source, Docker Desktop is free for personal and educational use, all of it runs offline on a laptop CPU, and each tool is the work of its own authors.
 
 *Table 12: Tools and libraries used, with their versions (report Table 5)*
 

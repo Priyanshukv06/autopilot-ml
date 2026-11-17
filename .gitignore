@@ -34,3 +34,6 @@ data/processed/*
 .idea/
 .DS_Store
 Thumbs.db
+
+# Lock files Word and PowerPoint create while the report or slides are open
+~$*

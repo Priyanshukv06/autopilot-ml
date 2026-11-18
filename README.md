@@ -13,7 +13,7 @@ We are building it in stages, and this README keeps them apart:
 - **Phase 3, learning and evaluation (built):** fixed development and evaluation datasets, choosing changes from what the memory learned on similar datasets (Thompson sampling, UCB1), switches that turn single parts of the loop off (for the ablations), comparison systems (a manual LightGBM baseline, FLAML alone and AutoGluon), a resumable benchmark with its statistics, a frozen experiment memory, and a study of how far the cheap Judge agrees with searching again. The first benchmark run was stopped early (23 usable runs on 2 datasets with 1 seed), so its results are observations, not tested claims; see Results below.
 - **Optional extensions (built, 1 to 12 November 2026):** SMOTE, cross-fitted target encoding and word features of text columns as new Strategies, group-aware splits, SHAP explanations of a Session's final model, target suggestion and a single-column leakage warning, plain-language Session summaries by a local language model (labelled, never used for decisions), a local HTTP API and a Docker image. The first benchmark run was made before them, so none of its results include them. A second, full benchmark run with the final code, which includes them, completed the whole grid (390 runs) on 12 and 13 November 2026; see Results below.
 
-The detailed project document is [docs/imp/PROJECT.md](docs/imp/PROJECT.md). To understand how the current system and FLAML work, step by step and with diagrams, read [docs/imp/how-it-works.md](docs/imp/how-it-works.md). All maintained documents are in [docs/imp](docs/imp), including the running notes for the final report. The Phase 1 review material is archived in [docs/unimp](docs/unimp).
+This version of the repository holds the code only. The project documents in `docs/` (the detailed project document, a step-by-step guide to how the system and FLAML work, the architecture, the roadmap, the research plan, the notes for the final report, the report itself and the archived Phase 1 review material) and the summary CSV files of the studies in `results/` are in the history: commit `9788b1a` is the last commit that has them.
 
 ## Problem
 
@@ -104,7 +104,7 @@ Final_Evaluation: first and final model, once, on the test part
 
 The code has three layers. `app/main.py` and `app/components/` are the Streamlit UI, which only collects input and shows results. `app/services/` holds all the logic, and none of it imports Streamlit, so it can be used from a script or a notebook. `app/core/` holds settings and logging. `app/api.py` is the local HTTP API, which runs the same Session code as the dashboard. FLAML is only touched inside `FLAMLEngine`, and MLflow only inside `ExperimentTracker`.
 
-More detail is in [docs/imp/architecture.md](docs/imp/architecture.md).
+More detail is in `docs/imp/architecture.md`.
 
 ## Installation
 
@@ -326,11 +326,11 @@ The question we want to answer:
 
 > Can an autonomous experimentation layer improve the efficiency and effectiveness of conventional AutoML by learning from previous experiments, diagnosing model weaknesses, selecting appropriate improvement strategies, and allocating computational resources adaptively?
 
-The benchmark compares a manual LightGBM baseline, FLAML alone, AutoGluon, AutoPilot-ML with the rule order (which is also AutoPilot-ML without the experiment memory) and the full AutoPilot-ML (Thompson sampling with the memory), plus three ablations (random order, no Critic, no Resource_Manager), on 6 evaluation datasets with total budgets of 2 and 5 minutes and 5 seeds. They are compared on test score, time to reach a target score, number of experiments, compute cost and consistency across datasets. The plan is in [docs/imp/research-direction.md](docs/imp/research-direction.md).
+The benchmark compares a manual LightGBM baseline, FLAML alone, AutoGluon, AutoPilot-ML with the rule order (which is also AutoPilot-ML without the experiment memory) and the full AutoPilot-ML (Thompson sampling with the memory), plus three ablations (random order, no Critic, no Resource_Manager), on 6 evaluation datasets with total budgets of 2 and 5 minutes and 5 seeds. They are compared on test score, time to reach a target score, number of experiments, compute cost and consistency across datasets. The plan is in `docs/imp/research-direction.md`.
 
 ## Results
 
-All measured on one laptop (CPU only, 16 logical cores); the details, settings and raw files are in [docs/imp/report-notes.md](docs/imp/report-notes.md), chapter 9.
+All measured on one laptop (CPU only, 16 logical cores); the details, settings and raw files are in `docs/imp/report-notes.md`, chapter 9.
 
 - **Critic study** (270 synthetic datasets with planted problems): the data-level Diagnoses raised no false alarm; overfitting was found with precision 0.88 and recall 0.91; unreliable validation is weak (precision 0.27).
 - **Judge study** (84 pairs of Setups with a known true difference): on the reporting seeds the Judge kept 0 of 18 harmful changes and 10 of 12 helpful ones.
@@ -352,7 +352,7 @@ This project was developed in Kiro, an AI-assisted code editor built on VS Code.
 4. Optional extras: SMOTE, target encoding and word features, group-aware splits, SHAP, target suggestion and a leakage check, local language-model summaries, a local HTTP API and a Docker image (done, 1 to 12 November 2026; 586 tests passing)
 5. A second, full benchmark run with the final code (`--label v2`; done, 12 and 13 November 2026: all 390 cells, no failure; H1 contradicted, H2 to H4 not shown)
 
-The summary is in [docs/imp/development-roadmap.md](docs/imp/development-roadmap.md). The detailed plan is a Kiro spec (requirements, design and ordered tasks) in the workspace folder `.kiro/specs/autopilot-ml/`, one level above this repository.
+The summary is in `docs/imp/development-roadmap.md`. The detailed plan is a Kiro spec (requirements, design and ordered tasks) in the workspace folder `.kiro/specs/autopilot-ml/`, one level above this repository.
 
 ## Future work
 
@@ -376,7 +376,7 @@ autopilot-ml/
 ├── research/               synthetic data, the critic and judge studies, the Phase 2 measurement,
 │                           the dataset registry, the comparison systems, the benchmark harness,
 │                           statistics and analysis, the memory build, the judge agreement study
-├── results/                summary CSV files of the studies, measurements and benchmark (in git)
+├── results/                summary CSV files of the studies, measurements and benchmark (in the history only)
 ├── data/sample/            small public demo datasets
 ├── scripts/                run_autopilot.py: one Session from the command line
 │                           run_study.py: the critic, judge and judge agreement studies
@@ -396,7 +396,7 @@ autopilot-ml/
 ├── mlruns/                 MLflow database and files (generated, not in git)
 ├── tests/                  pytest tests
 ├── Dockerfile              the image with the dashboard and the API
-└── docs/
+└── docs/                   (in the history only)
     ├── imp/                maintained: project document, how-it-works guide, architecture,
     │                       roadmap, research plan, notes for the final report, charts
     └── unimp/              archived Phase 1 review material

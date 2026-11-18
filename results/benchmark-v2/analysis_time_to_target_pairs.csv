@@ -1,6 +1,0 @@
-system_a,system_b,pairs,a_earlier,same,a_later
-autopilot_full,manual,30,5,23,2
-autopilot_full,flaml,30,2,18,10
-autopilot_full,autogluon,30,3,20,7
-autopilot_full,autopilot_rules,30,3,23,4
-autopilot_rules,flaml,30,3,18,9

@@ -1,6 +1,0 @@
-system,pairs,never,median_time_to_target,reached_by_120s,reached_by_300s
-manual,30,17,inf,13,13
-flaml,30,8,120.0,18,22
-autogluon,30,12,120.0,18,18
-autopilot_rules,30,12,300.0,13,18
-autopilot_full,30,14,300.0,13,16

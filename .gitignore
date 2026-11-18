@@ -37,3 +37,9 @@ Thumbs.db
 
 # Lock files Word and PowerPoint create while the report or slides are open
 ~$*
+
+# Project documents, the final report, study results and the report builders:
+# kept on this machine only. Commit 9788b1a is the last commit that has them.
+/docs/
+/results/
+/scripts/report/

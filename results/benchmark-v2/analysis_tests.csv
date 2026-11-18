@@ -1,4 +1,0 @@
-family,budget_seconds,systems,datasets,blocks,friedman_chi2,friedman_p,iman_davenport_f,iman_davenport_p,nemenyi_cd,cliques
-main,120,5,6,30,7.96638655462184,0.09281728725859541,2.4842767295597445,0.07649231947811944,2.4901059245169463,flaml = manual = autogluon = autopilot_full = autopilot_rules
-main,300,5,6,30,4.3999999999999915,0.35457010675946943,1.122448979591834,0.37389182316281233,2.4901059245169463,flaml = autopilot_full = autopilot_rules = manual = autogluon
-ablations,300,5,6,30,3.7983193277310914,0.4339878503122977,0.9400998336106487,0.46113204917883077,2.4901059245169463,no_critic = autopilot_full = random_choice = autopilot_rules = no_resource_manager
